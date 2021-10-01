@@ -22,25 +22,45 @@ ConfigurableUART::ConfigurableUART() noexcept
 int8_t ConfigurableUART::GetUARTPortNumber() noexcept
 {
     if(serialPort == nullptr) return -1;
-    
-    if(serialPort == &Serial1) return 0;
-#if defined(ENABLE_UART1)
-    if(serialPort == &Serial2) return 1;
+#if defined(HAVE_HWSERIAL1)
+    if(serialPort == &Serial1) return 1;
 #endif
-#if defined(ENABLE_UART2)
-    if(serialPort == &Serial3) return 2;
+#if defined(HAVE_HWSERIAL2)
+    if(serialPort == &Serial2) return 2;
 #endif
-#if defined(ENABLE_UART3)
-    if(serialPort == &Serial4) return 3;
+#if defined(HAVE_HWSERIAL3)
+    if(serialPort == &Serial3) return 3;
 #endif
-
-    return -1;
+#if defined(HAVE_HWSERIAL4)
+    if(serialPort == &Serial4) return 4;
+#endif
+#if defined(HAVE_HWSERIAL5)
+    if(serialPort == &Serial5) return 5;
+#endif
+#if defined(HAVE_HWSERIAL6)
+    if(serialPort == &Serial6) return 6;
+#endif
+#if defined(HAVE_HWSERIAL7)
+    if(serialPort == &Serial7) return 7;
+#endif
+#if defined(HAVE_HWSERIAL8)
+    if(serialPort == &Serial8) return 8;
+#endif
+#if defined(HAVE_HWSERIAL9)
+    if(serialPort == &Serial9) return 9;
+#endif
+#if defined(HAVE_HWSERIAL10)
+    if(serialPort == &Serial10) return 10;
+#endif
+#if defined(HAVE_HWSERIALLP1)
+    if(serialPort == &SerialLP1) return 11;
+#endif
+        return -1;
 }
 
 bool ConfigurableUART::Configure(Pin rx, Pin tx) noexcept
 {
     //Find the UART based on the confgured Pins
-
     void* rxDev = pinmap_peripheral(rx, PinMap_UART_RX);
     void* txDev = pinmap_peripheral(tx, PinMap_UART_TX);
 
@@ -103,12 +123,12 @@ bool ConfigurableUART::Configure(Pin rx, Pin tx) noexcept
             serialPort = &Serial9;
 #endif
 #if defined(HAVE_HWSERIAL10)
-        if (rxDev == USART11)
-            serialPort = &Serial11;
+        if (rxDev == USART10)
+            serialPort = &Serial10;
 #endif
 #if defined(HAVE_HWSERIALLP1)
         if (rxDev == USART12)
-            serialPort = &Serial12;
+            serialPort = &SerialLP1;
 #endif
 
         if (serialPort != nullptr)
