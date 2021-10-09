@@ -54,6 +54,13 @@ void UniqueIdBase::SetFromCurrentBoard() noexcept
 	{
 		SetChecksumWord();
 	}
+#elif STM32F4
+	for (size_t i = 0; i < 4; ++i)
+	{
+		data[i] = i;
+	}
+	SetChecksumWord();
+
 #else
 # error Unsupported processor
 #endif
