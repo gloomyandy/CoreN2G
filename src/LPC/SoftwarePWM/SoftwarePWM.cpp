@@ -2,7 +2,7 @@
 
 #include "SoftwarePWM.h"
 #include "SoftwarePWMTimer.h"
-
+extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 SoftwarePWM::SoftwarePWM(Pin softPWMPin) noexcept:
         pwmRunning(false),
@@ -20,13 +20,18 @@ SoftwarePWM::SoftwarePWM(Pin softPWMPin) noexcept:
 void SoftwarePWM::AttachTimer() noexcept
 {
     if (timerChan < 0)
+    {
         timerChan = softwarePWMTimer.enable(this, onTime, period - onTime);
+    }
+    
 }
 
 void SoftwarePWM::ReleaseTimer() noexcept
 {
     if (timerChan >= 0)
+    {
         softwarePWMTimer.disable(timerChan);
+    }
     timerChan = -1;
 }
 
@@ -39,16 +44,16 @@ void SoftwarePWM::Enable() noexcept
 void SoftwarePWM::Disable() noexcept
 {
     pwmRunning = false;
-    pinMode(pin, OUTPUT_LOW);
     ReleaseTimer();
+    pinMode(pin, OUTPUT_LOW);
 }
 
 void SoftwarePWM::AnalogWrite(float ulValue, uint16_t freq, Pin pin) noexcept
 {
     //Note: AnalogWrite gets called repeatedly by RRF for heaters
     
-    const uint32_t newPeriod = (freq!=0)?(1000000/freq):0;
-    const uint32_t newOnTime = CalculateDutyCycle(ulValue, newPeriod);
+    uint32_t newPeriod = (freq!=0)?(1000000/freq):0;
+    uint32_t newOnTime = CalculateDutyCycle(ulValue, newPeriod);
 
     //Common Frequnecies used in RRF:
     //Freq:   10Hz,     250Hz  and 500Hz
@@ -62,8 +67,8 @@ void SoftwarePWM::AnalogWrite(float ulValue, uint16_t freq, Pin pin) noexcept
     // 10us  = Min Duty:   0.01%, 0.25% and 0.5%
     constexpr uint16_t MinimumTime = 20; //microseconds
 
-    if(onTime < MinimumTime){ onTime = 0; }
-    if(onTime > (period-MinimumTime)){ onTime = period; }
+    if(newOnTime < MinimumTime){ newOnTime = 0; }
+    if(newOnTime > (period-MinimumTime)){ newOnTime = period; }
     
     if(newOnTime != onTime || newPeriod != period)
     {
