@@ -182,6 +182,25 @@ void pin_function(PinName pin, int function)
   pin_DisconnectDebug(pin);
 }
 
+/**
+ * Configure pin speed
+ */
+void pin_speed(PinName pin, int speed)
+{
+  /* Get the pin informations */
+  uint32_t port = STM_PORT(pin);
+  uint32_t ll_pin  = STM_LL_GPIO_PIN(pin);
+
+  if (pin == (PinName)NC) {
+    Error_Handler();
+  }
+
+  /* Enable GPIO clock */
+  GPIO_TypeDef *gpio = set_GPIO_Port_Clock(port);
+
+  LL_GPIO_SetPinSpeed(gpio, ll_pin, speed);
+}
+
 void pinmap_pinout(PinName pin, const PinMap *map)
 {
   if (pin == NC) {

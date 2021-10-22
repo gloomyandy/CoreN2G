@@ -45,6 +45,7 @@ typedef struct {
 
 bool pin_in_pinmap(PinName pin, const PinMap *map);
 void pin_function(PinName pin, int function);
+void pin_speed(PinName pin, int speed);
 
 static inline PinName pin_pinName(const PinMap *map)
 {
