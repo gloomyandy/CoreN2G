@@ -30,6 +30,7 @@ private:
     Pin miso;
     uint32_t mode;
     uint32_t delay;
+    uint32_t rate;
 };
 
 

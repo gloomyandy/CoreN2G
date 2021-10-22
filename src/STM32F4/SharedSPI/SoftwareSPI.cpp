@@ -37,7 +37,7 @@ void SoftwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, DMA_Stream_TypeD
 //setup the master device.
 void SoftwareSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept
 {
-    if(needInit)
+    if(needInit || mode != clockMode || bitRate != rate)
     {
         if (sck == NoPin)
             debugPrintf("Warning: Software SPI %d clock pin is not configured, check configuration\n", (this == &SWSSP0 ? 0 : this == &SWSSP1 ? 1 : 2));
@@ -53,16 +53,21 @@ void SoftwareSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bi
             delay = 1;
         else
             delay = NanosecondsToCycles(targetCycleNanos - timingCycleNanos)/2;
+        // debugPrintf("SSPI mode %x bitrate %d target %d fast %d slow %d timing %d delay %d\n", clockMode, bitRate, targetCycleNanos, fastCycleNanos, slowCycleNanos, timingCycleNanos, delay );
         pinMode(miso, INPUT_PULLUP);
         pinMode(mosi, OUTPUT_HIGH);
         pinMode(sck, (mode & 2 ? OUTPUT_HIGH : OUTPUT_LOW));
+        if (miso != NoPin) pin_speed(miso, GPIO_SPEED_FREQ_LOW);
+        if (mosi != NoPin) pin_speed(mosi, GPIO_SPEED_FREQ_LOW);
+        if (sck != NoPin) pin_speed(sck, GPIO_SPEED_FREQ_LOW);
+        rate = bitRate;
         needInit = false;
     }
 }
 
 
 SoftwareSPI::SoftwareSPI() noexcept
-    :needInit(true),sck(NoPin),mosi(NoPin),miso(NoPin),mode(0)
+    :needInit(true),sck(NoPin),mosi(NoPin),miso(NoPin),mode(0),rate(0)
 {
 
 }
@@ -144,6 +149,8 @@ uint8_t SoftwareSPI::mode01TransferByte(uint8_t byte_out) noexcept
         if (delay == 0)
         {
             for (bit = 0x80; bit; bit >>= 1) {
+                /* Pull the clock line low */
+                fastDigitalWriteLow(sck);
                 /* Shift-out a bit to the MOSI line */
                 if (mosi != NoPin)
                 {
@@ -157,13 +164,15 @@ uint8_t SoftwareSPI::mode01TransferByte(uint8_t byte_out) noexcept
                 /* Shift-in a bit from the MISO line */
                 if (miso != NoPin && fastDigitalRead(miso))
                     byte_in |= bit;
-                /* Pull the clock line low */
-                fastDigitalWriteLow(sck);
             }
+            /* Pull the clock line low */
+            fastDigitalWriteLow(sck);
         }
         else
         {
             for (bit = 0x80; bit; bit >>= 1) {
+                /* Pull the clock line low */
+                fastDigitalWriteLow(sck);
                 /* Shift-out a bit to the MOSI line */
                 if (mosi != NoPin)
                 {
@@ -179,9 +188,9 @@ uint8_t SoftwareSPI::mode01TransferByte(uint8_t byte_out) noexcept
                 if (miso != NoPin && fastDigitalRead(miso))
                     byte_in |= bit;
                 start = DelayCycles(start, delay);
-                /* Pull the clock line low */
-                fastDigitalWriteLow(sck);
             }
+            /* Pull the clock line low */
+            fastDigitalWriteLow(sck);
         }
     }
     return byte_in;
@@ -229,23 +238,25 @@ uint8_t SoftwareSPI::mode23TransferByte(uint8_t byte_out) noexcept
         {
             for (bit = 0x80; bit; bit >>= 1) {
                 start = DelayCycles(start, delay);
-                /* Pull the clock line high */
+                /* Pull the clock line low */
                 fastDigitalWriteLow(sck);
                 /* Shift-out a bit to the MOSI line */
                 if (mosi != NoPin)
                 {
+                    //start = DelayCycles(start, 10);
                     if (byte_out & bit)
                         fastDigitalWriteHigh(mosi);
                     else
                         fastDigitalWriteLow(mosi);
                 }
                 start = DelayCycles(start, delay);
-                /* Pull the clock line low */
+                /* Pull the clock line high */
                 fastDigitalWriteHigh(sck);
                 /* Shift-in a bit from the MISO line */
                 if (miso != NoPin && fastDigitalRead(miso))
                     byte_in |= bit;
             }
+
         }
     }
     else
@@ -253,6 +264,8 @@ uint8_t SoftwareSPI::mode23TransferByte(uint8_t byte_out) noexcept
         if (delay == 0)
         {       
             for (bit = 0x80; bit; bit >>= 1) {
+                /* Pull the clock line high */
+                fastDigitalWriteHigh(sck);
                 /* Shift-out a bit to the MOSI line */
                 if (mosi != NoPin)
                 {
@@ -261,18 +274,20 @@ uint8_t SoftwareSPI::mode23TransferByte(uint8_t byte_out) noexcept
                     else
                         fastDigitalWriteLow(mosi);
                 }
-                /* Pull the clock line high */
+                /* Pull the clock line low */
                 fastDigitalWriteLow(sck);
                 /* Shift-in a bit from the MISO line */
                 if (miso != NoPin && fastDigitalRead(miso))
                     byte_in |= bit;
-                /* Pull the clock line low */
-                fastDigitalWriteHigh(sck);
             }
+            /* Pull the clock line high */
+            fastDigitalWriteHigh(sck);
         }
         else
         {
             for (bit = 0x80; bit; bit >>= 1) {
+                /* Pull the clock line high */
+                fastDigitalWriteHigh(sck);
                 /* Shift-out a bit to the MOSI line */
                 if (mosi != NoPin)
                 {
@@ -282,15 +297,15 @@ uint8_t SoftwareSPI::mode23TransferByte(uint8_t byte_out) noexcept
                         fastDigitalWriteLow(mosi);
                 }
                 start = DelayCycles(start, delay);
-                /* Pull the clock line high */
+                /* Pull the clock line low */
                 fastDigitalWriteLow(sck);
                 /* Shift-in a bit from the MISO line */
                 if (miso != NoPin && fastDigitalRead(miso))
                     byte_in |= bit;
                 start = DelayCycles(start, delay);
-                /* Pull the clock line low */
-                fastDigitalWriteHigh(sck);
             }
+            /* Pull the clock line high */
+            fastDigitalWriteHigh(sck);
         }
     }
     return byte_in;
