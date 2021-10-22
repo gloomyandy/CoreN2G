@@ -5,6 +5,8 @@
 #include "semphr.h"
 #include "task.h"
 
+#define USE_SD_HIGHSPEED 0
+
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 HardwareSDIO HardwareSDIO::SDIO1;
@@ -70,6 +72,16 @@ void HardwareSDIO::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *in
 uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
 {
   uint8_t sd_state = MSD_OK;
+  #if USE_SD_HIGHSPEED
+  int speed = highspeed ? GPIO_SPEED_FREQ_HIGH : GPIO_SPEED_FREQ_MEDIUM;
+  pin_speed(PC_8, speed);
+  pin_speed(PC_9, speed);
+  pin_speed(PC_10, speed);
+  pin_speed(PC_11, speed);
+  pin_speed(PC_12, speed);
+  pin_speed(PD_2, speed);
+  #endif
+
   /* HAL SD initialization */
   hsd.Instance = SDIO;
   hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
@@ -119,7 +131,7 @@ uint8_t HardwareSDIO::Init(void) noexcept
   waitingTask = 0;
   // Some SD cards are not happy writing when using 48MHz
   // so for now we stick with 24.
-#if 0
+#if USE_SD_HIGHSPEED
   // try to init in highspeed mode
   sd_state = tryInit(true);
   if (sd_state != MSD_OK)
