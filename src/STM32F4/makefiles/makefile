@@ -6,6 +6,7 @@ FREERTOS_DIR ?= ./FreeRTOS
 REPRAPFIRMWARE_DIR ?= ./RepRapFirmware
 RRFLIBRARIES_DIR ?= ./RRFLibraries
 CORESTM_DIR ?= ./CoreN2G
+CANLIB_DIR ?= CANLib
 
 BUILD ?= Debug
 
@@ -39,6 +40,7 @@ $(info  - MAKE_DIR: $(MAKE_DIR))
 include $(MAKE_DIR)/Core.mk
 include $(MAKE_DIR)/FreeRTOS.mk
 include $(MAKE_DIR)/RRFLibraries.mk
+include $(MAKE_DIR)/CANLib.mk
 include $(MAKE_DIR)/RepRapFirmware.mk
 
 ifeq ($(BUILD),Debug)
@@ -109,13 +111,14 @@ CXXFLAGS_CORE = $(FLAGS) -std=gnu++17 -fno-threadsafe-statics -fno-exceptions -f
 
 
 #all Includes (RRF + Core)
-INCLUDES = $(CORE_INCLUDES) $(RRFLIBRARIES_INCLUDES) $(RRF_INCLUDES) $(RRFLIBC_INCLUDES)
+INCLUDES = $(CORE_INCLUDES) $(RRFLIBRARIES_INCLUDES) $(RRF_INCLUDES) $(RRFLIBC_INCLUDES) $(CANLIB_INCLUDES)
 
 
 DEPS = $(CORE_OBJS:.o=.d)
 DEPS += $(RRF_OBJS:.o=.d)
 DEPS += $(RRFLIBC_OBJS:.o=.d)
 DEPS += $(RRFLIBRARIES_OBJS:.o=.d)
+DEPS += $(CANLIB_OBJS:.o=.d)
 
 default: all
 
@@ -138,10 +141,10 @@ $(BUILD_DIR)/libRRFLibraries.a: $(RRFLIBRARIES_OBJS)
 #$(BUILD_DIR)/$(OUTPUT_NAME).elf: $(BUILD_DIR)/src/CoreMain.o $(BUILD_DIR)/libSTMCore.a $(BUILD_DIR)/libRRFLibraries.a $(RRFLIBC_OBJS)
 #	$(V)$(LD) -L$(BUILD_DIR)/ -L$(CORE_DIR)/variants/BIGTREE_SKR_PRO_1v1/ -L$(CORE_DIR)/CMSIS/CMSIS/DSP/Lib/GCC --specs=nano.specs -Os -Wl,--warn-section-align -Wl,--fatal-warnings -fmerge-all-constants -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m4 -mthumb -T$(LINKER_SCRIPT) -Wl,-Map,$(BUILD_DIR)/$(OUTPUT_NAME).map -o $(BUILD_DIR)/$(OUTPUT_NAME).elf -Wl,--cref -Wl,--check-sections -Wl,--gc-sections,--relax -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-section-align -Wl,--warn-unresolved-symbols -Wl,--defsym=LD_MAX_SIZE=1048576 -Wl,--defsym=LD_MAX_DATA_SIZE=196608 -Wl,--defsym=LD_FLASH_OFFSET=0x0 -Wl,--start-group $(BUILD_DIR)/src/CoreMain.o -lSTMCore -lRRFLibraries -larm_cortexM4l_math -lc -lm -lgcc -lstdc++ -Wl,--end-group
 
-$(BUILD_DIR)/$(OUTPUT_NAME).elf: $(BUILD_DIR)/libSTMCore.a $(BUILD_DIR)/libRRFLibraries.a $(RRFLIBC_OBJS) $(RRF_OBJS)
+$(BUILD_DIR)/$(OUTPUT_NAME).elf: $(BUILD_DIR)/libSTMCore.a $(BUILD_DIR)/libRRFLibraries.a $(CANLIB_OBJS) $(RRFLIBC_OBJS) $(RRF_OBJS)
 	@echo "\nCreating $(OUTPUT_NAME).bin"
 	$(V)$(MKDIR) $(dir $@)
-	$(V)$(LD) -L$(BUILD_DIR)/ -L$(CORE_DIR)/src/STM32F4/variants/STM32F407/ -L$(CORE_DIR)/src/STM32F4/system/CMSIS/CMSIS/DSP/Lib/GCC --specs=nosys.specs -Xlinker -z -Xlinker muldefs -Os -Wl,--fatal-warnings -fmerge-all-constants -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m4 -mthumb -T$(LINKER_SCRIPT) -Wl,-Map,$(BUILD_DIR)/$(OUTPUT_NAME).map -o $(BUILD_DIR)/$(OUTPUT_NAME).elf -Wl,--cref -Wl,--check-sections -Wl,--gc-sections,--relax -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-unresolved-symbols -Wl,--defsym=LD_MAX_SIZE=1048576 -Wl,--defsym=LD_MAX_DATA_SIZE=196608 -Wl,--defsym=LD_FLASH_OFFSET=0x0 -Wl,--start-group $(RRFLIBC_OBJS) -lSTMCore $(RRF_OBJS) -lRRFLibraries -larm_cortexM4l_math -lc -lm -lgcc -lstdc++ -Wl,--end-group
+	$(V)$(LD) -L$(BUILD_DIR)/ -L$(CORE_DIR)/src/STM32F4/variants/STM32F407/ -L$(CORE_DIR)/src/STM32F4/system/CMSIS/CMSIS/DSP/Lib/GCC --specs=nosys.specs -Xlinker -z -Xlinker muldefs -Os -Wl,--fatal-warnings -fmerge-all-constants -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m4 -mthumb -T$(LINKER_SCRIPT) -Wl,-Map,$(BUILD_DIR)/$(OUTPUT_NAME).map -o $(BUILD_DIR)/$(OUTPUT_NAME).elf -Wl,--cref -Wl,--check-sections -Wl,--gc-sections,--relax -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-unresolved-symbols -Wl,--defsym=LD_MAX_SIZE=1048576 -Wl,--defsym=LD_MAX_DATA_SIZE=196608 -Wl,--defsym=LD_FLASH_OFFSET=0x0 -Wl,--start-group $(RRFLIBC_OBJS) -lSTMCore $(RRF_OBJS) $(CANLIB_OBJS) -lRRFLibraries -larm_cortexM4l_math -lc -lm -lgcc -lstdc++ -Wl,--end-group
 	$(V)$(OBJCOPY) --strip-unneeded -O binary $(BUILD_DIR)/$(OUTPUT_NAME).elf $(BUILD_DIR)/$(OUTPUT_NAME).bin
 	$(V)$(SIZE) $(BUILD_DIR)/$(OUTPUT_NAME).elf
 	-@$(MAKE_DIR)/staticMemStats.sh $(BUILD_DIR)/$(OUTPUT_NAME)
