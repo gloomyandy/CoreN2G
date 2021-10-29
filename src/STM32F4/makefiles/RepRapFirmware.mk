@@ -17,7 +17,7 @@ ifeq ($(NETWORK), ETHERNET)
 else ifeq ($(NETWORK), WIFI) 
 	RRF_SRC_DIRS += Networking Networking/ESP8266WiFi targets/STM32/Networking/ESP8266WiFi
 else ifeq ($(NETWORK), SBC)
-	RRF_SRC_DIRS += Linux
+	RRF_SRC_DIRS += Sbc
 	RRF_SRC_DIRS += targets/common/NoNetwork
 else
 	RRF_SRC_DIRS += targets/common/NoNetwork
