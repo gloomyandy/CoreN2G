@@ -50,7 +50,7 @@ void AnalogOut::ReleasePWMPin(Pin pin)
 		debugPrintf("Release of unallocated PWM pin %x\n", static_cast<int>(pin));
 		return;
 	}
-	debugPrintf("Release of allocated PWM pin %x\n", static_cast<int>(pin));
+	//debugPrintf("Release of allocated PWM pin %x\n", static_cast<int>(pin));
 	hp->free();
 }
 // End
