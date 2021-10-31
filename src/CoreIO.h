@@ -457,7 +457,7 @@ inline bool fastDigitalRead(uint32_t pin) noexcept
  * @brief Reset the microcontroller
  *
  */
-[[noreturn]] void Reset() noexcept;
+[[noreturn]] void ResetProcessor() noexcept;
 
 #if !STM32F4 && !LPC17xx
 /**
