@@ -99,31 +99,7 @@
 
 #include <inttypes.h>				// for PRIu32 etc.
 #include <ctype.h>
-
-// Types
-
-typedef uint8_t DmaChannel;			///< A type that represents a DMA channel number
-typedef uint8_t DmaPriority;		///< A type that represents a DMA priority
-#if STM32F4
-typedef PinName Pin;
-#elif LPC17xx
-typedef gpioPins_et Pin;
-#else
-typedef uint8_t Pin;				///< A type that represents an I/O pin on the microcontroller
-#endif
-typedef uint16_t PwmFrequency;		///< A type that represents a PWM frequency. 0 sometimes means "default".
-typedef uint32_t NvicPriority;		///< A type that represents an interrupt priority
-typedef uint8_t ExintNumber;		///< A type that represents an EXINT number
-typedef uint8_t EventNumber;		///< A type that represents an event number
-
-#if STM32F4
-static const Pin NoPin = NC;		///< A number that represents no I/O pin
-#elif LPC17xx
-static const Pin NoPin = P_NC; 		//which =0xff
-#else
-static const Pin NoPin = 0xFF;		///< A number that represents no I/O pin
-static const Pin Nx = 0xFF;			///< A number that represents no I/O EXINT number
-#endif
+#include "CoreTypes.h"
 
 // Standard GCLK numbers and frequencies
 #if SAME5x
