@@ -22,3 +22,12 @@ void *CoreAllocCCMRAMPermanent(size_t sz, std::align_val_t align) noexcept
 	ccmHeapLimit = newHeapLimit;
 	return newHeapLimit;
 }
+
+void CoreCCMRAMUsage(size_t& ccmStatic, size_t& ccmUsed, size_t& ccmFree) noexcept
+{
+	ccmStatic = &_eccmram - &_sccmram;
+	ccmUsed = &_ccmramend - ccmHeapLimit;
+	ccmFree = ccmHeapLimit - ccmHeapTop;
+}
+
+
