@@ -27,9 +27,18 @@ Andy - 6/8/2020
 */
 
 // Create SPI devices the actual configuration is set later
+#if STM32H7
 HardwareSPI HardwareSPI::SSP1(SPI1);
-HardwareSPI HardwareSPI::SSP2(SPI2);
+HardwareSPI HardwareSPI::SSP2(SPI2, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
 HardwareSPI HardwareSPI::SSP3(SPI3);
+HardwareSPI HardwareSPI::SSP4(SPI4);
+HardwareSPI HardwareSPI::SSP5(SPI5);
+HardwareSPI HardwareSPI::SSP6(SPI6);
+#else
+HardwareSPI HardwareSPI::SSP1(SPI1);
+HardwareSPI HardwareSPI::SSP2(SPI2, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
+HardwareSPI HardwareSPI::SSP3(SPI3, DMA1_Stream0, DMA_CHANNEL_0, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_CHANNEL_0, DMA1_Stream5_IRQn);
+#endif
 
 //#define SSPI_DEBUG
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
@@ -133,30 +142,20 @@ void transferComplete(HardwareSPI *spiDevice) noexcept
     portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
 
-void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrq,
-                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrq) noexcept
+void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs) noexcept
 {
     spi.pin_sclk = clk;
     spi.pin_miso = miso;
     spi.pin_mosi = mosi;
     spi.pin_ssel = csPin = cs;
-    if (rxStream != nullptr)
-    {   
-        // init the DMA channels
-        __HAL_RCC_DMA2_CLK_ENABLE();
-        __HAL_RCC_DMA1_CLK_ENABLE();
-        initDmaStream(dmaRx, rxStream, rxChan, rxIrq, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
-        initDmaStream(dmaTx, txStream, txChan, txIrq, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
-        __HAL_LINKDMA(&(spi.handle), hdmarx, dmaRx);
-        __HAL_LINKDMA(&(spi.handle), hdmatx, dmaTx);
-        usingDma = true;
+    if (usingDma)
+    {
+        initDma();   
     }
-    else
-        usingDma = false;
     initComplete = false;
 }
 
-void HardwareSPI::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept
+void HardwareSPI::configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept
 {
     hdma.Instance                 = inst;
 #if STM32H7
@@ -175,9 +174,18 @@ void HardwareSPI::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *ins
     hdma.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
     hdma.Init.MemBurst            = DMA_MBURST_SINGLE;
     hdma.Init.PeriphBurst         = DMA_PBURST_SINGLE;
-    
-    HAL_DMA_Init(&hdma); 
-    NVIC_EnableIRQ(irq);      
+}
+
+void HardwareSPI::initDma() noexcept
+{    
+    __HAL_RCC_DMA2_CLK_ENABLE();
+    __HAL_RCC_DMA1_CLK_ENABLE();
+    HAL_DMA_Init(&dmaRx); 
+    NVIC_EnableIRQ(rxIrq);      
+    __HAL_LINKDMA(&(spi.handle), hdmarx, dmaRx);
+    HAL_DMA_Init(&dmaTx); 
+    NVIC_EnableIRQ(txIrq);      
+    __HAL_LINKDMA(&(spi.handle), hdmarx, dmaTx);
 }
 
 void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, bool hardwareCS) noexcept
@@ -207,7 +215,17 @@ void HardwareSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bi
     configureDevice(SPI_MODE_MASTER, bits, clockMode, bitRate, false);
 }
 
-HardwareSPI::HardwareSPI(SPI_TypeDef *spi) noexcept : dev(spi), initComplete(false), transferActive(false)
+HardwareSPI::HardwareSPI(SPI_TypeDef *spi, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrq,
+                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrq) noexcept : dev(spi), initComplete(false), transferActive(false), usingDma(true)
+{
+    configureDmaStream(dmaRx, rxStream, rxChan, rxIrq, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
+    configureDmaStream(dmaTx, txStream, txChan, txIrq, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
+    curBitRate = 0xffffffff;
+    curClockMode = 0xffffffff;
+    curBits = 0xffffffff;
+}
+
+HardwareSPI::HardwareSPI(SPI_TypeDef *spi) noexcept : dev(spi), initComplete(false), transferActive(false), usingDma(false)
 {
     curBitRate = 0xffffffff;
     curClockMode = 0xffffffff;

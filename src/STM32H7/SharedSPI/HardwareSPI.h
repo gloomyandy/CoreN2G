@@ -22,12 +22,13 @@ class HardwareSPI: public SPI
 {
 public:
     HardwareSPI(SPI_TypeDef *spi) noexcept;
+    HardwareSPI(SPI_TypeDef *spi, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrq,
+                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrq) noexcept;
     spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;
     bool waitForTxEmpty() noexcept;
     void configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept; // Master mode
     void configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, bool hardwareCS) noexcept;
-    void initPins(Pin clk, Pin miso, Pin mosi, Pin cs = NoPin, DMA_Stream_TypeDef* rxStream = nullptr, uint32_t rxChan = 0, IRQn_Type rxIrq = DMA1_Stream0_IRQn,
-                            DMA_Stream_TypeDef* txStream = nullptr, uint32_t txChan = 0, IRQn_Type txIrq = DMA1_Stream0_IRQn) noexcept;
+    void initPins(Pin clk, Pin miso, Pin mosi, Pin cs = NoPin) noexcept;
     void disable() noexcept;
     void flushRx() noexcept;
     void startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept;
@@ -35,23 +36,30 @@ public:
     static HardwareSPI SSP1;
     static HardwareSPI SSP2;
     static HardwareSPI SSP3;
-
+#if STM32H7
+    static HardwareSPI SSP4;
+    static HardwareSPI SSP5;
+    static HardwareSPI SSP6;
+#endif
 private:
-    bool usingDma;
     spi_t spi;
     SPI_TypeDef *dev;
     DMA_HandleTypeDef dmaRx;
     DMA_HandleTypeDef dmaTx;
+    IRQn_Type rxIrq;
+    IRQn_Type txIrq;
     Pin csPin;
     uint32_t curBitRate;
     uint32_t curBits;
     uint32_t curClockMode;
-    bool initComplete;
     SPICallbackFunction callback;
     TaskHandle_t waitingTask;
+    bool initComplete;
     bool transferActive;
-    void initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept;
+    bool usingDma;
+    void configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept;
     void startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;
+    void initDma() noexcept;
 
 #if SPI1DMA
     friend void DMA2_Stream2_IRQHandler() noexcept;

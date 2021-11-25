@@ -29,12 +29,19 @@ enum SSPChannel : uint8_t
     SWSPI0,
     SWSPI1,
     SWSPI2,
+    //Additional Hardware devices
+#if STM32H7
+    SSP4,
+    SSP5,
+    SSP6,
+#endif
+    SSPMAX,
     // Hardware SDIO
     SSPSDIO = 0xef,
     // Not defined
     SSPNONE = 0xff
 };
-constexpr size_t NumSPIDevices = (uint32_t)SWSPI2+1;
+constexpr size_t NumSPIDevices = (uint32_t)SSPMAX;
 constexpr size_t NumSoftwareSPIDevices = 3;
 
 class SPI
@@ -43,8 +50,7 @@ public:
     virtual void configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept;
     virtual spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;    
     virtual bool waitForTxEmpty() noexcept;
-    virtual void initPins(Pin clk, Pin miso, Pin mosi, Pin cs = NoPin, DMA_Stream_TypeDef* rxStream = nullptr, uint32_t rxChan = 0, IRQn_Type rxIrq = DMA1_Stream0_IRQn,
-                            DMA_Stream_TypeDef* txStream = nullptr, uint32_t txChan = 0, IRQn_Type txIrq = DMA1_Stream0_IRQn) noexcept;
+    virtual void initPins(Pin clk, Pin miso, Pin mosi, Pin cs = NoPin) noexcept;
     static SPI *getSSPDevice(SSPChannel channel) noexcept;
 };
 

@@ -16,6 +16,11 @@ SPI *SPI::getSSPDevice(SSPChannel channel)
         case SWSPI0: return &SoftwareSPI::SWSSP0; break;
         case SWSPI1: return &SoftwareSPI::SWSSP1; break;
         case SWSPI2: return &SoftwareSPI::SWSSP2; break;
+#if STM32H7
+        case SSP4: return &HardwareSPI::SSP4; break;
+        case SSP5: return &HardwareSPI::SSP5; break;
+        case SSP6: return &HardwareSPI::SSP6; break;
+#endif
         default: return nullptr;
     }
 }
