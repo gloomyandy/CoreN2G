@@ -9,7 +9,9 @@
 #define SRC_CORETYPES_H_
 
 #include <stdint.h>
-#if defined(__STM32F4__)
+#if defined(__STM32H7__)
+# include <stm32h7.h>
+#elif defined(__STM32F4__)
 # include <stm32f4.h>
 #elif defined(__LPC17xx__)
 # include <lpc17xx.h>

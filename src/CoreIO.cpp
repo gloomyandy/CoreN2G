@@ -647,7 +647,12 @@ void WatchdogInit() noexcept
 	constexpr uint16_t watchdogTicks = 256;						// about 1 second
 	WDT->WDT_MR = WDT_MR_WDRSTEN | WDT_MR_WDV(watchdogTicks) | WDT_MR_WDD(watchdogTicks);
 #elif STM32F4
+#if STM32H7
+return;
+    wdHandle.Instance = WWDG1;
+#else
     wdHandle.Instance = WWDG;
+#endif
     wdHandle.Init.Prescaler = WWDG_PRESCALER_8;
     wdHandle.Init.Window = 0x7f;
     wdHandle.Init.Counter = 0x7f;
@@ -671,6 +676,7 @@ void WatchdogInit() noexcept
 
 void WatchdogReset() noexcept
 {
+	return;
 #if SAME5x || SAMC21
 	// If we kick the watchdog too often, sometimes it resets us. It uses a 1024Hz nominal clock, so presumably it has to be reset less often than that.
 	if ((((uint32_t)g_ms_ticks) & 0x07) == 0 && (WDT->SYNCBUSY.reg & WDT_SYNCBUSY_CLEAR) == 0)

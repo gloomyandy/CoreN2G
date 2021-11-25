@@ -16,7 +16,11 @@
 //Based on mbed-os/hal/mbed_pinmap_common.c
 #include "pinmap.h"
 #include "pinconfig.h"
-#include "stm32f4xx_ll_gpio.h"
+#if defined(__STM32H7__)
+# include "stm32h7xx_ll_gpio.h"
+#else
+# include "stm32f4xx_ll_gpio.h"
+#endif
 
 /* Map STM_PIN to LL */
 const uint32_t pin_map_ll[16] = {

@@ -5,6 +5,15 @@
 #include "semphr.h"
 #include "task.h"
 
+#if STM32H7
+#define SDIO_CLOCK_EDGE_RISING SDMMC_CLOCK_EDGE_RISING
+#define SDIO_CLOCK_POWER_SAVE_DISABLE SDMMC_CLOCK_POWER_SAVE_DISABLE
+#define SDIO_BUS_WIDE_1B SDMMC_BUS_WIDE_1B
+#define SDIO_HARDWARE_FLOW_CONTROL_DISABLE SDMMC_HARDWARE_FLOW_CONTROL_DISABLE
+#define SDIO_BUS_WIDE_4B SDMMC_BUS_WIDE_4B
+#else
+#endif
+
 #define USE_SD_HIGHSPEED 0
 
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
@@ -20,6 +29,16 @@ extern "C" void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsdio)
 {
   TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask);
 }    
+
+#if STM32H7
+extern "C" void HAL_SD_AbortCallback(SD_HandleTypeDef *hsd) {
+}
+
+extern "C" void SDMMC1_IRQHandler()
+{
+  HAL_SD_IRQHandler(&(HardwareSDIO::SDIO1.hsd));
+}
+#else
 
 extern "C" void DMA2_Stream3_IRQHandler()
 {
@@ -39,16 +58,12 @@ extern "C" void SDIO_IRQHandler()
   HAL_SD_IRQHandler(&(HardwareSDIO::SDIO1.hsd));
 }
 
-HardwareSDIO::HardwareSDIO() noexcept
-{   
-}
-
-
 void HardwareSDIO::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept
 {
   hdma.Instance                 = inst;
   
   hdma.Init.Channel             = chan;
+
   hdma.Init.Direction           = dir;
   hdma.Init.PeriphInc           = DMA_PINC_DISABLE;
   hdma.Init.MemInc              = minc;
@@ -68,9 +83,15 @@ void HardwareSDIO::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *in
   }
   NVIC_EnableIRQ(irq);      
 }
+#endif
+
+HardwareSDIO::HardwareSDIO() noexcept
+{   
+}
 
 uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
 {
+  // TODO: Consider using STM32H7 code to switch to higher speed
   uint8_t sd_state = MSD_OK;
   #if USE_SD_HIGHSPEED
   int speed = highspeed ? GPIO_SPEED_FREQ_HIGH : GPIO_SPEED_FREQ_MEDIUM;
@@ -83,9 +104,15 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
   #endif
 
   /* HAL SD initialization */
+#if STM32H7
+  hsd.Instance = SDMMC1;
+#else
   hsd.Instance = SDIO;
+#endif
   hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
+#if !STM32H7
   hsd.Init.ClockBypass = (highspeed ? SDIO_CLOCK_BYPASS_ENABLE : SDIO_CLOCK_BYPASS_DISABLE);
+#endif
   hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
   hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
   hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
@@ -115,19 +142,27 @@ uint8_t HardwareSDIO::Init(void) noexcept
   if (IsDetected() != SD_PRESENT) {
     return MSD_ERROR;
   }
+#if STM32H7
+  __HAL_RCC_SDMMC1_CLK_ENABLE();
+#else
   __HAL_RCC_SDIO_CLK_ENABLE();
+#endif
   pinmap_pinout(PC_8, PinMap_SD);
   pinmap_pinout(PC_9, PinMap_SD);
   pinmap_pinout(PC_10, PinMap_SD);
   pinmap_pinout(PC_11, PinMap_SD);
   pinmap_pinout(PC_12, PinMap_SD);
   pinmap_pinout(PD_2, PinMap_SD);
+#if STM32H7
+  NVIC_EnableIRQ(SDMMC1_IRQn);      
+#else
   // DMA setup
   __HAL_RCC_DMA2_CLK_ENABLE();
   initDmaStream(dmaRx, DMA2_Stream3, DMA_CHANNEL_4, DMA2_Stream3_IRQn, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
   initDmaStream(dmaTx, DMA2_Stream6, DMA_CHANNEL_4, DMA2_Stream6_IRQn, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
   __HAL_LINKDMA(&hsd, hdmarx, dmaRx);
   __HAL_LINKDMA(&hsd, hdmatx, dmaTx);
+#endif
   waitingTask = 0;
   // Some SD cards are not happy writing when using 48MHz
   // so for now we stick with 24.

@@ -26,11 +26,39 @@ constexpr uint32_t NumADCs = 3;                          // Max supported ADCs
 constexpr uint32_t OversampleBits = 2;                   // Number of extra bit of resolution
 constexpr uint32_t Oversample = 16;                      // 4^OversampleBits
 constexpr uint32_t MaxActiveChannels = 16;               // Max active ADC channels
-constexpr uint32_t NumChannelsADC1 = ADC_CHANNEL_VREFINT+2;
-constexpr uint32_t NumChannelsADC3 = 16;
 constexpr AnalogChannelNumber ADC_1 = 0x10000;
 constexpr AnalogChannelNumber ADC_2 = 0x20000;
 constexpr AnalogChannelNumber ADC_3 = 0x30000;
+#if STM32H7
+constexpr uint32_t NumChannelsADC1 = 20;
+constexpr uint32_t NumChannelsADC3 = 20;
+constexpr uint32_t StmChanMap1[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
+                                    ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
+                                    ADC_CHANNEL_14, ADC_CHANNEL_15, ADC_CHANNEL_16, ADC_CHANNEL_17, ADC_CHANNEL_18, ADC_CHANNEL_19};
+constexpr uint32_t StmChanMap3[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
+                                    ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
+                                    ADC_CHANNEL_14, ADC_CHANNEL_15, ADC_CHANNEL_16, ADC_CHANNEL_VBAT, LL_ADC_CHANNEL_TEMPSENSOR, ADC_CHANNEL_VREFINT};
+constexpr uint32_t CHAN_VREFINT = (ADC_3 | 19);
+constexpr uint32_t CHAN_TEMPSENSOR = (ADC_3 | 18);
+constexpr uint32_t ADC1DMA = DMA_REQUEST_ADC1;
+constexpr uint32_t ADC3DMA = DMA_REQUEST_ADC3;
+constexpr uint32_t ADC_SAMPLETIME = ADC_SAMPLETIME_387CYCLES_5;
+#else
+constexpr uint32_t NumChannelsADC1 = 19;
+constexpr uint32_t NumChannelsADC3 = 16;
+constexpr uint32_t StmChanMap1[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
+                                    ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
+                                    ADC_CHANNEL_14, ADC_CHANNEL_15, ADC_CHANNEL_TEMPSENSOR, ADC_CHANNEL_VREFINT, ADC_CHANNEL_VBAT};
+constexpr uint32_t StmChanMap3[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
+                                    ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
+                                    ADC_CHANNEL_14, ADC_CHANNEL_15};
+constexpr uint32_t CHAN_VREFINT = (ADC_1 | 17);
+constexpr uint32_t CHAN_TEMPSENSOR = (ADC_3 | 16);
+constexpr uint32_t ADC1DMA = DMA_CHANNEL_0;
+constexpr uint32_t ADC3DMA = DMA_CHANNEL_2;
+constexpr uint32_t ADC_SAMPLETIME = ADC_SAMPLETIME_480CYCLES;
+#endif
+static constexpr const uint32_t *StmChanMap[NumADCs+1] = {nullptr, StmChanMap1, nullptr, StmChanMap3};
 constexpr uint32_t NumChannels[NumADCs+1] = {0, NumChannelsADC1, 0, NumChannelsADC3};
 
 static int32_t ChanMap1[NumChannelsADC1];
@@ -75,7 +103,11 @@ static void ConfigureDma(DMA_HandleTypeDef& DmaHandle, DMA_Stream_TypeDef *inst,
 {
     DmaHandle.Instance = inst;
 
+#if STM32H7
+    DmaHandle.Init.Request  = chan;
+#else
     DmaHandle.Init.Channel  = chan;
+#endif
     DmaHandle.Init.Direction = DMA_PERIPH_TO_MEMORY;
     DmaHandle.Init.PeriphInc = DMA_PINC_DISABLE;
     DmaHandle.Init.MemInc = DMA_MINC_ENABLE;
@@ -286,9 +318,15 @@ static void ConfigureAdc(ADC_HandleTypeDef& AdcHandle, ADC_TypeDef *inst, uint32
     // captured to RAM via DMA
     AdcHandle.Instance = inst;
     // consider using ADC_CLOCK_SYNC_PCLK_DIV8
+#if STM32H7
+    AdcHandle.Init.ClockPrescaler        = ADC_CLOCK_SYNC_PCLK_DIV4;      /* (A)synchronous clock mode, input ADC clock divided */
+#else
     AdcHandle.Init.ClockPrescaler        = ADC_CLOCK_SYNC_PCLK_DIV8;      /* (A)synchronous clock mode, input ADC clock divided */
+#endif
     AdcHandle.Init.Resolution            = ADC_RESOLUTION_12B;            /* 12-bit resolution for converted data */
+#if !STM32H7
     AdcHandle.Init.DataAlign             = ADC_DATAALIGN_RIGHT;           /* Right-alignment for converted data */
+#endif
     AdcHandle.Init.ScanConvMode          = ENABLE;                        /* Sequencer Enabled */
     AdcHandle.Init.EOCSelection          = DISABLE;                       /* EOC flag picked-up to indicate conversion end */
 #if !defined(STM32F1xx) && !defined(STM32F2xx) && !defined(STM32F4xx) && \
@@ -312,7 +350,11 @@ static void ConfigureAdc(ADC_HandleTypeDef& AdcHandle, ADC_TypeDef *inst, uint32
     AdcHandle.Init.NbrOfDiscConversion   = 0;                             
 #endif
     AdcHandle.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+#if STM32H7
+// do we need this at all?
+#else
     AdcHandle.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_CC1;
+#endif
 
 #if !defined(STM32F1xx)
     //AdcHandle.Init.ExternalTrigConvEdge  = ADC_EXTERNALTRIGCONVEDGE_NONE; /* Parameter discarded because software trigger chosen */
@@ -376,10 +418,10 @@ static uint32_t GetActiveChannels(int32_t *cm, uint32_t sz)
     return cnt;
 }
 
-static uint32_t AddActiveChannels(ADC_HandleTypeDef& AdcHandle, int32_t *cm, uint32_t sz, uint32_t dataOffset)
+static uint32_t AddActiveChannels(ADC_HandleTypeDef& AdcHandle, uint32_t AdcNum, int32_t *cm, uint32_t sz, uint32_t dataOffset)
 {
     ADC_ChannelConfTypeDef  AdcChannelConf = {};
-    AdcChannelConf.SamplingTime = ADC_SAMPLETIME_480CYCLES;
+    AdcChannelConf.SamplingTime = ADC_SAMPLETIME;
 
     int32_t sampleOffset = 0;
     for(uint32_t i = 0; i < sz; i++)
@@ -387,10 +429,7 @@ static uint32_t AddActiveChannels(ADC_HandleTypeDef& AdcHandle, int32_t *cm, uin
         if (cm[i] != -1)
         {
             // include this channel
-            if (i == (ADC_CHANNEL_TEMPSENSOR & 0xffff))
-                AdcChannelConf.Channel = ADC_CHANNEL_TEMPSENSOR;
-            else
-                AdcChannelConf.Channel = i;
+            AdcChannelConf.Channel = StmChanMap[AdcNum][i];
             AdcChannelConf.Rank = ++sampleOffset;
             HAL_ADC_ConfigChannel(&AdcHandle, &AdcChannelConf);
             // record the location of the sample
@@ -430,7 +469,7 @@ static void ConfigureChannels()
         __HAL_RCC_ADC3_CLK_ENABLE();
         // setup the ADC for that number of channels
         ConfigureAdc(Adc3Handle, ADC3, Active3);
-        AddActiveChannels(Adc3Handle, ChanMap3, NumChannelsADC3, Active1*Oversample);
+        AddActiveChannels(Adc3Handle, 3, ChanMap3, NumChannelsADC3, Active1*Oversample);
         // All done restart sampling
         HAL_ADC_Start_DMA(&Adc3Handle, ChanValues + Active1*Oversample, Active3*Oversample);
         Adc3Running = true;
@@ -438,10 +477,14 @@ static void ConfigureChannels()
     NumActiveChannels[3] = Active3;
     if (Active1 > 0)
     {
+#if STM32H7
+        __HAL_RCC_ADC12_CLK_ENABLE();
+#else
         __HAL_RCC_ADC1_CLK_ENABLE();
+#endif
         // setup the ADC for that number of channels
         ConfigureAdc(Adc1Handle, ADC1, Active1);
-        AddActiveChannels(Adc1Handle, ChanMap1, NumChannelsADC1, 0);
+        AddActiveChannels(Adc1Handle, 1, ChanMap1, NumChannelsADC1, 0);
         // All done restart sampling
         HAL_ADC_Start_DMA(&Adc1Handle, ChanValues, Active1*Oversample);
         Adc1Running = true;
@@ -461,8 +504,8 @@ namespace LegacyAnalogIn
             ChanMap3[i] = -1;
 
         __HAL_RCC_DMA2_CLK_ENABLE();
-        ConfigureDma(Dma1Handle, DMA2_Stream4, DMA_CHANNEL_0);
-        ConfigureDma(Dma3Handle, DMA2_Stream0, DMA_CHANNEL_2);
+        ConfigureDma(Dma1Handle, DMA2_Stream4, ADC1DMA);
+        ConfigureDma(Dma3Handle, DMA2_Stream0, ADC3DMA);
         __HAL_LINKDMA(&Adc1Handle, DMA_Handle, Dma1Handle);
         __HAL_LINKDMA(&Adc3Handle, DMA_Handle, Dma3Handle);
     }
@@ -544,13 +587,13 @@ namespace LegacyAnalogIn
     // Get the temperature measurement channel
     AnalogChannelNumber GetTemperatureAdcChannel()
     {
-        return (ADC_1 | (ADC_CHANNEL_TEMPSENSOR & 0xffff));
+        return CHAN_TEMPSENSOR;
     }
 
     // Get the temperature measurement channel
     AnalogChannelNumber GetVREFAdcChannel()
     {
-        return (ADC_1 | ADC_CHANNEL_VREFINT);
+        return CHAN_VREFINT;
     }
 }
 // End

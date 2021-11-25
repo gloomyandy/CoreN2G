@@ -67,6 +67,18 @@
 # define SAM4S				0
 # define SAME5x				0
 # define SAME70				0
+#elif defined(__STM32H7__)
+# include <stm32h7.h>
+# include <dwt.h>
+# define STM32F4			1
+# define STM32H7			1
+# define LPC17xx			0
+# define SAMC21				0
+# define SAM3XA				0
+# define SAM4E				0
+# define SAM4S				0
+# define SAME5x				0
+# define SAME70				0
 #elif defined(__LPC17xx__)
 # include <lpc17xx.h>
 # define LPC17xx			1

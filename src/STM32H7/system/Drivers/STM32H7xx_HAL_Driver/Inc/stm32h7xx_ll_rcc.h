@@ -5364,6 +5364,7 @@ __STATIC_INLINE uint32_t LL_RCC_IsEnableIT_LSECSS(void)
   */
 
 #if defined(USE_FULL_LL_DRIVER)
+sdsdsdsds
 /** @defgroup RCC_LL_EF_Init De-initialization function
   * @{
   */

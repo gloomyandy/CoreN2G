@@ -26,6 +26,9 @@
  extern "C" {
 #endif
 
+#if defined(STM32F4) && defined(STM32H7)
+#undef STM32F4
+#endif
 /* Includes ------------------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
@@ -3639,6 +3642,9 @@
 }
 #endif
 
+#if defined(STM32H7)
+#define STM32F4 1
+#endif
 #endif /* STM32_HAL_LEGACY */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

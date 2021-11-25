@@ -55,7 +55,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32h7xx_hal.h"
-
+#if defined (HAL_SRAM_MODULE_ENABLED) || defined(HAL_NOR_MODULE_ENABLED) || defined(HAL_NAND_MODULE_ENABLED) || defined(HAL_PCCARD_MODULE_ENABLED) || defined(HAL_SDRAM_MODULE_ENABLED)
 /** @addtogroup STM32H7xx_HAL_Driver
   * @{
   */
@@ -1050,5 +1050,5 @@ uint32_t FMC_SDRAM_GetModeStatus(FMC_SDRAM_TypeDef *Device, uint32_t Bank)
 /**
   * @}
   */
-
+#endif
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

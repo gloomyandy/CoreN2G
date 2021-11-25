@@ -133,6 +133,7 @@ void spi_init(spi_t *obj, SPI_TypeDef *dev, uint32_t spimode, uint32_t speed, sp
   handle->Init.Mode              = spimode;
 
   spi_freq = spi_getClkFreqInst(obj->spi);
+  debugPrintf("spi freq %d lowest %d requested %d\n", spi_freq, spi_freq / SPI_SPEED_CLOCK_DIV256_MHZ, speed);
   if (speed >= (spi_freq / SPI_SPEED_CLOCK_DIV2_MHZ)) {
     handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   } else if (speed >= (spi_freq / SPI_SPEED_CLOCK_DIV4_MHZ)) {
@@ -150,9 +151,9 @@ void spi_init(spi_t *obj, SPI_TypeDef *dev, uint32_t spimode, uint32_t speed, sp
   } else if (speed >= (spi_freq / SPI_SPEED_CLOCK_DIV256_MHZ)) {
     handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
   } else {
-    handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+    handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
   }
-
+debugPrintf("selected prescaler %x div256 %x\n", handle->Init.BaudRatePrescaler, SPI_BAUDRATEPRESCALER_256);
   handle->Init.Direction         = SPI_DIRECTION_2LINES;
 
   if ((mode == CORE_SPI_MODE_0) || (mode == CORE_SPI_MODE_2)) {
@@ -178,10 +179,11 @@ void spi_init(spi_t *obj, SPI_TypeDef *dev, uint32_t spimode, uint32_t speed, sp
   }
 
   handle->Init.TIMode            = SPI_TIMODE_DISABLE;
-#if defined(STM32F0xx) || defined(STM32F3xx) || defined(STM32F7xx) ||\
-    defined(STM32G0xx) || defined(STM32H7xx) || defined(STM32L4xx) ||\
-    defined(STM32WBxx)
+#if defined(SPI_NSS_PULSE_DISABLE)
   handle->Init.NSSPMode          = SPI_NSS_PULSE_DISABLE;
+#endif
+#ifdef SPI_MASTER_KEEP_IO_STATE_ENABLE
+  handle->Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_ENABLE;  /* Recommended setting to avoid glitches */
 #endif
 
   /* Configure SPI GPIO pins */
@@ -202,36 +204,48 @@ void spi_init(spi_t *obj, SPI_TypeDef *dev, uint32_t spimode, uint32_t speed, sp
   // Enable SPI clock
   if (handle->Instance == SPI1) {
     __HAL_RCC_SPI1_CLK_ENABLE();
+    __HAL_RCC_SPI1_FORCE_RESET();
+    __HAL_RCC_SPI1_RELEASE_RESET();
   }
 #endif
 
 #if defined SPI2_BASE
   if (handle->Instance == SPI2) {
     __HAL_RCC_SPI2_CLK_ENABLE();
+    __HAL_RCC_SPI2_FORCE_RESET();
+    __HAL_RCC_SPI2_RELEASE_RESET();
   }
 #endif
 
 #if defined SPI3_BASE
   if (handle->Instance == SPI3) {
     __HAL_RCC_SPI3_CLK_ENABLE();
+    __HAL_RCC_SPI3_FORCE_RESET();
+    __HAL_RCC_SPI3_RELEASE_RESET();
   }
 #endif
 
 #if defined SPI4_BASE
   if (handle->Instance == SPI4) {
     __HAL_RCC_SPI4_CLK_ENABLE();
+    __HAL_RCC_SPI4_FORCE_RESET();
+    __HAL_RCC_SPI4_RELEASE_RESET();
   }
 #endif
 
 #if defined SPI5_BASE
   if (handle->Instance == SPI5) {
     __HAL_RCC_SPI5_CLK_ENABLE();
+    __HAL_RCC_SPI5_FORCE_RESET();
+    __HAL_RCC_SPI5_RELEASE_RESET();
   }
 #endif
 
 #if defined SPI6_BASE
   if (handle->Instance == SPI6) {
     __HAL_RCC_SPI6_CLK_ENABLE();
+    __HAL_RCC_SPI6_FORCE_RESET();
+    __HAL_RCC_SPI6_RELEASE_RESET();
   }
 #endif
 

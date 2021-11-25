@@ -44,7 +44,11 @@ static inline void flushRxFifo(SPI_HandleTypeDef *hspi) noexcept
     while (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_RXNE))
     {
         /* read the received data */
+#if STM32H7
+        (void)*(__IO uint8_t *)&hspi->Instance->RXDR;
+#else
         (void)*(__IO uint8_t *)&hspi->Instance->DR;
+#endif
     }
 }
 
@@ -155,8 +159,11 @@ void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, DMA_Stream_TypeD
 void HardwareSPI::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept
 {
     hdma.Instance                 = inst;
-    
+#if STM32H7
+    hdma.Init.Request             = chan;
+#else    
     hdma.Init.Channel             = chan;
+#endif
     hdma.Init.Direction           = dir;
     hdma.Init.PeriphInc           = DMA_PINC_DISABLE;
     hdma.Init.MemInc              = minc;
