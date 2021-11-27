@@ -46,7 +46,7 @@ __attribute__((constructor(101))) void premain()
   SCB_EnableICache();
 #endif
 #ifndef D_CACHE_DISABLED
-  SCB_EnableDCache();
+  //SCB_EnableDCache();
 #endif
 #endif
 	//__libc_init_array();	// initialize C library and call C++ constructors for static data

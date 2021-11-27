@@ -178,7 +178,7 @@ void SystemClockStartupInit() {
 
   // Enable L1-Cache
   SCB_EnableICache();
-  SCB_EnableDCache();
+  //SCB_EnableDCache();
   SCB->CACR |= 1<<2;
 
   PWR->CR3 &= ~(1 << 2);  // SCUEN=0
