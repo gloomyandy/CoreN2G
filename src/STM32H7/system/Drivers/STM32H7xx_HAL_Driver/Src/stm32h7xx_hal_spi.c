@@ -129,6 +129,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32h7xx_hal.h"
+extern void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 /** @addtogroup STM32H7xx_HAL_Driver
   * @{
@@ -2358,6 +2359,17 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
 
   /* Set the DMA AbortCallback */
   hspi->hdmarx->XferAbortCallback = NULL;
+//debugPrintf("about to start (RXWNE FRLVL) %x RXP %x\n", hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL), hspi->Instance->SR & SPI_SR_RXP);
+//uint8_t dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+__HAL_SPI_ENABLE(hspi);
+//debugPrintf("about to start (RXWNE FRLVL) %x RXP %x\n", hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL), hspi->Instance->SR & SPI_SR_RXP);
+uint8_t dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+__HAL_SPI_DISABLE(hspi);
+//debugPrintf("about to start (RXWNE FRLVL) %x RXP %x\n", hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL), hspi->Instance->SR & SPI_SR_RXP);
 
   /* Enable the Rx DMA Stream/Channel  */
   if (HAL_OK != HAL_DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->RXDR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount))
@@ -2403,7 +2415,14 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
 
   /* Enable the SPI Error Interrupt Bit */
   __HAL_SPI_ENABLE_IT(hspi, (SPI_IT_OVR | SPI_IT_UDR | SPI_IT_FRE | SPI_IT_MODF));
-
+//debugPrintf("about to start (RXWNE FRLVL) %x RXP %x\n", hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL), hspi->Instance->SR & SPI_SR_RXP);
+//uint8_t dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+//__HAL_SPI_ENABLE(hspi);
+//dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+//dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+//dummy = *((__IO uint8_t *)&hspi->Instance->RXDR);
+//__HAL_SPI_DISABLE(hspi);
+//debugPrintf("about to start (RXWNE FRLVL) %x RXP %x\n", hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL), hspi->Instance->SR & SPI_SR_RXP);
   /* Enable SPI peripheral */
   __HAL_SPI_ENABLE(hspi);
 

@@ -133,7 +133,7 @@ void spi_init(spi_t *obj, SPI_TypeDef *dev, uint32_t spimode, uint32_t speed, sp
   handle->Init.Mode              = spimode;
 
   spi_freq = spi_getClkFreqInst(obj->spi);
-  debugPrintf("spi freq %d lowest %d requested %d\n", spi_freq, spi_freq / SPI_SPEED_CLOCK_DIV256_MHZ, speed);
+  //debugPrintf("spi freq %d lowest %d requested %d\n", spi_freq, spi_freq / SPI_SPEED_CLOCK_DIV256_MHZ, speed);
   if (speed >= (spi_freq / SPI_SPEED_CLOCK_DIV2_MHZ)) {
     handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   } else if (speed >= (spi_freq / SPI_SPEED_CLOCK_DIV4_MHZ)) {
@@ -153,7 +153,7 @@ void spi_init(spi_t *obj, SPI_TypeDef *dev, uint32_t spimode, uint32_t speed, sp
   } else {
     handle->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
   }
-debugPrintf("selected prescaler %x div256 %x\n", handle->Init.BaudRatePrescaler, SPI_BAUDRATEPRESCALER_256);
+//debugPrintf("selected prescaler %x div256 %x\n", handle->Init.BaudRatePrescaler, SPI_BAUDRATEPRESCALER_256);
   handle->Init.Direction         = SPI_DIRECTION_2LINES;
 
   if ((mode == CORE_SPI_MODE_0) || (mode == CORE_SPI_MODE_2)) {

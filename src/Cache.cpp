@@ -11,12 +11,15 @@
 # include <RTOSIface/RTOSIface.h>
 #endif
 
-#if SAM4E || SAME70 || SAME5x
+#if SAM4E || SAME70 || SAME5x || STM32H7
 
-#if SAME70
+#if SAME70 || STM32H7
 # include <core_cm7.h>
 
+// STM32 memory protection handled in varient
+#if !STM32H7
 #define USE_MPU		1
+#endif
 
 extern uint32_t _nocache_ram_start;
 extern uint32_t _nocache_ram_end;
@@ -299,7 +302,7 @@ void Cache::Init() noexcept
 
 void Cache::Enable() noexcept
 {
-#if SAME70
+#if SAME70 || STM32H7
 	if ((SCB->CCR & SCB_CCR_IC_Msk) == 0)			// if instruction cache is not enabled
 	{
 		SCB_EnableICache();
@@ -323,7 +326,7 @@ void Cache::Enable() noexcept
 // Disable the cache, returning true if it was enabled
 bool Cache::Disable() noexcept
 {
-#if SAME70
+#if SAME70 || STM32H7
 	if ((SCB->CCR & SCB_CCR_IC_Msk) != 0)			// if instruction cache is enabled
 	{
 		SCB_DisableICache();
@@ -344,7 +347,7 @@ bool Cache::Disable() noexcept
 	return wasEnabled;
 }
 
-#if SAME70
+#if SAME70 || STM32H7
 
 extern "C" [[noreturn]] void vAssertCalled(uint32_t line, const char *file) noexcept;
 
@@ -365,7 +368,7 @@ void Cache::Flush(const volatile void *start, size_t length) noexcept
 #if !(SAME5x && CACHE_INSTRUCTIONS_ONLY)
 void Cache::Invalidate(const volatile void *start, size_t length) noexcept
 {
-# if SAME70
+# if SAME70 || STM32H7
 	if ((SCB->CCR & SCB_CCR_DC_Msk) != 0)			// if data cache is enabled
 	{
 		// The DMA buffer should be entirely inside the non-cached RAM area

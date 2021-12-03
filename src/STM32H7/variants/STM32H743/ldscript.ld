@@ -206,6 +206,16 @@ SECTIONS
     . = ALIGN(8);
   } >RAM_D1
 
+ 	.ram_nocache (NOLOAD) :
+	{
+        . = ALIGN(4);
+        _szero_nocache = .;
+		*(.CanMessage .CanMessage.*)
+		*(.ram_nocache .ram_nocache.*)
+        . = ALIGN(4);
+        _ezero_nocache = .;
+ 	} > RAM_D2
+
   /* Remove information from the compiler libraries */
   /DISCARD/ :
   {
@@ -215,4 +225,6 @@ SECTIONS
   }
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
+  PROVIDE(_nocache_ram_start = ORIGIN(RAM_D2));
+  PROVIDE(_nocache_ram_end = ORIGIN(RAM_D2) + LENGTH(RAM_D2));
 }

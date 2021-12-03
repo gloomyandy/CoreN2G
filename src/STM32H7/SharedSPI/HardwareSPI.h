@@ -15,6 +15,14 @@ extern "C" void DMA1_Stream3_IRQHandler(void) noexcept;
 extern "C" void DMA1_Stream4_IRQHandler(void) noexcept;
 extern "C" void DMA1_Stream0_IRQHandler(void) noexcept;
 extern "C" void DMA1_Stream5_IRQHandler(void) noexcept;
+#if STM32H7
+extern "C" void SPI1_IRQHandler() noexcept;
+extern "C" void SPI2_IRQHandler() noexcept;
+extern "C" void SPI3_IRQHandler() noexcept;
+extern "C" void SPI4_IRQHandler() noexcept;
+extern "C" void SPI5_IRQHandler() noexcept;
+extern "C" void SPI6_IRQHandler() noexcept;
+#endif
 
 class HardwareSPI;
 typedef void (*SPICallbackFunction)(HardwareSPI *spiDevice) noexcept;
@@ -22,8 +30,8 @@ class HardwareSPI: public SPI
 {
 public:
     HardwareSPI(SPI_TypeDef *spi) noexcept;
-    HardwareSPI(SPI_TypeDef *spi, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrq,
-                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrq) noexcept;
+    HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrqNo,
+                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrqNo) noexcept;
     spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;
     bool waitForTxEmpty() noexcept;
     void configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept; // Master mode
@@ -44,6 +52,7 @@ public:
 private:
     spi_t spi;
     SPI_TypeDef *dev;
+    IRQn_Type spiIrq;
     DMA_HandleTypeDef dmaRx;
     DMA_HandleTypeDef dmaTx;
     IRQn_Type rxIrq;
@@ -57,7 +66,7 @@ private:
     bool initComplete;
     bool transferActive;
     bool usingDma;
-    void configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept;
+    void configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, uint32_t dir, uint32_t minc) noexcept;
     void startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;
     void initDma() noexcept;
 
@@ -72,6 +81,15 @@ private:
     friend void transferComplete(HardwareSPI *spiDevice) noexcept;
     friend void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi);
     friend void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi);
+#if STM32H7
+    friend void SPI1_IRQHandler() noexcept;
+    friend void SPI2_IRQHandler() noexcept;
+    friend void SPI3_IRQHandler() noexcept;
+    friend void SPI4_IRQHandler() noexcept;
+    friend void SPI5_IRQHandler() noexcept;
+    friend void SPI6_IRQHandler() noexcept;
+#endif
+    
 };
 
 #endif

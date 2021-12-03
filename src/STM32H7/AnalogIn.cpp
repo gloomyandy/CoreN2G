@@ -19,6 +19,7 @@ Each channel is oversampled 16 times to increase the resolution by 2 bits to 14 
 */
 #include <CoreImp.h>
 #include <AnalogIn.h>
+#include <Cache.h>
 
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
@@ -30,6 +31,7 @@ constexpr AnalogChannelNumber ADC_1 = 0x10000;
 constexpr AnalogChannelNumber ADC_2 = 0x20000;
 constexpr AnalogChannelNumber ADC_3 = 0x30000;
 #if STM32H7
+# define __nocache		__attribute__((section(".ram_nocache")))
 constexpr uint32_t NumChannelsADC1 = 20;
 constexpr uint32_t NumChannelsADC3 = 20;
 constexpr uint32_t StmChanMap1[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
@@ -44,6 +46,7 @@ constexpr uint32_t ADC1DMA = DMA_REQUEST_ADC1;
 constexpr uint32_t ADC3DMA = DMA_REQUEST_ADC3;
 constexpr uint32_t ADC_SAMPLETIME = ADC_SAMPLETIME_387CYCLES_5;
 #else
+# define __nocache
 constexpr uint32_t NumChannelsADC1 = 19;
 constexpr uint32_t NumChannelsADC3 = 16;
 constexpr uint32_t StmChanMap1[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
@@ -66,7 +69,7 @@ constexpr uint32_t Ranks[] = { ADC_REGULAR_RANK_1, ADC_REGULAR_RANK_2, ADC_REGUL
                                ADC_REGULAR_RANK_16 };
 static int32_t ChanMap1[NumChannelsADC1];
 static int32_t ChanMap3[NumChannelsADC3];
-static uint32_t ChanValues[MaxActiveChannels*Oversample];
+static __nocache uint32_t ChanValues[MaxActiveChannels*Oversample];
 static constexpr int32_t *ChanMap[NumADCs+1] = {nullptr, ChanMap1, nullptr, ChanMap3};
 static uint8_t NumActiveChannels[NumADCs+1] = {0, 0, 0, 0};
 static bool Adc1Running = false;
@@ -327,8 +330,10 @@ namespace LegacyAnalogIn
             debugPrintf("Read bad ADC channel %d %d\n", static_cast<int>(AdcNo), static_cast<int>(channel));
             return 0;
         }
+      
         pSamples = &ChanValues[ChanMap[AdcNo][channel]];
         step = NumActiveChannels[AdcNo];
+        Cache::InvalidateAfterDMAReceive(pSamples, Oversample*step*sizeof(uint32_t));
         uint32_t val = 0;
         for(uint32_t i = 0; i < Oversample; i++)
         {
@@ -345,16 +350,6 @@ namespace LegacyAnalogIn
     {
 
     }
-
-
-
-
-    // Finalise a conversion
-//    void AnalogInFinaliseConversion()
-//    {
-
-//    }
-
 
     // Check whether all conversions have been completed since the last call to AnalogStartConversion
     bool AnalogInCheckReady(uint32_t channels)

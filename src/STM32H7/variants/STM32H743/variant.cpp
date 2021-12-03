@@ -156,6 +156,8 @@ const PinName digitalPin[] = {
 #ifdef __cplusplus
 extern "C" {
 #endif
+extern uint32_t _szero_nocache;
+extern uint32_t _ezero_nocache;
 
 void SystemClockStartupInit() {
   // Confirm is called only once time to avoid hang up caused by repeated calls in USB wakeup interrupt
@@ -291,12 +293,20 @@ uint8_t MPU_Set_Protection(uint32_t baseaddr, uint32_t size, uint32_t rnum, uint
 
 void MPU_Memory_Protection(void)
 {
+  // DTCM currently no used
 	MPU_Set_Protection(0x20000000, 128 * 1024, 1, MPU_REGION_FULL_ACCESS, 0, 1, 1);       // protect DTCM 128k,  Sharing is prohibited, cache is allowed, and buffering is allowed
-
+  // AXI RAM used for stacks and heap
 	MPU_Set_Protection(0x24000000, 512 * 1024, 2, MPU_REGION_FULL_ACCESS, 0, 1, 1);       // protect AXI SRAM,  Sharing is prohibited, cache is allowed, and buffering is allowed
-	MPU_Set_Protection(0x30000000, 512 * 1024, 3, MPU_REGION_FULL_ACCESS, 0, 1, 1);       // protect SRAM1~SRAM3, Sharing is prohibited, cache is allowed, and buffering is allowed
+  // SRAM1~SRAM3 used for DMA buffers
+#if 1
+	MPU_Set_Protection(0x30000000, 512 * 1024, 3, MPU_REGION_FULL_ACCESS, 1, 0, 0);       // protect SRAM1~SRAM3, Sharing is enabled, no cache, no buffering
+#else
+	MPU_Set_Protection(0x30000000, 512 * 1024, 3, MPU_REGION_FULL_ACCESS, 0, 1, 1);       // protect SRAM1~SRAM3, Sharing is enabled, no cache, and buffering is allowed
+#endif
+  // SRAM4 currently not used
 	MPU_Set_Protection(0x38000000, 64 * 1024, 4, MPU_REGION_FULL_ACCESS, 0, 1, 1);        // protect SRAM4, Sharing is prohibited, cache is allowed, and buffering is allowed
 
+  // We don't use any of these
 	MPU_Set_Protection(0x60000000, 64 * 1024 * 1024, 5, MPU_REGION_FULL_ACCESS, 0, 0, 0);   // protect LCD FMC  64M, No sharing, no cache, no buffering
 	MPU_Set_Protection(0XC0000000, 32 * 1024 * 1024, 6, MPU_REGION_FULL_ACCESS, 0, 1, 1);   // protect SDRAM  32M, Sharing is prohibited, cache is allowed, and buffering is allowed
 	MPU_Set_Protection(0X80000000, 256 * 1024 * 1024, 7, MPU_REGION_FULL_ACCESS, 0, 0, 0);  // protect NAND FLASH 256M, No sharing, no cache, no buffering
@@ -324,6 +334,13 @@ WEAK void SystemClock_Config(void)
 
   /* SysTick_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
+
+  /* Zero uncahced memory */
+	for (uint32_t *pDest = &_szero_nocache; pDest < &_ezero_nocache;)
+	{
+		*pDest++ = 0;
+	}
+
 }
 
 #ifdef __cplusplus

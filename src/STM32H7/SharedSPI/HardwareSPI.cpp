@@ -5,6 +5,7 @@
 #include "semphr.h"
 #include "task.h"
 #include "spi_com.h"
+#include "Cache.h"
 
 /*
 DMA Notes
@@ -29,8 +30,8 @@ Andy - 6/8/2020
 // Create SPI devices the actual configuration is set later
 #if STM32H7
 HardwareSPI HardwareSPI::SSP1(SPI1);
-HardwareSPI HardwareSPI::SSP2(SPI2, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
-HardwareSPI HardwareSPI::SSP3(SPI3);
+HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
+HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_REQUEST_SPI3_RX, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_REQUEST_SPI3_TX, DMA1_Stream5_IRQn);
 HardwareSPI HardwareSPI::SSP4(SPI4);
 HardwareSPI HardwareSPI::SSP5(SPI5);
 HardwareSPI HardwareSPI::SSP6(SPI6);
@@ -116,23 +117,55 @@ extern "C" void DMA2_Stream3_IRQHandler()
 
 extern "C" void DMA1_Stream3_IRQHandler()
 {
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaRx));    
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaRx));
 }
 
 extern "C" void DMA1_Stream4_IRQHandler()
 {
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaTx));    
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaTx));
 }
 
 extern "C" void DMA1_Stream0_IRQHandler()
 {
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaRx));    
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaRx));
 }
 
 extern "C" void DMA1_Stream5_IRQHandler()
 {
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaTx));    
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaTx));
 }
+
+#if STM32H7
+extern "C" void SPI1_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+}
+
+extern "C" void SPI2_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP2.spi.handle));
+}
+
+extern "C" void SPI3_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP3.spi.handle));
+}
+
+extern "C" void SPI4_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP4.spi.handle));
+}
+
+extern "C" void SPI5_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP5.spi.handle));
+}
+
+extern "C" void SPI6_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP6.spi.handle));
+}
+#endif
 
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
@@ -155,7 +188,7 @@ void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs) noexcept
     initComplete = false;
 }
 
-void HardwareSPI::configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept
+void HardwareSPI::configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, uint32_t dir, uint32_t minc) noexcept
 {
     hdma.Instance                 = inst;
 #if STM32H7
@@ -185,7 +218,8 @@ void HardwareSPI::initDma() noexcept
     __HAL_LINKDMA(&(spi.handle), hdmarx, dmaRx);
     HAL_DMA_Init(&dmaTx); 
     NVIC_EnableIRQ(txIrq);      
-    __HAL_LINKDMA(&(spi.handle), hdmarx, dmaTx);
+    __HAL_LINKDMA(&(spi.handle), hdmatx, dmaTx);
+    NVIC_EnableIRQ(spiIrq);      
 }
 
 void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, bool hardwareCS) noexcept
@@ -215,11 +249,12 @@ void HardwareSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bi
     configureDevice(SPI_MODE_MASTER, bits, clockMode, bitRate, false);
 }
 
-HardwareSPI::HardwareSPI(SPI_TypeDef *spi, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrq,
-                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrq) noexcept : dev(spi), initComplete(false), transferActive(false), usingDma(true)
+HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrqNo,
+                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrqNo) noexcept : dev(spi), spiIrq(spiIrqNo), rxIrq(rxIrqNo), txIrq(txIrqNo), initComplete(false), transferActive(false), usingDma(true)
 {
-    configureDmaStream(dmaRx, rxStream, rxChan, rxIrq, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
-    configureDmaStream(dmaTx, txStream, txChan, txIrq, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
+    configureDmaStream(dmaRx, rxStream, rxChan, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
+    dmaRx.Init.Priority = DMA_PRIORITY_HIGH;
+    configureDmaStream(dmaTx, txStream, txChan, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
     curBitRate = 0xffffffff;
     curClockMode = 0xffffffff;
     curBits = 0xffffffff;
@@ -261,11 +296,21 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
     callback = ioComplete;
     transferActive = true;
     if (rx_data == nullptr)
+    {
+        Cache::FlushBeforeDMASend(tx_data, len);
         status = HAL_SPI_Transmit_DMA(&(spi.handle), (uint8_t *)tx_data, len);
+    }
     else if (tx_data == nullptr)
+    {
+        Cache::FlushBeforeDMAReceive(rx_data, len);
         status = HAL_SPI_TransmitReceive_DMA(&(spi.handle), rx_data, rx_data, len);
+    }
     else
+    {
+        Cache::FlushBeforeDMASend(tx_data, len);
+        Cache::FlushBeforeDMAReceive(rx_data, len);
         status = HAL_SPI_TransmitReceive_DMA(&(spi.handle), (uint8_t *)tx_data, rx_data, len);
+    }
     if (status != HAL_OK)
         debugPrintf("SPI Error %d\n", (int)status);
 }
@@ -317,6 +362,7 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
             debugPrintf("SPI timeout\n");
         }
         waitingTask = 0;
+        if (rx_data != nullptr) Cache::InvalidateAfterDMAReceive(rx_data, len);
         return ret;
     }
     else
