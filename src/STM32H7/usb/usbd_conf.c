@@ -464,7 +464,11 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
   USBD_reenumerate();
   /* Set common LL Driver parameters */
   g_hpcd.Init.dev_endpoints = DEV_NUM_EP;
+#if STM32H7
+  g_hpcd.Init.ep0_mps = EP_MPS_64;
+#else
   g_hpcd.Init.ep0_mps = DEP0CTL_MPS_64;
+#endif
 #if !defined(STM32F1xx) && !defined(STM32F2xx) || defined(USB)
   g_hpcd.Init.lpm_enable = DISABLE;
   g_hpcd.Init.battery_charging_enable = DISABLE;
