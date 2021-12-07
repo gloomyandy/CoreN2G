@@ -16,6 +16,8 @@ extern "C" void DMA1_Stream4_IRQHandler(void) noexcept;
 extern "C" void DMA1_Stream0_IRQHandler(void) noexcept;
 extern "C" void DMA1_Stream5_IRQHandler(void) noexcept;
 #if STM32H7
+extern "C" void DMA1_Stream1_IRQHandler() noexcept;
+extern "C" void DMA1_Stream2_IRQHandler() noexcept;
 extern "C" void SPI1_IRQHandler() noexcept;
 extern "C" void SPI2_IRQHandler() noexcept;
 extern "C" void SPI3_IRQHandler() noexcept;
@@ -82,6 +84,8 @@ private:
     friend void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi);
     friend void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi);
 #if STM32H7
+    friend void DMA1_Stream1_IRQHandler() noexcept;
+    friend void DMA1_Stream2_IRQHandler() noexcept;
     friend void SPI1_IRQHandler() noexcept;
     friend void SPI2_IRQHandler() noexcept;
     friend void SPI3_IRQHandler() noexcept;

@@ -32,7 +32,7 @@ Andy - 6/8/2020
 HardwareSPI HardwareSPI::SSP1(SPI1);
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
 HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_REQUEST_SPI3_RX, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_REQUEST_SPI3_TX, DMA1_Stream5_IRQn);
-HardwareSPI HardwareSPI::SSP4(SPI4);
+HardwareSPI HardwareSPI::SSP4(SPI4, SPI4_IRQn, DMA1_Stream1, DMA_REQUEST_SPI4_RX, DMA1_Stream1_IRQn, DMA1_Stream2, DMA_REQUEST_SPI4_TX, DMA1_Stream2_IRQn);
 HardwareSPI HardwareSPI::SSP5(SPI5);
 HardwareSPI HardwareSPI::SSP6(SPI6);
 #else
@@ -136,6 +136,16 @@ extern "C" void DMA1_Stream5_IRQHandler()
 }
 
 #if STM32H7
+extern "C" void DMA1_Stream1_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP4.dmaRx));
+}
+
+extern "C" void DMA1_Stream2_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP4.dmaTx));
+}
+
 extern "C" void SPI1_IRQHandler()
 {
     HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
@@ -318,7 +328,7 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
 void HardwareSPI::stopTransfer() noexcept
 {
     // Stop a DMA transfer.
-    // Note although in theory we could use HAL_SPI_Abort to do this it does not
+    // Note on the STM32F4 HAL_SPI_Abort does not
     // work because it leaves data in the TX fifo (which will not be clocked out 
     // because cs is not set). It seems that the only way to flush this fifo is
     // re-init the device, so we just do that.
@@ -326,8 +336,13 @@ void HardwareSPI::stopTransfer() noexcept
     {
         if (transferActive)
         {
+#if STM32H7
+            HAL_SPI_Abort(&(spi.handle));
+            transferActive = false;
+#else
             disable();
             configureDevice(spi.handle.Init.Mode, curBits, curClockMode, curBitRate, spi.pin_ssel != NoPin);
+#endif
         }
         __HAL_SPI_DISABLE(&(spi.handle));
     }
