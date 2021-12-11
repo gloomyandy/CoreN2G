@@ -84,11 +84,17 @@
 #undef HAL_QSPI_MODULE_ENABLED
 #endif
 
-/*
- * Disabled HAL modules, handled thanks Arduino menu
- */
-/*#define HAL_UART_MODULE_ENABLED*/
-/*#define HAL_PCD_MODULE_ENABLED*/
+#if !defined(HAL_UART_MODULE_DISABLED)
+#define HAL_UART_MODULE_ENABLED
+#else
+#undef HAL_UART_MODULE_ENABLED
+#endif
+
+#if !defined(HAL_PCD_MODULE_DISABLED)
+#define HAL_PCD_MODULE_ENABLED
+#else
+#undef HAL_PCD_MODULE_ENABLED
+#endif
 
 /*
  * Unused HAL modules

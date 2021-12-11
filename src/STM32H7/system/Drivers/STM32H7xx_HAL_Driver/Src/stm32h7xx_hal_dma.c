@@ -1787,9 +1787,14 @@ static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t
     /* Clear all interrupt flags at correct offset within the register */
     regs_dma->IFCR = 0x3FUL << (hdma->StreamIndex & 0x1FU);
 
+#if HAL_RRF
+    /* Clear DBM bit, and set inc and direction */
+    ((DMA_Stream_TypeDef *)hdma->Instance)->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR|DMA_SxCR_MINC|DMA_SxCR_PINC));
+    ((DMA_Stream_TypeDef *)hdma->Instance)->CR |= (hdma->Init.Direction | hdma->Init.PeriphInc | hdma->Init.MemInc);
+#else
     /* Clear DBM bit, and set direction */
-    ((DMA_Stream_TypeDef *)hdma->Instance)->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR));
-    ((DMA_Stream_TypeDef *)hdma->Instance)->CR |= hdma->Init.Direction;
+    ((DMA_Stream_TypeDef *)hdma->Instance)->CR &= (uint32_t)(~DMA_SxCR_DBM);
+#endif
 
     /* Configure DMA Stream data length */
     ((DMA_Stream_TypeDef *)hdma->Instance)->NDTR = DataLength;
