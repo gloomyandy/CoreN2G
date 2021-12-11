@@ -29,6 +29,13 @@ Andy - 6/8/2020
 
 // Create SPI devices the actual configuration is set later
 #if STM32H7
+// On the H7 we need to make sure that and dma address is within a none cached memory area
+extern uint32_t _nocache_ram_start;
+extern uint32_t _nocache_ram_end;
+static constexpr uint32_t MinDMALength = 16;
+#define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_nocache_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache_ram_end)))
+
+// Create SPI devices the actual configuration is set later
 HardwareSPI HardwareSPI::SSP1(SPI1);
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
 HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_REQUEST_SPI3_RX, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_REQUEST_SPI3_TX, DMA1_Stream5_IRQn);
@@ -36,6 +43,10 @@ HardwareSPI HardwareSPI::SSP4(SPI4, SPI4_IRQn, DMA1_Stream1, DMA_REQUEST_SPI4_RX
 HardwareSPI HardwareSPI::SSP5(SPI5);
 HardwareSPI HardwareSPI::SSP6(SPI6);
 #else
+static constexpr uint32_t MinDMALength = 0;
+#define CAN_USE_DMA(ptr, len) (true)
+
+// Create SPI devices the actual configuration is set later
 HardwareSPI HardwareSPI::SSP1(SPI1);
 HardwareSPI HardwareSPI::SSP2(SPI2, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
 HardwareSPI HardwareSPI::SSP3(SPI3, DMA1_Stream0, DMA_CHANNEL_0, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_CHANNEL_0, DMA1_Stream5_IRQn);
@@ -44,63 +55,29 @@ HardwareSPI HardwareSPI::SSP3(SPI3, DMA1_Stream0, DMA_CHANNEL_0, DMA1_Stream0_IR
 //#define SSPI_DEBUG
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
-static inline void flushTxFifo(SPI_HandleTypeDef *sspDevice) noexcept
-{
-
-}
-
-static inline void flushRxFifo(SPI_HandleTypeDef *hspi) noexcept
-{
-    while (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_RXNE))
-    {
-        /* read the received data */
-#if STM32H7
-        (void)*(__IO uint8_t *)&hspi->Instance->RXDR;
-#else
-        (void)*(__IO uint8_t *)&hspi->Instance->DR;
-#endif
-    }
-}
-
-void HardwareSPI::flushRx() noexcept
-{
-    flushRxFifo(&spi.handle);
-}
-
-// Disable the device and flush any data from the fifos
-void HardwareSPI::disable() noexcept
-{
-    if (initComplete)
-    {
-        if (usingDma)
-            HAL_SPI_DMAStop(&(spi.handle));
-        flushRxFifo(&spi.handle);
-        spi_deinit(&spi);
-        initComplete = false;
-        transferActive = false;
-    }
-}
-
-// Wait for transmitter empty returning true if timed out
-bool HardwareSPI::waitForTxEmpty() noexcept
-{
-    return false;
-}
 
 extern "C" void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
 {
     // Get pointer to containing object
     HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
     s->transferActive = false;
-    if (s->callback) s->callback(s);    
+    if (s->callback) s->callback(s);
 }
 
 extern "C" void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
 {
-    // Get pointer to containing object 
+    // Get pointer to containing object
     HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
     s->transferActive = false;
-    if (s->callback) s->callback(s);    
+    if (s->callback) s->callback(s);
+}    
+
+extern "C" void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
+{
+    // Get pointer to containing object
+    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+    s->transferActive = false;
+    if (s->callback) s->callback(s);
 }    
 
 #if SPI1DMA
@@ -176,6 +153,49 @@ extern "C" void SPI6_IRQHandler()
     HAL_SPI_IRQHandler(&(HardwareSPI::SSP6.spi.handle));
 }
 #endif
+
+static inline void flushTxFifo(SPI_HandleTypeDef *sspDevice) noexcept
+{
+
+}
+
+static inline void flushRxFifo(SPI_HandleTypeDef *hspi) noexcept
+{
+    while (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_RXNE))
+    {
+        /* read the received data */
+#if STM32H7
+        (void)*(__IO uint8_t *)&hspi->Instance->RXDR;
+#else
+        (void)*(__IO uint8_t *)&hspi->Instance->DR;
+#endif
+    }
+}
+
+void HardwareSPI::flushRx() noexcept
+{
+    flushRxFifo(&spi.handle);
+}
+
+// Disable the device and flush any data from the fifos
+void HardwareSPI::disable() noexcept
+{
+    if (initComplete)
+    {
+        if (usingDma)
+            HAL_SPI_DMAStop(&(spi.handle));
+        flushRxFifo(&spi.handle);
+        spi_deinit(&spi);
+        initComplete = false;
+        transferActive = false;
+    }
+}
+
+// Wait for transmitter empty returning true if timed out
+bool HardwareSPI::waitForTxEmpty() noexcept
+{
+    return false;
+}
 
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
@@ -313,7 +333,7 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
     else if (tx_data == nullptr)
     {
         Cache::FlushBeforeDMAReceive(rx_data, len);
-        status = HAL_SPI_TransmitReceive_DMA(&(spi.handle), rx_data, rx_data, len);
+        status = HAL_SPI_Receive_DMA(&(spi.handle), rx_data, len);
     }
     else
     {
@@ -355,7 +375,7 @@ void HardwareSPI::startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data,
     if (rx_data == nullptr)
         status = HAL_SPI_Transmit(&(spi.handle), (uint8_t *)tx_data, len, SPITimeoutMillis);
     else if (tx_data == nullptr)
-        status = HAL_SPI_TransmitReceive(&(spi.handle), rx_data, rx_data, len, SPITimeoutMillis);
+        status = HAL_SPI_Receive(&(spi.handle), rx_data, len, SPITimeoutMillis);
     else
         status = HAL_SPI_TransmitReceive(&(spi.handle), (uint8_t *)tx_data, rx_data, len, SPITimeoutMillis);
     transferActive = false;
@@ -365,7 +385,7 @@ void HardwareSPI::startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data,
 
 spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
-    if (usingDma)
+    if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
     {
         waitingTask = xTaskGetCurrentTaskHandle();
         startTransfer(tx_data, rx_data, len, transferComplete);

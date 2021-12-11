@@ -301,7 +301,7 @@ void MPU_Memory_Protection(void)
 #if 1
 	MPU_Set_Protection(0x30000000, 512 * 1024, 3, MPU_REGION_FULL_ACCESS, 1, 0, 0);       // protect SRAM1~SRAM3, Sharing is enabled, no cache, no buffering
 #else
-	MPU_Set_Protection(0x30000000, 512 * 1024, 3, MPU_REGION_FULL_ACCESS, 0, 1, 1);       // protect SRAM1~SRAM3, Sharing is enabled, no cache, and buffering is allowed
+	MPU_Set_Protection(0x30000000, 512 * 1024, 3, MPU_REGION_FULL_ACCESS, 0, 1, 1);       // protect SRAM1~SRAM3, Sharing is disabled, cache, and buffering is allowed
 #endif
   // SRAM4 currently not used
 	MPU_Set_Protection(0x38000000, 64 * 1024, 4, MPU_REGION_FULL_ACCESS, 0, 1, 1);        // protect SRAM4, Sharing is prohibited, cache is allowed, and buffering is allowed

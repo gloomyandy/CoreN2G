@@ -83,6 +83,7 @@ private:
     friend void transferComplete(HardwareSPI *spiDevice) noexcept;
     friend void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi);
     friend void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi);
+    friend void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi);
 #if STM32H7
     friend void DMA1_Stream1_IRQHandler() noexcept;
     friend void DMA1_Stream2_IRQHandler() noexcept;
