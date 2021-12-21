@@ -22,11 +22,13 @@ HardwareSDIO HardwareSDIO::SDIO1;
 
 extern "C" void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsdio)
 {
+  HardwareSDIO::SDIO1.ioComplete = true;
   TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask);
 }
 
 extern "C" void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsdio)
 {
+  HardwareSDIO::SDIO1.ioComplete = true;
   TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask);
 }    
 
@@ -201,16 +203,20 @@ uint8_t HardwareSDIO::ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t Nu
   }
   
   waitingTask = TaskBase::GetCallerTaskHandle();
+  ioComplete = false;
   HAL_StatusTypeDef stat = HAL_SD_ReadBlocks_DMA(&hsd, (uint8_t *)pData, ReadAddr, NumOfBlocks);
   if (stat != HAL_OK) {
     debugPrintf("SDIO Read %d len %d error %d code %x\n", (int)ReadAddr, (int)NumOfBlocks, stat, (unsigned)HAL_SD_GetError(&hsd));
     return MSD_ERROR;
   }
-  if(!TaskBase::Take(Timeout)) // timed out
-  {
-      sd_state = MSD_ERROR;
-      debugPrintf("SDIO Read SD timeout\n");
-  }
+  // The SBC code can sometimes spam us with task notifications, check that our operation has finished
+  while (!ioComplete)
+    if(!TaskBase::Take(Timeout)) // timed out
+    {
+        sd_state = MSD_ERROR;
+        debugPrintf("SDIO Read SD timeout\n");
+        break;
+    }
   waitingTask = 0;
   return sd_state;
 }
@@ -236,16 +242,20 @@ uint8_t HardwareSDIO::WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t 
     }
   }
   waitingTask = TaskBase::GetCallerTaskHandle();
+  ioComplete = false;
   HAL_StatusTypeDef stat = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)pData, WriteAddr, NumOfBlocks);
   if (stat != HAL_OK) {
     debugPrintf("SDIO Write %d len %d error %d\n", (int)WriteAddr, (int)NumOfBlocks, stat);
     return MSD_ERROR;
   }
-  if(!TaskBase::Take(Timeout)) // timed out
-  {
-      sd_state = MSD_ERROR;
-      debugPrintf("SDIO Write SD timeout\n");
-  }
+  // The SBC code can sometimes spam us with task notifications, check that our operation has finished
+  while (!ioComplete)
+    if(!TaskBase::Take(Timeout)) // timed out
+    {
+        sd_state = MSD_ERROR;
+        debugPrintf("SDIO Write SD timeout\n");
+        break;
+    }
   waitingTask = 0;
 
   return sd_state;

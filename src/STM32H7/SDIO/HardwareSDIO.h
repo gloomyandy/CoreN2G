@@ -44,6 +44,7 @@ private:
     DMA_HandleTypeDef dmaRx;
     DMA_HandleTypeDef dmaTx;
     TaskHandle waitingTask;
+    volatile bool ioComplete;
 
     friend void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsdio);
     friend void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsdio);
