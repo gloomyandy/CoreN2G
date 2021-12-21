@@ -43,6 +43,7 @@ private:
     DMA_HandleTypeDef dmaRx;
     DMA_HandleTypeDef dmaTx;
     TaskHandle waitingTask;
+    volatile bool ioComplete;
 
     friend void DMA2_Stream6_IRQHandler();
     friend void DMA2_Stream3_IRQHandler();
