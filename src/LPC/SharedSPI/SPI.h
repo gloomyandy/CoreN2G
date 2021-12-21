@@ -14,6 +14,7 @@ enum SSPChannel : uint8_t
     // Not defined
     SSPNONE = 0xff
 };
+constexpr size_t NumSPIDevices = (uint32_t)SWSPI0+1;
 
 constexpr uint16_t SPITimeoutMillis = 250;
 typedef enum
