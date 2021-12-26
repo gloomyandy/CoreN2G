@@ -15,7 +15,7 @@
  License along with this library; if not, write to the Free Software
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
-
+#ifdef RTOS
 #include <CoreImp.h>
 #include <AnalogOut.h>
 #include <HybridPWM.h>
@@ -54,3 +54,4 @@ void AnalogOut::ReleasePWMPin(Pin pin)
 	hp->free();
 }
 // End
+#endif

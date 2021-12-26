@@ -2,7 +2,7 @@
 
 //SoftwareSPI
 
-
+#ifdef RTOS
 #include "SoftwareSPI.h"
 
 // The following three constatnts provide a rough estimate of how many clock cycles are required for one
@@ -310,3 +310,4 @@ uint8_t SoftwareSPI::mode23TransferByte(uint8_t byte_out) noexcept
     }
     return byte_in;
 }
+#endif

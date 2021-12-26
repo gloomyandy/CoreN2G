@@ -1,9 +1,11 @@
 //Hardware SPI
 #include "HardwareSPI.h"
 
+#ifdef RTOS
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
+#endif
 #include "spi_com.h"
 
 /*
@@ -27,7 +29,9 @@ Andy - 6/8/2020
 */
 
 // Create SPI devices the actual configuration is set later
+#ifdef RTOS
 HardwareSPI HardwareSPI::SSP1(SPI1);
+#endif
 HardwareSPI HardwareSPI::SSP2(SPI2);
 HardwareSPI HardwareSPI::SSP3(SPI3);
 
@@ -121,6 +125,7 @@ extern "C" void DMA1_Stream5_IRQHandler()
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaTx));    
 }
 
+#ifdef RTOS
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
 {
@@ -128,6 +133,7 @@ void transferComplete(HardwareSPI *spiDevice) noexcept
     vTaskNotifyGiveFromISR(spiDevice->waitingTask, &higherPriorityTaskWoken);
     portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
+#endif
 
 void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrq,
                             DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrq) noexcept
@@ -282,6 +288,7 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
 {
     if (usingDma)
     {
+#ifdef RTOS
         waitingTask = xTaskGetCurrentTaskHandle();
         startTransfer(tx_data, rx_data, len, transferComplete);
         spi_status_t ret = SPI_OK;
@@ -290,8 +297,23 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
         {
             ret = SPI_TIMEOUT;
             debugPrintf("SPI timeout\n");
+            stopTransfer();
         }
         waitingTask = 0;
+#else
+        startTransfer(tx_data, rx_data, len, nullptr);
+        spi_status_t ret = SPI_OK;
+        uint32_t start = millis();
+        while(transferActive && millis() - start < SPITimeoutMillis)
+        {
+        }
+        if (transferActive)
+        {
+            ret = SPI_TIMEOUT;
+            debugPrintf("SPI timeout\n");
+            stopTransfer();
+        }
+#endif
         return ret;
     }
     else
