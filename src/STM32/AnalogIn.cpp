@@ -63,10 +63,18 @@ constexpr uint32_t ADC_SAMPLETIME = ADC_SAMPLETIME_480CYCLES;
 #endif
 static constexpr const uint32_t *StmChanMap[NumADCs+1] = {nullptr, StmChanMap1, nullptr, StmChanMap3};
 constexpr uint32_t NumChannels[NumADCs+1] = {0, NumChannelsADC1, 0, NumChannelsADC3};
+#if defined(ADC_REGULAR_RANK_1)
 constexpr uint32_t Ranks[] = { ADC_REGULAR_RANK_1, ADC_REGULAR_RANK_2, ADC_REGULAR_RANK_3, ADC_REGULAR_RANK_4, ADC_REGULAR_RANK_5,
                                ADC_REGULAR_RANK_6, ADC_REGULAR_RANK_7, ADC_REGULAR_RANK_8, ADC_REGULAR_RANK_9, ADC_REGULAR_RANK_10,
                                ADC_REGULAR_RANK_11, ADC_REGULAR_RANK_12, ADC_REGULAR_RANK_13, ADC_REGULAR_RANK_14, ADC_REGULAR_RANK_15,
                                ADC_REGULAR_RANK_16 };
+#else
+constexpr uint32_t Ranks[] = { 1, 2, 3, 4, 5,
+                               6, 7, 8, 9, 10,
+                               11, 12, 13, 14, 15,
+                               16 };
+#endif
+
 static int32_t ChanMap1[NumChannelsADC1];
 static int32_t ChanMap3[NumChannelsADC3];
 static __nocache uint32_t ChanValues[MaxActiveChannels*Oversample];
@@ -145,24 +153,24 @@ static void ConfigureAdc(ADC_HandleTypeDef& AdcHandle, ADC_TypeDef *inst, uint32
     // Adc converts channels, continuously and
     // captured to RAM via DMA
     AdcHandle.Instance = inst;
-#if STM32H7
+#if STM32H7xx
     AdcHandle.Init.ClockPrescaler           = ADC_CLOCK_SYNC_PCLK_DIV4;
+    AdcHandle.Init.LowPowerAutoWait         = DISABLE;                       /* Auto-delayed conversion feature disabled */
+    AdcHandle.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DMA_CIRCULAR; /* ADC DMA circular requested */
+    AdcHandle.Init.OversamplingMode         = DISABLE;                       /* No oversampling */
+    AdcHandle.Init.Overrun                  = ADC_OVR_DATA_OVERWRITTEN;      /* DR register is overwritten with the last conversion result in case of overrun */
 #else
     AdcHandle.Init.ClockPrescaler           = ADC_CLOCK_SYNC_PCLK_DIV8;
 #endif
     AdcHandle.Init.Resolution               = ADC_RESOLUTION_12B;            /* 12-bit resolution for converted data */
     AdcHandle.Init.ScanConvMode             = ENABLE;                        /* Sequencer disabled (ADC conversion on only 1 channel: channel set on rank 1) */
     AdcHandle.Init.EOCSelection             = ADC_EOC_SINGLE_CONV;           /* EOC flag picked-up to indicate conversion end */
-    AdcHandle.Init.LowPowerAutoWait         = DISABLE;                       /* Auto-delayed conversion feature disabled */
     AdcHandle.Init.ContinuousConvMode       = ENABLE;                        /* Continuous mode enabled (automatic conversion restart after each conversion) */
     AdcHandle.Init.NbrOfConversion          = chanCount;                     /* Parameter discarded because sequencer is disabled */
     AdcHandle.Init.DiscontinuousConvMode    = DISABLE;                       /* Parameter discarded because sequencer is disabled */
     AdcHandle.Init.NbrOfDiscConversion      = 0;                             /* Parameter discarded because sequencer is disabled */
     AdcHandle.Init.ExternalTrigConv         = ADC_SOFTWARE_START;            /* Software start to trig the 1st conversion manually, without external event */
     AdcHandle.Init.ExternalTrigConvEdge     = ADC_EXTERNALTRIGCONVEDGE_NONE; /* Parameter discarded because software trigger chosen */
-    AdcHandle.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DMA_CIRCULAR; /* ADC DMA circular requested */
-    AdcHandle.Init.Overrun                  = ADC_OVR_DATA_OVERWRITTEN;      /* DR register is overwritten with the last conversion result in case of overrun */
-    AdcHandle.Init.OversamplingMode         = DISABLE;                       /* No oversampling */
 
     AdcHandle.State = HAL_ADC_STATE_RESET;
     AdcHandle.Lock = HAL_UNLOCKED;
@@ -187,11 +195,13 @@ static uint32_t AddActiveChannels(ADC_HandleTypeDef& AdcHandle, uint32_t AdcNum,
 {
     ADC_ChannelConfTypeDef  AdcChannelConf = {};
     AdcChannelConf.SamplingTime = ADC_SAMPLETIME;
+    AdcChannelConf.Offset = 0;                                 /* Parameter discarded because offset correction is disabled */
+#if STM32H7
     AdcChannelConf.SingleDiff   = ADC_SINGLE_ENDED;            /* Single-ended input channel */
     AdcChannelConf.OffsetNumber = ADC_OFFSET_NONE;             /* No offset subtraction */
-    AdcChannelConf.Offset = 0;                                 /* Parameter discarded because offset correction is disabled */
     AdcChannelConf.OffsetRightShift = DISABLE;                 /* No Right Offset Shift */
     AdcChannelConf.OffsetSignedSaturation = DISABLE;           /* Signed saturation feature is not used */
+#endif
 
     int32_t sampleOffset = 0;
     for(uint32_t i = 0; i < sz; i++)
@@ -221,17 +231,21 @@ static void ConfigureChannels()
         // reset the ADC to match the DMA transfer, but calling Deinit does the job. Unfortuately
         // it also resets ADC1, so we need to restart that as well!
         HAL_ADC_DeInit(&Adc3Handle);
+#if defined(__HAL_RCC_ADC3_FORCE_RESET)
         __HAL_RCC_ADC3_FORCE_RESET();
         __HAL_RCC_ADC3_RELEASE_RESET();
         __HAL_RCC_ADC3_CLK_DISABLE();
+#endif
     }
     if (Adc1Running)
     {
         HAL_ADC_Stop_DMA(&Adc1Handle);
         HAL_ADC_DeInit(&Adc1Handle);
+#if defined(__HAL_RCC_ADC12_FORCE_RESET)
         __HAL_RCC_ADC12_FORCE_RESET();
         __HAL_RCC_ADC12_RELEASE_RESET();
         __HAL_RCC_ADC12_CLK_DISABLE();
+#endif
     }
     uint32_t Active3 = GetActiveChannels(ChanMap3, NumChannelsADC3);
     uint32_t Active1 = GetActiveChannels(ChanMap1, NumChannelsADC1);
@@ -246,7 +260,9 @@ static void ConfigureChannels()
         //__HAL_RCC_ADC_CONFIG(RCC_ADCCLKSOURCE_CLKP);
         // setup the ADC for that number of channels
         ConfigureAdc(Adc3Handle, ADC3, Active3);
+#if STM32H7
         HAL_ADCEx_Calibration_Start(&Adc3Handle, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
+#endif
         AddActiveChannels(Adc3Handle, 3, ChanMap3, NumChannelsADC3, Active1*Oversample);
         // All done restart sampling
         HAL_ADC_Start_DMA(&Adc3Handle, ChanValues + Active1*Oversample, Active3*Oversample);
@@ -263,7 +279,9 @@ static void ConfigureChannels()
         //__HAL_RCC_ADC_CONFIG(RCC_ADCCLKSOURCE_CLKP);
         // setup the ADC for that number of channels
         ConfigureAdc(Adc1Handle, ADC1, Active1);
+#if STM32H7
         HAL_ADCEx_Calibration_Start(&Adc1Handle, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
+#endif
         AddActiveChannels(Adc1Handle, 1, ChanMap1, NumChannelsADC1, 0);
         // All done restart sampling
         HAL_ADC_Start_DMA(&Adc1Handle, ChanValues, Active1*Oversample);

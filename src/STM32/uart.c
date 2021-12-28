@@ -300,7 +300,9 @@ void uart_init(serial_t *obj, uint32_t baudrate, uint32_t databits, uint32_t par
   huart->Init.Mode         = UART_MODE_TX_RX;
   huart->Init.HwFlowCtl    = UART_HWCONTROL_NONE;
   huart->Init.OverSampling = UART_OVERSAMPLING_16;
-  huart->FifoMode = 
+#if (defined(STM32H7xx))
+  huart->FifoMode          = USART_FIFOMODE_DISABLE;
+#endif
 #if !defined(STM32F1xx) && !defined(STM32F2xx) && !defined(STM32F4xx)\
  && !defined(STM32L1xx)
   huart->AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
@@ -867,14 +869,11 @@ static void UART_IRQHandler(UART_HandleTypeDef *huart)
   }
 
   /* If some errors occur */
+// FIXME: This is a mess different flags on H7/F4
 #if STM32H7
   if ((errorflags != 0U)
       && ((((cr3its & (USART_CR3_RXFTIE | USART_CR3_EIE)) != 0U)
            || ((cr1its & (USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_RTOIE)) != 0U))))
-#else
-  if ((errorflags != RESET) && (((cr3its & USART_CR3_EIE) != RESET) || 
-      ((cr1its & (USART_CR1_RXNEIE | USART_CR1_PEIE)) != RESET)))
-#endif
   {
     /* UART parity error interrupt occurred -------------------------------------*/
     if (((isrflags & USART_ISR_PE) != 0U) && ((cr1its & USART_CR1_PEIE) != 0U))
@@ -928,9 +927,51 @@ static void UART_IRQHandler(UART_HandleTypeDef *huart)
       huart->ErrorCode = HAL_UART_ERROR_NONE;
     }
     return;
-
   }
+#else
+  /* If some errors occur */
+  if ((errorflags != RESET) && (((cr3its & USART_CR3_EIE) != RESET) || ((cr1its & (USART_CR1_RXNEIE | USART_CR1_PEIE)) != RESET)))
+  {
+    /* UART parity error interrupt occurred ----------------------------------*/
+    if (((isrflags & USART_SR_PE) != RESET) && ((cr1its & USART_CR1_PEIE) != RESET))
+    {
+      huart->ErrorCode |= HAL_UART_ERROR_PE;
+    }
 
+    /* UART noise error interrupt occurred -----------------------------------*/
+    if (((isrflags & USART_SR_NE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
+    {
+      huart->ErrorCode |= HAL_UART_ERROR_NE;
+    }
+
+    /* UART frame error interrupt occurred -----------------------------------*/
+    if (((isrflags & USART_SR_FE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
+    {
+      huart->ErrorCode |= HAL_UART_ERROR_FE;
+    }
+
+    /* UART Over-Run interrupt occurred --------------------------------------*/
+    if (((isrflags & USART_SR_ORE) != RESET) && (((cr1its & USART_CR1_RXNEIE) != RESET) || ((cr3its & USART_CR3_EIE) != RESET)))
+    {
+      huart->ErrorCode |= HAL_UART_ERROR_ORE;
+    }
+
+    /* Call UART Error Call back function if need be --------------------------*/
+    if (huart->ErrorCode != HAL_UART_ERROR_NONE)
+    {
+      /* UART in mode Receiver -----------------------------------------------*/
+      if (((isrflags & USART_SR_RXNE) != RESET) && ((cr1its & USART_CR1_RXNEIE) != RESET))
+      {
+        UART_Receive_IT(huart);
+      }
+
+      // record error and restart
+      HAL_UART_ErrorCallback(huart);
+      huart->ErrorCode = HAL_UART_ERROR_NONE;
+    }
+    return;
+  } /* End if some error occurs */
+#endif
   /* UART in mode Transmitter ------------------------------------------------*/
   if (((isrflags & UART_FLAG_TXE) != RESET) && ((cr1its & USART_CR1_TXEIE) != RESET))
   {

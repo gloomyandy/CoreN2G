@@ -48,8 +48,8 @@ static constexpr uint32_t MinDMALength = 0;
 
 // Create SPI devices the actual configuration is set later
 HardwareSPI HardwareSPI::SSP1(SPI1);
-HardwareSPI HardwareSPI::SSP2(SPI2, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
-HardwareSPI HardwareSPI::SSP3(SPI3, DMA1_Stream0, DMA_CHANNEL_0, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_CHANNEL_0, DMA1_Stream5_IRQn);
+HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
+HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_CHANNEL_0, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_CHANNEL_0, DMA1_Stream5_IRQn);
 #endif
 
 //#define SSPI_DEBUG
