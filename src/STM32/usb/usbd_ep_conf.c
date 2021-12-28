@@ -15,10 +15,10 @@
   *
   ******************************************************************************
   */
+#include "stm32yyxx_hal_conf.h"
 #if defined(HAL_PCD_MODULE_ENABLED) && defined(USBCON)
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_ep_conf.h"
-
 #ifdef USBD_USE_CDC
 const ep_desc_t ep_def[] = {
 #ifdef USE_USB_HS

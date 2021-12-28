@@ -19,6 +19,7 @@ Each channel is oversampled 16 times to increase the resolution by 2 bits to 14 
 */
 #include <CoreImp.h>
 #include <AnalogIn.h>
+#include <Cache.h>
 
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
@@ -26,16 +27,49 @@ constexpr uint32_t NumADCs = 3;                          // Max supported ADCs
 constexpr uint32_t OversampleBits = 2;                   // Number of extra bit of resolution
 constexpr uint32_t Oversample = 16;                      // 4^OversampleBits
 constexpr uint32_t MaxActiveChannels = 16;               // Max active ADC channels
-constexpr uint32_t NumChannelsADC1 = ADC_CHANNEL_VREFINT+2;
-constexpr uint32_t NumChannelsADC3 = 16;
 constexpr AnalogChannelNumber ADC_1 = 0x10000;
 constexpr AnalogChannelNumber ADC_2 = 0x20000;
 constexpr AnalogChannelNumber ADC_3 = 0x30000;
+#if STM32H7
+# define __nocache		__attribute__((section(".ram_nocache")))
+constexpr uint32_t NumChannelsADC1 = 20;
+constexpr uint32_t NumChannelsADC3 = 20;
+constexpr uint32_t StmChanMap1[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
+                                    ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
+                                    ADC_CHANNEL_14, ADC_CHANNEL_15, ADC_CHANNEL_16, ADC_CHANNEL_17, ADC_CHANNEL_18, ADC_CHANNEL_19};
+constexpr uint32_t StmChanMap3[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
+                                    ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
+                                    ADC_CHANNEL_14, ADC_CHANNEL_15, ADC_CHANNEL_16, ADC_CHANNEL_VBAT, LL_ADC_CHANNEL_TEMPSENSOR, ADC_CHANNEL_VREFINT};
+constexpr uint32_t CHAN_VREFINT = (ADC_3 | 19);
+constexpr uint32_t CHAN_TEMPSENSOR = (ADC_3 | 18);
+constexpr uint32_t ADC1DMA = DMA_REQUEST_ADC1;
+constexpr uint32_t ADC3DMA = DMA_REQUEST_ADC3;
+constexpr uint32_t ADC_SAMPLETIME = ADC_SAMPLETIME_387CYCLES_5;
+#else
+# define __nocache
+constexpr uint32_t NumChannelsADC1 = 19;
+constexpr uint32_t NumChannelsADC3 = 16;
+constexpr uint32_t StmChanMap1[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
+                                    ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
+                                    ADC_CHANNEL_14, ADC_CHANNEL_15, ADC_CHANNEL_TEMPSENSOR, ADC_CHANNEL_VREFINT, ADC_CHANNEL_VBAT};
+constexpr uint32_t StmChanMap3[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6,
+                                    ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
+                                    ADC_CHANNEL_14, ADC_CHANNEL_15};
+constexpr uint32_t CHAN_VREFINT = (ADC_1 | 17);
+constexpr uint32_t CHAN_TEMPSENSOR = (ADC_3 | 16);
+constexpr uint32_t ADC1DMA = DMA_CHANNEL_0;
+constexpr uint32_t ADC3DMA = DMA_CHANNEL_2;
+constexpr uint32_t ADC_SAMPLETIME = ADC_SAMPLETIME_480CYCLES;
+#endif
+static constexpr const uint32_t *StmChanMap[NumADCs+1] = {nullptr, StmChanMap1, nullptr, StmChanMap3};
 constexpr uint32_t NumChannels[NumADCs+1] = {0, NumChannelsADC1, 0, NumChannelsADC3};
-
+constexpr uint32_t Ranks[] = { ADC_REGULAR_RANK_1, ADC_REGULAR_RANK_2, ADC_REGULAR_RANK_3, ADC_REGULAR_RANK_4, ADC_REGULAR_RANK_5,
+                               ADC_REGULAR_RANK_6, ADC_REGULAR_RANK_7, ADC_REGULAR_RANK_8, ADC_REGULAR_RANK_9, ADC_REGULAR_RANK_10,
+                               ADC_REGULAR_RANK_11, ADC_REGULAR_RANK_12, ADC_REGULAR_RANK_13, ADC_REGULAR_RANK_14, ADC_REGULAR_RANK_15,
+                               ADC_REGULAR_RANK_16 };
 static int32_t ChanMap1[NumChannelsADC1];
 static int32_t ChanMap3[NumChannelsADC3];
-static uint32_t ChanValues[MaxActiveChannels*Oversample];
+static __nocache uint32_t ChanValues[MaxActiveChannels*Oversample];
 static constexpr int32_t *ChanMap[NumADCs+1] = {nullptr, ChanMap1, nullptr, ChanMap3};
 static uint8_t NumActiveChannels[NumADCs+1] = {0, 0, 0, 0};
 static bool Adc1Running = false;
@@ -46,6 +80,15 @@ static ADC_HandleTypeDef Adc1Handle = {};
 static ADC_HandleTypeDef Adc3Handle = {};
 static DMA_HandleTypeDef Dma1Handle = {};
 static DMA_HandleTypeDef Dma3Handle = {};
+
+extern "C" void DMA2_Stream4_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(&Dma1Handle);
+}
+extern "C" void DMA2_Stream0_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(&Dma3Handle);
+}
 
 /* Private Functions */
 static AnalogChannelNumber GetAdcChannel(PinName pin)
@@ -75,7 +118,11 @@ static void ConfigureDma(DMA_HandleTypeDef& DmaHandle, DMA_Stream_TypeDef *inst,
 {
     DmaHandle.Instance = inst;
 
+#if STM32H7
+    DmaHandle.Init.Request  = chan;
+#else
     DmaHandle.Init.Channel  = chan;
+#endif
     DmaHandle.Init.Direction = DMA_PERIPH_TO_MEMORY;
     DmaHandle.Init.PeriphInc = DMA_PINC_DISABLE;
     DmaHandle.Init.MemInc = DMA_MINC_ENABLE;
@@ -83,200 +130,13 @@ static void ConfigureDma(DMA_HandleTypeDef& DmaHandle, DMA_Stream_TypeDef *inst,
     DmaHandle.Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
     DmaHandle.Init.Mode = DMA_CIRCULAR;
     DmaHandle.Init.Priority = DMA_PRIORITY_LOW;
-    DmaHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;         
-    DmaHandle.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_HALFFULL;
-    DmaHandle.Init.MemBurst = DMA_MBURST_SINGLE;
-    DmaHandle.Init.PeriphBurst = DMA_PBURST_SINGLE; 
+    //DmaHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;         
+    //DmaHandle.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_HALFFULL;
+    //DmaHandle.Init.MemBurst = DMA_MBURST_SINGLE;
+    //DmaHandle.Init.PeriphBurst = DMA_PBURST_SINGLE; 
 
+    HAL_DMA_DeInit(&DmaHandle);
     HAL_DMA_Init(&DmaHandle);
-}
-
-/**
-  * @brief ADC MSP Initialization
-  *        This function configures the hardware resources used in this example:
-  *           - Peripheral's clock enable
-  *           - Peripheral's GPIO Configuration
-  * @param hadc: ADC handle pointer
-  * @retval None
-  */
-void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc)
-{
-  /*##-1- Enable peripherals and GPIO Clocks #################################*/
-  /* ADC Periph clock enable */
-  if (hadc->Instance == ADC1) {
-#ifdef __HAL_RCC_ADC1_CLK_ENABLE
-    __HAL_RCC_ADC1_CLK_ENABLE();
-#endif
-#ifdef __HAL_RCC_ADC12_CLK_ENABLE
-    __HAL_RCC_ADC12_CLK_ENABLE();
-#endif
-  }
-#ifdef ADC2
-  else if (hadc->Instance == ADC2) {
-#ifdef __HAL_RCC_ADC2_CLK_ENABLE
-    __HAL_RCC_ADC2_CLK_ENABLE();
-#endif
-#ifdef __HAL_RCC_ADC12_CLK_ENABLE
-    __HAL_RCC_ADC12_CLK_ENABLE();
-#endif
-  }
-#endif
-#ifdef ADC3
-  else if (hadc->Instance == ADC3) {
-#ifdef __HAL_RCC_ADC3_CLK_ENABLE
-    __HAL_RCC_ADC3_CLK_ENABLE();
-#endif
-#ifdef __HAL_RCC_ADC34_CLK_ENABLE
-    __HAL_RCC_ADC34_CLK_ENABLE();
-#endif
-#if defined(ADC345_COMMON)
-    __HAL_RCC_ADC345_CLK_ENABLE();
-#endif
-  }
-#endif
-#ifdef ADC4
-  else if (hadc->Instance == ADC4) {
-#ifdef __HAL_RCC_ADC34_CLK_ENABLE
-    __HAL_RCC_ADC34_CLK_ENABLE();
-#endif
-#if defined(ADC345_COMMON)
-    __HAL_RCC_ADC345_CLK_ENABLE();
-#endif
-  }
-#endif
-#ifdef ADC5
-  else if (hadc->Instance == ADC5) {
-#if defined(ADC345_COMMON)
-    __HAL_RCC_ADC345_CLK_ENABLE();
-#endif
-  }
-#endif
-#ifdef __HAL_RCC_ADC_CLK_ENABLE
-  __HAL_RCC_ADC_CLK_ENABLE();
-#endif
-  /* For STM32F1xx and STM32H7xx, ADC prescaler is configured in
-     SystemClock_Config (variant.cpp) */
-#if defined(__HAL_RCC_ADC_CONFIG) && !defined(STM32F1xx) && !defined(STM32H7xx)
-  /* ADC Periph interface clock configuration */
-  __HAL_RCC_ADC_CONFIG(RCC_ADCCLKSOURCE_SYSCLK);
-#endif
-}
-
-/**
-  * @brief  DeInitializes the ADC MSP.
-  * @param  hadc: ADC handle
-  * @retval None
-  */
-void HAL_ADC_MspDeInit(ADC_HandleTypeDef *hadc)
-{
-#ifdef __HAL_RCC_ADC_FORCE_RESET
-  __HAL_RCC_ADC_FORCE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC_RELEASE_RESET
-  __HAL_RCC_ADC_RELEASE_RESET();
-#endif
-
-  if (hadc->Instance == ADC1) {
-#ifdef __HAL_RCC_ADC1_FORCE_RESET
-    __HAL_RCC_ADC1_FORCE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC1_RELEASE_RESET
-    __HAL_RCC_ADC1_RELEASE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC12_FORCE_RESET
-    __HAL_RCC_ADC12_FORCE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC12_RELEASE_RESET
-    __HAL_RCC_ADC12_RELEASE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC1_CLK_DISABLE
-    __HAL_RCC_ADC1_CLK_DISABLE();
-#endif
-#ifdef __HAL_RCC_ADC12_CLK_DISABLE
-    __HAL_RCC_ADC12_CLK_DISABLE();
-#endif
-  }
-#ifdef ADC2
-  else if (hadc->Instance == ADC2) {
-#ifdef __HAL_RCC_ADC2_FORCE_RESET
-    __HAL_RCC_ADC2_FORCE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC2_RELEASE_RESET
-    __HAL_RCC_ADC2_RELEASE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC12_FORCE_RESET
-    __HAL_RCC_ADC12_FORCE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC12_RELEASE_RESET
-    __HAL_RCC_ADC12_RELEASE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC2_CLK_DISABLE
-    __HAL_RCC_ADC2_CLK_DISABLE();
-#endif
-#ifdef __HAL_RCC_ADC2_CLK_DISABLE
-    __HAL_RCC_ADC2_CLK_DISABLE();
-#endif
-  }
-#endif
-#ifdef ADC3
-  else if (hadc->Instance == ADC3) {
-#ifdef __HAL_RCC_ADC3_FORCE_RESET
-    __HAL_RCC_ADC3_FORCE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC3_RELEASE_RESET
-    __HAL_RCC_ADC3_RELEASE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC34_FORCE_RESET
-    __HAL_RCC_ADC34_FORCE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC34_RELEASE_RESET
-    __HAL_RCC_ADC34_RELEASE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC3_CLK_DISABLE
-    __HAL_RCC_ADC3_CLK_DISABLE();
-#endif
-#ifdef __HAL_RCC_ADC34_CLK_DISABLE
-    __HAL_RCC_ADC34_CLK_DISABLE();
-#endif
-#if defined(ADC345_COMMON)
-    __HAL_RCC_ADC345_FORCE_RESET();
-    __HAL_RCC_ADC345_RELEASE_RESET();
-    __HAL_RCC_ADC345_CLK_DISABLE();
-#endif
-  }
-#endif
-#ifdef ADC4
-  else if (hadc->Instance == ADC4) {
-#ifdef __HAL_RCC_ADC34_FORCE_RESET
-    __HAL_RCC_ADC34_FORCE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC34_RELEASE_RESET
-    __HAL_RCC_ADC34_RELEASE_RESET();
-#endif
-#ifdef __HAL_RCC_ADC34_CLK_DISABLE
-    __HAL_RCC_ADC34_CLK_DISABLE();
-#endif
-#if defined(ADC345_COMMON)
-    __HAL_RCC_ADC345_FORCE_RESET();
-    __HAL_RCC_ADC345_RELEASE_RESET();
-    __HAL_RCC_ADC345_CLK_DISABLE();
-#endif
-  }
-#endif
-#ifdef ADC5
-  else if (hadc->Instance == ADC5) {
-#if defined(ADC345_COMMON)
-    __HAL_RCC_ADC345_FORCE_RESET();
-    __HAL_RCC_ADC345_RELEASE_RESET();
-    __HAL_RCC_ADC345_CLK_DISABLE();
-#endif
-  }
-#endif
-#ifdef __HAL_RCC_ADC_CLK_DISABLE
-  __HAL_RCC_ADC_FORCE_RESET();
-  __HAL_RCC_ADC_RELEASE_RESET();
-  __HAL_RCC_ADC_CLK_DISABLE();
-#endif
 }
 
 
@@ -285,77 +145,24 @@ static void ConfigureAdc(ADC_HandleTypeDef& AdcHandle, ADC_TypeDef *inst, uint32
     // Adc converts channels, continuously and
     // captured to RAM via DMA
     AdcHandle.Instance = inst;
-    // consider using ADC_CLOCK_SYNC_PCLK_DIV8
-    AdcHandle.Init.ClockPrescaler        = ADC_CLOCK_SYNC_PCLK_DIV8;      /* (A)synchronous clock mode, input ADC clock divided */
-    AdcHandle.Init.Resolution            = ADC_RESOLUTION_12B;            /* 12-bit resolution for converted data */
-    AdcHandle.Init.DataAlign             = ADC_DATAALIGN_RIGHT;           /* Right-alignment for converted data */
-    AdcHandle.Init.ScanConvMode          = ENABLE;                        /* Sequencer Enabled */
-    AdcHandle.Init.EOCSelection          = DISABLE;                       /* EOC flag picked-up to indicate conversion end */
-#if !defined(STM32F1xx) && !defined(STM32F2xx) && !defined(STM32F4xx) && \
-    !defined(STM32F7xx) && !defined(STM32F373xC) && !defined(STM32F378xx)
-    AdcHandle.Init.LowPowerAutoWait      = DISABLE;                       /* Auto-delayed conversion feature disabled */
+#if STM32H7
+    AdcHandle.Init.ClockPrescaler           = ADC_CLOCK_SYNC_PCLK_DIV4;
+#else
+    AdcHandle.Init.ClockPrescaler           = ADC_CLOCK_SYNC_PCLK_DIV8;
 #endif
-#if !defined(STM32F1xx) && !defined(STM32F2xx) && !defined(STM32F3xx) && \
-    !defined(STM32F4xx) && !defined(STM32F7xx) && !defined(STM32G4xx) && \
-    !defined(STM32H7xx) && !defined(STM32L4xx) && !defined(STM32WBxx)
-    AdcHandle.Init.LowPowerAutoPowerOff  = DISABLE;                       /* ADC automatically powers-off after a conversion and automatically wakes-up when a new conversion is triggered */
-#endif
-#ifdef ADC_CHANNELS_BANK_A
-    AdcHandle.Init.ChannelsBank          = ADC_CHANNELS_BANK_A;
-#endif
-    AdcHandle.Init.ContinuousConvMode    = ENABLE;                        /* Continuous mode enabled */
-#if !defined(STM32F0xx) && !defined(STM32L0xx)
-    AdcHandle.Init.NbrOfConversion       = chanCount;                     /* Specifies the number of ranks that will be converted within the regular group sequencer. */
-#endif
-    AdcHandle.Init.DiscontinuousConvMode = DISABLE;                       /* Disable discontinuous mode */
-#if !defined(STM32F0xx) && !defined(STM32G0xx) && !defined(STM32L0xx)
-    AdcHandle.Init.NbrOfDiscConversion   = 0;                             
-#endif
-    AdcHandle.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-    AdcHandle.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_CC1;
-
-#if !defined(STM32F1xx)
-    //AdcHandle.Init.ExternalTrigConvEdge  = ADC_EXTERNALTRIGCONVEDGE_NONE; /* Parameter discarded because software trigger chosen */
-#endif
-#if !defined(STM32F1xx) && !defined(STM32H7xx) && \
-    !defined(STM32F373xC) && !defined(STM32F378xx)
-    AdcHandle.Init.DMAContinuousRequests = ENABLE;                        /* DMA continuous mode enabled */
-#endif
-#ifdef ADC_CONVERSIONDATA_DR
-    AdcHandle.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DR;      /* Regular Conversion data stored in DR register only */
-#endif
-#ifdef ADC_OVR_DATA_OVERWRITTEN
-    AdcHandle.Init.Overrun               = ADC_OVR_DATA_OVERWRITTEN;      /* DR register is overwritten with the last conversion result in case of overrun */
-#endif
-#ifdef ADC_LEFTBITSHIFT_NONE
-    AdcHandle.Init.LeftBitShift          = ADC_LEFTBITSHIFT_NONE;         /* No bit shift left applied on the final ADC convesion data */
-#endif
-
-#if defined(STM32F0xx)
-    AdcHandle.Init.SamplingTimeCommon    = samplingTime;
-#endif
-#if defined(STM32G0xx)
-    AdcHandle.Init.SamplingTimeCommon1   = samplingTime;              /* Set sampling time common to a group of channels. */
-    AdcHandle.Init.SamplingTimeCommon2   = samplingTime;              /* Set sampling time common to a group of channels, second common setting possible.*/
-    AdcHandle.Init.TriggerFrequencyMode  = ADC_TRIGGER_FREQ_HIGH;
-#endif
-#if defined(STM32L0xx)
-    AdcHandle.Init.LowPowerFrequencyMode = DISABLE;                       /* To be enabled only if ADC clock < 2.8 MHz */
-    AdcHandle.Init.SamplingTime          = samplingTime;
-#endif
-#if !defined(STM32F0xx) && !defined(STM32F1xx) && !defined(STM32F2xx) && \
-    !defined(STM32F3xx) && !defined(STM32F4xx) && !defined(STM32F7xx) && \
-    !defined(STM32L1xx)
-    AdcHandle.Init.OversamplingMode      = DISABLE;
-  /* Adc3Handle.Init.Oversample ignore for STM32L0xx as oversampling disabled */
-  /* Adc3Handle.Init.Oversampling ignored for other as oversampling disabled */
-#endif
-#if defined(ADC_CFGR_DFSDMCFG) && defined(DFSDM1_Channel0)
-    AdcHandle.Init.DFSDMConfig           = ADC_DFSDM_MODE_DISABLE;        /* ADC conversions are not transferred by DFSDM. */
-#endif
-#ifdef ADC_TRIGGER_FREQ_HIGH
-    AdcHandle.Init.TriggerFrequencyMode  = ADC_TRIGGER_FREQ_HIGH;
-#endif
+    AdcHandle.Init.Resolution               = ADC_RESOLUTION_12B;            /* 12-bit resolution for converted data */
+    AdcHandle.Init.ScanConvMode             = ENABLE;                        /* Sequencer disabled (ADC conversion on only 1 channel: channel set on rank 1) */
+    AdcHandle.Init.EOCSelection             = ADC_EOC_SINGLE_CONV;           /* EOC flag picked-up to indicate conversion end */
+    AdcHandle.Init.LowPowerAutoWait         = DISABLE;                       /* Auto-delayed conversion feature disabled */
+    AdcHandle.Init.ContinuousConvMode       = ENABLE;                        /* Continuous mode enabled (automatic conversion restart after each conversion) */
+    AdcHandle.Init.NbrOfConversion          = chanCount;                     /* Parameter discarded because sequencer is disabled */
+    AdcHandle.Init.DiscontinuousConvMode    = DISABLE;                       /* Parameter discarded because sequencer is disabled */
+    AdcHandle.Init.NbrOfDiscConversion      = 0;                             /* Parameter discarded because sequencer is disabled */
+    AdcHandle.Init.ExternalTrigConv         = ADC_SOFTWARE_START;            /* Software start to trig the 1st conversion manually, without external event */
+    AdcHandle.Init.ExternalTrigConvEdge     = ADC_EXTERNALTRIGCONVEDGE_NONE; /* Parameter discarded because software trigger chosen */
+    AdcHandle.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DMA_CIRCULAR; /* ADC DMA circular requested */
+    AdcHandle.Init.Overrun                  = ADC_OVR_DATA_OVERWRITTEN;      /* DR register is overwritten with the last conversion result in case of overrun */
+    AdcHandle.Init.OversamplingMode         = DISABLE;                       /* No oversampling */
 
     AdcHandle.State = HAL_ADC_STATE_RESET;
     AdcHandle.Lock = HAL_UNLOCKED;
@@ -376,10 +183,15 @@ static uint32_t GetActiveChannels(int32_t *cm, uint32_t sz)
     return cnt;
 }
 
-static uint32_t AddActiveChannels(ADC_HandleTypeDef& AdcHandle, int32_t *cm, uint32_t sz, uint32_t dataOffset)
+static uint32_t AddActiveChannels(ADC_HandleTypeDef& AdcHandle, uint32_t AdcNum, int32_t *cm, uint32_t sz, uint32_t dataOffset)
 {
     ADC_ChannelConfTypeDef  AdcChannelConf = {};
-    AdcChannelConf.SamplingTime = ADC_SAMPLETIME_480CYCLES;
+    AdcChannelConf.SamplingTime = ADC_SAMPLETIME;
+    AdcChannelConf.SingleDiff   = ADC_SINGLE_ENDED;            /* Single-ended input channel */
+    AdcChannelConf.OffsetNumber = ADC_OFFSET_NONE;             /* No offset subtraction */
+    AdcChannelConf.Offset = 0;                                 /* Parameter discarded because offset correction is disabled */
+    AdcChannelConf.OffsetRightShift = DISABLE;                 /* No Right Offset Shift */
+    AdcChannelConf.OffsetSignedSaturation = DISABLE;           /* Signed saturation feature is not used */
 
     int32_t sampleOffset = 0;
     for(uint32_t i = 0; i < sz; i++)
@@ -387,11 +199,8 @@ static uint32_t AddActiveChannels(ADC_HandleTypeDef& AdcHandle, int32_t *cm, uin
         if (cm[i] != -1)
         {
             // include this channel
-            if (i == (ADC_CHANNEL_TEMPSENSOR & 0xffff))
-                AdcChannelConf.Channel = ADC_CHANNEL_TEMPSENSOR;
-            else
-                AdcChannelConf.Channel = i;
-            AdcChannelConf.Rank = ++sampleOffset;
+            AdcChannelConf.Channel = StmChanMap[AdcNum][i];
+            AdcChannelConf.Rank = Ranks[sampleOffset++];
             HAL_ADC_ConfigChannel(&AdcHandle, &AdcChannelConf);
             // record the location of the sample
             cm[i] = dataOffset++;
@@ -412,11 +221,17 @@ static void ConfigureChannels()
         // reset the ADC to match the DMA transfer, but calling Deinit does the job. Unfortuately
         // it also resets ADC1, so we need to restart that as well!
         HAL_ADC_DeInit(&Adc3Handle);
+        __HAL_RCC_ADC3_FORCE_RESET();
+        __HAL_RCC_ADC3_RELEASE_RESET();
+        __HAL_RCC_ADC3_CLK_DISABLE();
     }
     if (Adc1Running)
     {
         HAL_ADC_Stop_DMA(&Adc1Handle);
         HAL_ADC_DeInit(&Adc1Handle);
+        __HAL_RCC_ADC12_FORCE_RESET();
+        __HAL_RCC_ADC12_RELEASE_RESET();
+        __HAL_RCC_ADC12_CLK_DISABLE();
     }
     uint32_t Active3 = GetActiveChannels(ChanMap3, NumChannelsADC3);
     uint32_t Active1 = GetActiveChannels(ChanMap1, NumChannelsADC1);
@@ -428,9 +243,11 @@ static void ConfigureChannels()
     if (Active3 > 0)
     {
         __HAL_RCC_ADC3_CLK_ENABLE();
+        //__HAL_RCC_ADC_CONFIG(RCC_ADCCLKSOURCE_CLKP);
         // setup the ADC for that number of channels
         ConfigureAdc(Adc3Handle, ADC3, Active3);
-        AddActiveChannels(Adc3Handle, ChanMap3, NumChannelsADC3, Active1*Oversample);
+        HAL_ADCEx_Calibration_Start(&Adc3Handle, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
+        AddActiveChannels(Adc3Handle, 3, ChanMap3, NumChannelsADC3, Active1*Oversample);
         // All done restart sampling
         HAL_ADC_Start_DMA(&Adc3Handle, ChanValues + Active1*Oversample, Active3*Oversample);
         Adc3Running = true;
@@ -438,10 +255,16 @@ static void ConfigureChannels()
     NumActiveChannels[3] = Active3;
     if (Active1 > 0)
     {
+#if STM32H7
+        __HAL_RCC_ADC12_CLK_ENABLE();
+#else
         __HAL_RCC_ADC1_CLK_ENABLE();
+#endif
+        //__HAL_RCC_ADC_CONFIG(RCC_ADCCLKSOURCE_CLKP);
         // setup the ADC for that number of channels
         ConfigureAdc(Adc1Handle, ADC1, Active1);
-        AddActiveChannels(Adc1Handle, ChanMap1, NumChannelsADC1, 0);
+        HAL_ADCEx_Calibration_Start(&Adc1Handle, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
+        AddActiveChannels(Adc1Handle, 1, ChanMap1, NumChannelsADC1, 0);
         // All done restart sampling
         HAL_ADC_Start_DMA(&Adc1Handle, ChanValues, Active1*Oversample);
         Adc1Running = true;
@@ -451,6 +274,7 @@ static void ConfigureChannels()
 
 namespace LegacyAnalogIn
 {
+
     // Module initialisation
     void AnalogInInit()
     {
@@ -461,15 +285,19 @@ namespace LegacyAnalogIn
             ChanMap3[i] = -1;
 
         __HAL_RCC_DMA2_CLK_ENABLE();
-        ConfigureDma(Dma1Handle, DMA2_Stream4, DMA_CHANNEL_0);
-        ConfigureDma(Dma3Handle, DMA2_Stream0, DMA_CHANNEL_2);
+        __HAL_RCC_DMA1_CLK_ENABLE();
+        ConfigureDma(Dma1Handle, DMA2_Stream4, ADC1DMA);
+        ConfigureDma(Dma3Handle, DMA2_Stream0, ADC3DMA);
         __HAL_LINKDMA(&Adc1Handle, DMA_Handle, Dma1Handle);
         __HAL_LINKDMA(&Adc3Handle, DMA_Handle, Dma3Handle);
+        // Note we deliberately do not setup the interrupt handler normnally used for DMA operations
+        // this code runs the capture/conversion process with no intervention from the mcu
     }
 
     // Enable or disable a channel. Use AnalogCheckReady to make sure the ADC is ready before calling this.
     void AnalogInEnableChannel(AnalogChannelNumber channel, bool enable)
     {
+        //#if 0
         if (channel == NO_ADC) 
         {
             //debugPrintf("Enable bad ADC channel %d\n", static_cast<int>(channel));
@@ -484,7 +312,9 @@ namespace LegacyAnalogIn
         }
         ChanMap[AdcNo][channel] = (enable ? 0 : -1);
         ConfigureChannels();
+        //#endif
     }
+
 
     // Read the most recent 12-bit result from a channel
     uint16_t AnalogInReadChannel(AnalogChannelNumber channel)
@@ -500,8 +330,10 @@ namespace LegacyAnalogIn
             debugPrintf("Read bad ADC channel %d %d\n", static_cast<int>(AdcNo), static_cast<int>(channel));
             return 0;
         }
+      
         pSamples = &ChanValues[ChanMap[AdcNo][channel]];
         step = NumActiveChannels[AdcNo];
+        Cache::InvalidateAfterDMAReceive(pSamples, Oversample*step*sizeof(uint32_t));
         uint32_t val = 0;
         for(uint32_t i = 0; i < Oversample; i++)
         {
@@ -519,16 +351,6 @@ namespace LegacyAnalogIn
 
     }
 
-
-
-
-    // Finalise a conversion
-//    void AnalogInFinaliseConversion()
-//    {
-
-//    }
-
-
     // Check whether all conversions have been completed since the last call to AnalogStartConversion
     bool AnalogInCheckReady(uint32_t channels)
     {
@@ -544,13 +366,13 @@ namespace LegacyAnalogIn
     // Get the temperature measurement channel
     AnalogChannelNumber GetTemperatureAdcChannel()
     {
-        return (ADC_1 | (ADC_CHANNEL_TEMPSENSOR & 0xffff));
+        return CHAN_TEMPSENSOR;
     }
 
     // Get the temperature measurement channel
     AnalogChannelNumber GetVREFAdcChannel()
     {
-        return (ADC_1 | ADC_CHANNEL_VREFINT);
+        return CHAN_VREFINT;
     }
 }
 // End

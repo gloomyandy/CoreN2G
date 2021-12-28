@@ -18,6 +18,7 @@
 #define SD_DATATIMEOUT           ((uint32_t)100000000)
 extern "C" void DMA2_Stream6_IRQHandler(void);
 extern "C" void DMA2_Stream3_IRQHandler(void);
+extern "C" void SDMMC1_IRQHandler(void);
 extern "C" void SDIO_IRQHandler(void);
 extern "C" void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsdio);
 extern "C" void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsdio);
@@ -45,11 +46,16 @@ private:
     TaskHandle waitingTask;
     volatile bool ioComplete;
 
-    friend void DMA2_Stream6_IRQHandler();
-    friend void DMA2_Stream3_IRQHandler();
     friend void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsdio);
     friend void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsdio);
+
+#if STM32H7
+    friend void SDMMC1_IRQHandler();
+#else
+    friend void DMA2_Stream6_IRQHandler();
+    friend void DMA2_Stream3_IRQHandler();
     friend void SDIO_IRQHandler();
+#endif
 };
 
 #endif

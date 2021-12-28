@@ -32,7 +32,12 @@
 #define _PINCONFIG_H
 
 #include "PinAF_STM32F1.h"
-#include "stm32f4xx_ll_gpio.h"
+#if defined(__STM32H7__)
+# include "stm32h7xx_ll_gpio.h"
+#else
+# include "stm32f4xx_ll_gpio.h"
+#endif
+
 
 static inline void pin_DisconnectDebug(PinName pin)
 {

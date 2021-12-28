@@ -14,12 +14,18 @@ HardwareTimer Timer2(TIM2);
 HardwareTimer Timer3(TIM3);
 HardwareTimer Timer4(TIM4);
 HardwareTimer Timer8(TIM8);
-HardwareTimer Timer9(TIM9);
-HardwareTimer Timer10(TIM10);
-HardwareTimer Timer11(TIM11);
 HardwareTimer Timer12(TIM12);
 HardwareTimer Timer13(TIM13);
 HardwareTimer Timer14(TIM14);
+#if STM32H7
+HardwareTimer Timer15(TIM15);
+HardwareTimer Timer16(TIM16);
+HardwareTimer Timer17(TIM17);
+#else
+HardwareTimer Timer9(TIM9);
+HardwareTimer Timer10(TIM10);
+HardwareTimer Timer11(TIM11);
+#endif
 
 HardwarePWM::HardwarePWM() noexcept : timer(nullptr), channel(0)
 {

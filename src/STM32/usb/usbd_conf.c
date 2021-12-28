@@ -21,7 +21,11 @@
 #include "usbd_core.h"
 #include "usbd_if.h"
 #include "usbd_ep_conf.h"
+#if STM32H7
+#include "stm32h7xx_ll_pwr.h"
+#else
 #include "stm32f4xx_ll_pwr.h"
+#endif
 #include "PeripheralPins.h"
 #ifndef HAL_PCD_MODULE_ENABLED
 #error "HAL_PCD_MODULE_ENABLED is required"
@@ -460,7 +464,11 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
   USBD_reenumerate();
   /* Set common LL Driver parameters */
   g_hpcd.Init.dev_endpoints = DEV_NUM_EP;
+#if STM32H7
+  g_hpcd.Init.ep0_mps = EP_MPS_64;
+#else
   g_hpcd.Init.ep0_mps = DEP0CTL_MPS_64;
+#endif
 #if !defined(STM32F1xx) && !defined(STM32F2xx) || defined(USB)
   g_hpcd.Init.lpm_enable = DISABLE;
   g_hpcd.Init.battery_charging_enable = DISABLE;

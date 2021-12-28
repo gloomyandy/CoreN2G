@@ -5,6 +5,7 @@
 #include "semphr.h"
 #include "task.h"
 #include "spi_com.h"
+#include "Cache.h"
 
 /*
 DMA Notes
@@ -27,12 +28,131 @@ Andy - 6/8/2020
 */
 
 // Create SPI devices the actual configuration is set later
+#if STM32H7
+// On the H7 we need to make sure that and dma address is within a none cached memory area
+extern uint32_t _nocache_ram_start;
+extern uint32_t _nocache_ram_end;
+static constexpr uint32_t MinDMALength = 16;
+#define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_nocache_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache_ram_end)))
+
+// Create SPI devices the actual configuration is set later
 HardwareSPI HardwareSPI::SSP1(SPI1);
-HardwareSPI HardwareSPI::SSP2(SPI2);
-HardwareSPI HardwareSPI::SSP3(SPI3);
+HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
+HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_REQUEST_SPI3_RX, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_REQUEST_SPI3_TX, DMA1_Stream5_IRQn);
+HardwareSPI HardwareSPI::SSP4(SPI4, SPI4_IRQn, DMA1_Stream1, DMA_REQUEST_SPI4_RX, DMA1_Stream1_IRQn, DMA1_Stream2, DMA_REQUEST_SPI4_TX, DMA1_Stream2_IRQn);
+HardwareSPI HardwareSPI::SSP5(SPI5);
+HardwareSPI HardwareSPI::SSP6(SPI6);
+#else
+static constexpr uint32_t MinDMALength = 0;
+#define CAN_USE_DMA(ptr, len) (true)
+
+// Create SPI devices the actual configuration is set later
+HardwareSPI HardwareSPI::SSP1(SPI1);
+HardwareSPI HardwareSPI::SSP2(SPI2, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
+HardwareSPI HardwareSPI::SSP3(SPI3, DMA1_Stream0, DMA_CHANNEL_0, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_CHANNEL_0, DMA1_Stream5_IRQn);
+#endif
 
 //#define SSPI_DEBUG
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
+
+
+extern "C" void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
+{
+    // Get pointer to containing object
+    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+    s->transferActive = false;
+    if (s->callback) s->callback(s);
+}
+
+extern "C" void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
+{
+    // Get pointer to containing object
+    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+    s->transferActive = false;
+    if (s->callback) s->callback(s);
+}    
+
+extern "C" void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
+{
+    // Get pointer to containing object
+    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+    s->transferActive = false;
+    if (s->callback) s->callback(s);
+}    
+
+#if SPI1DMA
+extern "C" void DMA2_Stream2_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaRx));
+}
+
+extern "C" void DMA2_Stream3_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaTx));
+}
+#endif
+
+extern "C" void DMA1_Stream3_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaRx));
+}
+
+extern "C" void DMA1_Stream4_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaTx));
+}
+
+extern "C" void DMA1_Stream0_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaRx));
+}
+
+extern "C" void DMA1_Stream5_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaTx));
+}
+
+#if STM32H7
+extern "C" void DMA1_Stream1_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP4.dmaRx));
+}
+
+extern "C" void DMA1_Stream2_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP4.dmaTx));
+}
+
+extern "C" void SPI1_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+}
+
+extern "C" void SPI2_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP2.spi.handle));
+}
+
+extern "C" void SPI3_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP3.spi.handle));
+}
+
+extern "C" void SPI4_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP4.spi.handle));
+}
+
+extern "C" void SPI5_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP5.spi.handle));
+}
+
+extern "C" void SPI6_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP6.spi.handle));
+}
+#endif
 
 static inline void flushTxFifo(SPI_HandleTypeDef *sspDevice) noexcept
 {
@@ -44,7 +164,11 @@ static inline void flushRxFifo(SPI_HandleTypeDef *hspi) noexcept
     while (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_RXNE))
     {
         /* read the received data */
+#if STM32H7
+        (void)*(__IO uint8_t *)&hspi->Instance->RXDR;
+#else
         (void)*(__IO uint8_t *)&hspi->Instance->DR;
+#endif
     }
 }
 
@@ -73,54 +197,6 @@ bool HardwareSPI::waitForTxEmpty() noexcept
     return false;
 }
 
-extern "C" void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
-{
-    // Get pointer to containing object
-    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
-    s->transferActive = false;
-    if (s->callback) s->callback(s);    
-}
-
-extern "C" void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
-{
-    // Get pointer to containing object 
-    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
-    s->transferActive = false;
-    if (s->callback) s->callback(s);    
-}    
-
-#if SPI1DMA
-extern "C" void DMA2_Stream2_IRQHandler()
-{
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaRx));
-}
-
-extern "C" void DMA2_Stream3_IRQHandler()
-{
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaTx));
-}
-#endif
-
-extern "C" void DMA1_Stream3_IRQHandler()
-{
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaRx));    
-}
-
-extern "C" void DMA1_Stream4_IRQHandler()
-{
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaTx));    
-}
-
-extern "C" void DMA1_Stream0_IRQHandler()
-{
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaRx));    
-}
-
-extern "C" void DMA1_Stream5_IRQHandler()
-{
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaTx));    
-}
-
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
 {
@@ -129,34 +205,27 @@ void transferComplete(HardwareSPI *spiDevice) noexcept
     portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
 
-void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrq,
-                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrq) noexcept
+void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs) noexcept
 {
     spi.pin_sclk = clk;
     spi.pin_miso = miso;
     spi.pin_mosi = mosi;
     spi.pin_ssel = csPin = cs;
-    if (rxStream != nullptr)
-    {   
-        // init the DMA channels
-        __HAL_RCC_DMA2_CLK_ENABLE();
-        __HAL_RCC_DMA1_CLK_ENABLE();
-        initDmaStream(dmaRx, rxStream, rxChan, rxIrq, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
-        initDmaStream(dmaTx, txStream, txChan, txIrq, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
-        __HAL_LINKDMA(&(spi.handle), hdmarx, dmaRx);
-        __HAL_LINKDMA(&(spi.handle), hdmatx, dmaTx);
-        usingDma = true;
+    if (usingDma)
+    {
+        initDma();   
     }
-    else
-        usingDma = false;
     initComplete = false;
 }
 
-void HardwareSPI::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept
+void HardwareSPI::configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, uint32_t dir, uint32_t minc) noexcept
 {
     hdma.Instance                 = inst;
-    
+#if STM32H7
+    hdma.Init.Request             = chan;
+#else    
     hdma.Init.Channel             = chan;
+#endif
     hdma.Init.Direction           = dir;
     hdma.Init.PeriphInc           = DMA_PINC_DISABLE;
     hdma.Init.MemInc              = minc;
@@ -168,9 +237,19 @@ void HardwareSPI::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *ins
     hdma.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
     hdma.Init.MemBurst            = DMA_MBURST_SINGLE;
     hdma.Init.PeriphBurst         = DMA_PBURST_SINGLE;
-    
-    HAL_DMA_Init(&hdma); 
-    NVIC_EnableIRQ(irq);      
+}
+
+void HardwareSPI::initDma() noexcept
+{    
+    __HAL_RCC_DMA2_CLK_ENABLE();
+    __HAL_RCC_DMA1_CLK_ENABLE();
+    HAL_DMA_Init(&dmaRx); 
+    NVIC_EnableIRQ(rxIrq);      
+    __HAL_LINKDMA(&(spi.handle), hdmarx, dmaRx);
+    HAL_DMA_Init(&dmaTx); 
+    NVIC_EnableIRQ(txIrq);      
+    __HAL_LINKDMA(&(spi.handle), hdmatx, dmaTx);
+    NVIC_EnableIRQ(spiIrq);      
 }
 
 void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, bool hardwareCS) noexcept
@@ -200,7 +279,18 @@ void HardwareSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bi
     configureDevice(SPI_MODE_MASTER, bits, clockMode, bitRate, false);
 }
 
-HardwareSPI::HardwareSPI(SPI_TypeDef *spi) noexcept : dev(spi), initComplete(false), transferActive(false)
+HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrqNo,
+                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrqNo) noexcept : dev(spi), spiIrq(spiIrqNo), rxIrq(rxIrqNo), txIrq(txIrqNo), initComplete(false), transferActive(false), usingDma(true)
+{
+    configureDmaStream(dmaRx, rxStream, rxChan, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
+    dmaRx.Init.Priority = DMA_PRIORITY_HIGH;
+    configureDmaStream(dmaTx, txStream, txChan, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
+    curBitRate = 0xffffffff;
+    curClockMode = 0xffffffff;
+    curBits = 0xffffffff;
+}
+
+HardwareSPI::HardwareSPI(SPI_TypeDef *spi) noexcept : dev(spi), initComplete(false), transferActive(false), usingDma(false)
 {
     curBitRate = 0xffffffff;
     curClockMode = 0xffffffff;
@@ -236,11 +326,21 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
     callback = ioComplete;
     transferActive = true;
     if (rx_data == nullptr)
+    {
+        Cache::FlushBeforeDMASend(tx_data, len);
         status = HAL_SPI_Transmit_DMA(&(spi.handle), (uint8_t *)tx_data, len);
+    }
     else if (tx_data == nullptr)
-        status = HAL_SPI_TransmitReceive_DMA(&(spi.handle), rx_data, rx_data, len);
+    {
+        Cache::FlushBeforeDMAReceive(rx_data, len);
+        status = HAL_SPI_Receive_DMA(&(spi.handle), rx_data, len);
+    }
     else
+    {
+        Cache::FlushBeforeDMASend(tx_data, len);
+        Cache::FlushBeforeDMAReceive(rx_data, len);
         status = HAL_SPI_TransmitReceive_DMA(&(spi.handle), (uint8_t *)tx_data, rx_data, len);
+    }
     if (status != HAL_OK)
         debugPrintf("SPI Error %d\n", (int)status);
 }
@@ -248,7 +348,7 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
 void HardwareSPI::stopTransfer() noexcept
 {
     // Stop a DMA transfer.
-    // Note although in theory we could use HAL_SPI_Abort to do this it does not
+    // Note on the STM32F4 HAL_SPI_Abort does not
     // work because it leaves data in the TX fifo (which will not be clocked out 
     // because cs is not set). It seems that the only way to flush this fifo is
     // re-init the device, so we just do that.
@@ -256,8 +356,13 @@ void HardwareSPI::stopTransfer() noexcept
     {
         if (transferActive)
         {
+#if STM32H7
+            HAL_SPI_Abort(&(spi.handle));
+            transferActive = false;
+#else
             disable();
             configureDevice(spi.handle.Init.Mode, curBits, curClockMode, curBitRate, spi.pin_ssel != NoPin);
+#endif
         }
         __HAL_SPI_DISABLE(&(spi.handle));
     }
@@ -270,7 +375,7 @@ void HardwareSPI::startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data,
     if (rx_data == nullptr)
         status = HAL_SPI_Transmit(&(spi.handle), (uint8_t *)tx_data, len, SPITimeoutMillis);
     else if (tx_data == nullptr)
-        status = HAL_SPI_TransmitReceive(&(spi.handle), rx_data, rx_data, len, SPITimeoutMillis);
+        status = HAL_SPI_Receive(&(spi.handle), rx_data, len, SPITimeoutMillis);
     else
         status = HAL_SPI_TransmitReceive(&(spi.handle), (uint8_t *)tx_data, rx_data, len, SPITimeoutMillis);
     transferActive = false;
@@ -280,7 +385,7 @@ void HardwareSPI::startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data,
 
 spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
-    if (usingDma)
+    if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
     {
         waitingTask = xTaskGetCurrentTaskHandle();
         startTransfer(tx_data, rx_data, len, transferComplete);
@@ -292,6 +397,7 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
             debugPrintf("SPI timeout\n");
         }
         waitingTask = 0;
+        if (rx_data != nullptr) Cache::InvalidateAfterDMAReceive(rx_data, len);
         return ret;
     }
     else

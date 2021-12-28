@@ -300,6 +300,7 @@ void uart_init(serial_t *obj, uint32_t baudrate, uint32_t databits, uint32_t par
   huart->Init.Mode         = UART_MODE_TX_RX;
   huart->Init.HwFlowCtl    = UART_HWCONTROL_NONE;
   huart->Init.OverSampling = UART_OVERSAMPLING_16;
+  huart->FifoMode = 
 #if !defined(STM32F1xx) && !defined(STM32F2xx) && !defined(STM32F4xx)\
  && !defined(STM32L1xx)
   huart->AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
@@ -308,6 +309,7 @@ void uart_init(serial_t *obj, uint32_t baudrate, uint32_t databits, uint32_t par
   huart->Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
 #endif
 
+#if 0
 #if defined(LPUART1_BASE)
   /*
    * Note that LPUART clock source must be in the range
@@ -358,7 +360,7 @@ void uart_init(serial_t *obj, uint32_t baudrate, uint32_t databits, uint32_t par
 #endif
   }
 #endif
-
+#endif
   if (HAL_UART_Init(huart) != HAL_OK) {
     return;
   }
@@ -486,6 +488,7 @@ void uart_deinit(serial_t *obj)
   }
 }
 
+#if 0
 #if defined(HAL_PWR_MODULE_ENABLED) && defined(UART_IT_WUF)
 /**
   * @brief  Function called to configure the uart interface for low power
@@ -546,6 +549,7 @@ void uart_config_lowpower(serial_t *obj)
 #endif
   }
 }
+#endif
 #endif
 
 /**
@@ -730,29 +734,8 @@ uint8_t uart_index(UART_HandleTypeDef *huart)
   * @param  UartHandle pointer on the uart reference
   * @retval None
   */
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+void UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
-#if defined(STM32F1xx) || defined(STM32F2xx) || defined(STM32F4xx) || defined(STM32L1xx)
-  if (__HAL_UART_GET_FLAG(huart, UART_FLAG_PE) != RESET) {
-    __HAL_UART_CLEAR_PEFLAG(huart); /* Clear PE flag */
-  } else if (__HAL_UART_GET_FLAG(huart, UART_FLAG_FE) != RESET) {
-    __HAL_UART_CLEAR_FEFLAG(huart); /* Clear FE flag */
-  } else if (__HAL_UART_GET_FLAG(huart, UART_FLAG_NE) != RESET) {
-    __HAL_UART_CLEAR_NEFLAG(huart); /* Clear NE flag */
-  } else if (__HAL_UART_GET_FLAG(huart, UART_FLAG_ORE) != RESET) {
-    __HAL_UART_CLEAR_OREFLAG(huart); /* Clear ORE flag */
-  }
-#else
-  if (__HAL_UART_GET_FLAG(huart, UART_FLAG_PE) != RESET) {
-    __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_PEF); /* Clear PE flag */
-  } else if (__HAL_UART_GET_FLAG(huart, UART_FLAG_FE) != RESET) {
-    __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_FEF); /* Clear FE flag */
-  } else if (__HAL_UART_GET_FLAG(huart, UART_FLAG_NE) != RESET) {
-    __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_NEF); /* Clear NE flag */
-  } else if (__HAL_UART_GET_FLAG(huart, UART_FLAG_ORE) != RESET) {
-    __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_OREF); /* Clear ORE flag */
-  }
-#endif
   /* Restart receive interrupt after any error */
   serial_t *obj = get_serial_obj(huart);
   if (obj) {
@@ -772,7 +755,11 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 static inline HAL_StatusTypeDef UART_Receive_IT(UART_HandleTypeDef *huart)
 {
   serial_t *obj = get_serial_obj(huart);
+#if STM32H7
+  uint8_t val = (uint8_t)(huart->Instance->RDR & (uint8_t)0x00FF);
+#else
   uint8_t val = (uint8_t)(huart->Instance->DR & (uint8_t)0x00FF);
+#endif
   uint32_t pos = (obj->rx_head + 1) % SERIAL_RX_BUFFER_SIZE;
   if (pos != obj->rx_tail)
   {
@@ -794,7 +781,11 @@ static inline HAL_StatusTypeDef UART_Transmit_IT(UART_HandleTypeDef *huart)
 {
   serial_t *obj = get_serial_obj(huart);
   // write the data
+#if STM32H7
+  huart->Instance->TDR = obj->tx_buff[obj->tx_tail];
+#else
   huart->Instance->DR = obj->tx_buff[obj->tx_tail];
+#endif
   // update write pointer
   obj->tx_tail = (obj->tx_tail + 1) % SERIAL_TX_BUFFER_SIZE;
   // do we have more to send?
@@ -822,7 +813,11 @@ static HAL_StatusTypeDef UART_EndTransmit_IT(UART_HandleTypeDef *huart)
   if (obj->tx_tail != obj->tx_head)
   {
     // Yes so send the data
+#if STM32H7
+    huart->Instance->TDR = obj->tx_buff[obj->tx_tail];
+#else
     huart->Instance->DR = obj->tx_buff[obj->tx_tail];
+#endif
     // update write pointer
     obj->tx_tail = (obj->tx_tail + 1) % SERIAL_TX_BUFFER_SIZE;
     // do we have more to send?
@@ -850,17 +845,21 @@ static HAL_StatusTypeDef UART_EndTransmit_IT(UART_HandleTypeDef *huart)
   */
 static void UART_IRQHandler(UART_HandleTypeDef *huart)
 {
+#if STM32H7
+  uint32_t isrflags   = READ_REG(huart->Instance->ISR);
+  uint32_t errorflags = (isrflags & (uint32_t)(USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE | USART_ISR_RTOF));
+#else
   uint32_t isrflags   = READ_REG(huart->Instance->SR);
+  uint32_t errorflags = (isrflags & (uint32_t)(UART_FLAG_PE | UART_FLAG_FE | UART_FLAG_ORE | UART_FLAG_NE));
+#endif
   uint32_t cr1its     = READ_REG(huart->Instance->CR1);
   uint32_t cr3its     = READ_REG(huart->Instance->CR3);
-  uint32_t errorflags = 0x00U;
 
   /* If no error occurs */
-  errorflags = (isrflags & (uint32_t)(USART_SR_PE | USART_SR_FE | USART_SR_ORE | USART_SR_NE));
   if (errorflags == RESET)
   {
     /* UART in mode Receiver -------------------------------------------------*/
-    if (((isrflags & USART_SR_RXNE) != RESET) && ((cr1its & USART_CR1_RXNEIE) != RESET))
+    if (((isrflags & UART_FLAG_RXNE) != RESET) && ((cr1its & USART_CR1_RXNEIE) != RESET))
     {
       UART_Receive_IT(huart);
       return;
@@ -868,65 +867,79 @@ static void UART_IRQHandler(UART_HandleTypeDef *huart)
   }
 
   /* If some errors occur */
-  if ((errorflags != RESET) && (((cr3its & USART_CR3_EIE) != RESET) || ((cr1its & (USART_CR1_RXNEIE | USART_CR1_PEIE)) != RESET)))
+#if STM32H7
+  if ((errorflags != 0U)
+      && ((((cr3its & (USART_CR3_RXFTIE | USART_CR3_EIE)) != 0U)
+           || ((cr1its & (USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_RTOIE)) != 0U))))
+#else
+  if ((errorflags != RESET) && (((cr3its & USART_CR3_EIE) != RESET) || 
+      ((cr1its & (USART_CR1_RXNEIE | USART_CR1_PEIE)) != RESET)))
+#endif
   {
-    /* UART parity error interrupt occurred ----------------------------------*/
-    if (((isrflags & USART_SR_PE) != RESET) && ((cr1its & USART_CR1_PEIE) != RESET))
+    /* UART parity error interrupt occurred -------------------------------------*/
+    if (((isrflags & USART_ISR_PE) != 0U) && ((cr1its & USART_CR1_PEIE) != 0U))
     {
+      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_PEF);
       huart->ErrorCode |= HAL_UART_ERROR_PE;
     }
 
-    /* UART noise error interrupt occurred -----------------------------------*/
-    if (((isrflags & USART_SR_NE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
+    /* UART frame error interrupt occurred --------------------------------------*/
+    if (((isrflags & USART_ISR_FE) != 0U) && ((cr3its & USART_CR3_EIE) != 0U))
     {
-      huart->ErrorCode |= HAL_UART_ERROR_NE;
-    }
-
-    /* UART frame error interrupt occurred -----------------------------------*/
-    if (((isrflags & USART_SR_FE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
-    {
+      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_FEF);
       huart->ErrorCode |= HAL_UART_ERROR_FE;
     }
 
-    /* UART Over-Run interrupt occurred --------------------------------------*/
-    if (((isrflags & USART_SR_ORE) != RESET) && (((cr1its & USART_CR1_RXNEIE) != RESET) || ((cr3its & USART_CR3_EIE) != RESET)))
+    /* UART noise error interrupt occurred --------------------------------------*/
+    if (((isrflags & USART_ISR_NE) != 0U) && ((cr3its & USART_CR3_EIE) != 0U))
     {
+      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_NEF);
+      huart->ErrorCode |= HAL_UART_ERROR_NE;
+    }
+
+    /* UART Over-Run interrupt occurred -----------------------------------------*/
+    if (((isrflags & USART_ISR_ORE) != 0U)
+        && (((cr1its & USART_CR1_RXNEIE_RXFNEIE) != 0U) ||
+            ((cr3its & (USART_CR3_RXFTIE | USART_CR3_EIE)) != 0U)))
+    {
+      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_OREF);
       huart->ErrorCode |= HAL_UART_ERROR_ORE;
     }
 
-    /* Call UART Error Call back function if need be --------------------------*/
+    /* UART Receiver Timeout interrupt occurred ---------------------------------*/
+    if (((isrflags & USART_ISR_RTOF) != 0U) && ((cr1its & USART_CR1_RTOIE) != 0U))
+    {
+      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_RTOF);
+      huart->ErrorCode |= HAL_UART_ERROR_RTO;
+    }
+
+    /* Call UART Error Call back function if need be ----------------------------*/
     if (huart->ErrorCode != HAL_UART_ERROR_NONE)
     {
-      /* UART in mode Receiver -----------------------------------------------*/
-      if (((isrflags & USART_SR_RXNE) != RESET) && ((cr1its & USART_CR1_RXNEIE) != RESET))
+      /* UART in mode Receiver --------------------------------------------------*/
+      if (((isrflags & USART_ISR_RXNE_RXFNE) != 0U)
+          && (((cr1its & USART_CR1_RXNEIE_RXFNEIE) != 0U)
+              || ((cr3its & USART_CR3_RXFTIE) != 0U)))
       {
         UART_Receive_IT(huart);
       }
-
-      /* Non Blocking error : transfer could go on.
-          Error is notified to user through user error callback */
-#if (USE_HAL_UART_REGISTER_CALLBACKS == 1)
-      /*Call registered error callback*/
-      huart->ErrorCallback(huart);
-#else
-      /*Call legacy weak error callback*/
+      // record error and restart
       HAL_UART_ErrorCallback(huart);
-#endif /* USE_HAL_UART_REGISTER_CALLBACKS */
-
       huart->ErrorCode = HAL_UART_ERROR_NONE;
     }
     return;
-  } /* End if some error occurs */
+
+  }
 
   /* UART in mode Transmitter ------------------------------------------------*/
-  if (((isrflags & USART_SR_TXE) != RESET) && ((cr1its & USART_CR1_TXEIE) != RESET))
+  if (((isrflags & UART_FLAG_TXE) != RESET) && ((cr1its & USART_CR1_TXEIE) != RESET))
   {
     UART_Transmit_IT(huart);
     return;
   }
 
   /* UART in mode Transmitter end --------------------------------------------*/
-  if (((isrflags & USART_SR_TC) != RESET) && ((cr1its & USART_CR1_TCIE) != RESET))
+  if (((isrflags & UART_FLAG_TC) != RESET) && ((cr1its & USART_CR1_TCIE) != RESET))
   {
     UART_EndTransmit_IT(huart);
     return;

@@ -9,8 +9,6 @@
 
 
 #include "HardwareCRC32.h"
-#include "stm32f4xx_hal_crc.h"
-#include "stm32f4xx_hal_rcc_ex.h"
 
 // Original code
 #if 0

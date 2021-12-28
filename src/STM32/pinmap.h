@@ -22,7 +22,11 @@
 #include "PinNames.h"
 #include <stdbool.h>
 #include <string.h>
-#include "stm32f4xx_hal_gpio.h"
+#if defined(__STM32H7__)
+# include "stm32h7xx_hal_gpio.h"
+#else
+# include "stm32f4xx_hal_gpio.h"
+#endif
 #ifdef __cplusplus
 extern "C" {
 #endif
