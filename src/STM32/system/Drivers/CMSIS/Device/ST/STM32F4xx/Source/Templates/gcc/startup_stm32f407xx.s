@@ -60,7 +60,9 @@ defined in linker script */
   .type  Reset_Handler, %function
 Reset_Handler:
   ldr   sp, =_estack     /* set stack pointer */
-
+#if HAL_RRF
+  cpsid if               /* ensure interrupts are off during startup */
+#endif
 /* Copy the data segment initializers from flash to SRAM */
   ldr r0, =_sdata
   ldr r1, =_edata
