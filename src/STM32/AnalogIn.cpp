@@ -56,7 +56,7 @@ constexpr uint32_t StmChanMap3[] = {ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2,
                                     ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9, ADC_CHANNEL_10, ADC_CHANNEL_11, ADC_CHANNEL_12, ADC_CHANNEL_13,
                                     ADC_CHANNEL_14, ADC_CHANNEL_15};
 constexpr uint32_t CHAN_VREFINT = (ADC_1 | 17);
-constexpr uint32_t CHAN_TEMPSENSOR = (ADC_3 | 16);
+constexpr uint32_t CHAN_TEMPSENSOR = (ADC_1 | 16);
 constexpr uint32_t ADC1DMA = DMA_CHANNEL_0;
 constexpr uint32_t ADC3DMA = DMA_CHANNEL_2;
 constexpr uint32_t ADC_SAMPLETIME = ADC_SAMPLETIME_480CYCLES;
@@ -138,10 +138,10 @@ static void ConfigureDma(DMA_HandleTypeDef& DmaHandle, DMA_Stream_TypeDef *inst,
     DmaHandle.Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
     DmaHandle.Init.Mode = DMA_CIRCULAR;
     DmaHandle.Init.Priority = DMA_PRIORITY_LOW;
-    //DmaHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;         
-    //DmaHandle.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_HALFFULL;
-    //DmaHandle.Init.MemBurst = DMA_MBURST_SINGLE;
-    //DmaHandle.Init.PeriphBurst = DMA_PBURST_SINGLE; 
+    DmaHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;         
+    DmaHandle.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_HALFFULL;
+    DmaHandle.Init.MemBurst = DMA_MBURST_SINGLE;
+    DmaHandle.Init.PeriphBurst = DMA_PBURST_SINGLE; 
 
     HAL_DMA_DeInit(&DmaHandle);
     HAL_DMA_Init(&DmaHandle);
@@ -159,12 +159,15 @@ static void ConfigureAdc(ADC_HandleTypeDef& AdcHandle, ADC_TypeDef *inst, uint32
     AdcHandle.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DMA_CIRCULAR; /* ADC DMA circular requested */
     AdcHandle.Init.OversamplingMode         = DISABLE;                       /* No oversampling */
     AdcHandle.Init.Overrun                  = ADC_OVR_DATA_OVERWRITTEN;      /* DR register is overwritten with the last conversion result in case of overrun */
+    AdcHandle.Init.EOCSelection             = ADC_EOC_SINGLE_CONV;           /* EOC flag picked-up to indicate conversion end */
 #else
     AdcHandle.Init.ClockPrescaler           = ADC_CLOCK_SYNC_PCLK_DIV8;
+    AdcHandle.Init.DataAlign                = ADC_DATAALIGN_RIGHT;           /* Right-alignment for converted data */
+    AdcHandle.Init.EOCSelection             = DISABLE;                       /* EOC flag picked-up to indicate conversion end */
+    AdcHandle.Init.DMAContinuousRequests = ENABLE;                        /* DMA continuous mode enabled */
 #endif
     AdcHandle.Init.Resolution               = ADC_RESOLUTION_12B;            /* 12-bit resolution for converted data */
     AdcHandle.Init.ScanConvMode             = ENABLE;                        /* Sequencer disabled (ADC conversion on only 1 channel: channel set on rank 1) */
-    AdcHandle.Init.EOCSelection             = ADC_EOC_SINGLE_CONV;           /* EOC flag picked-up to indicate conversion end */
     AdcHandle.Init.ContinuousConvMode       = ENABLE;                        /* Continuous mode enabled (automatic conversion restart after each conversion) */
     AdcHandle.Init.NbrOfConversion          = chanCount;                     /* Parameter discarded because sequencer is disabled */
     AdcHandle.Init.DiscontinuousConvMode    = DISABLE;                       /* Parameter discarded because sequencer is disabled */
