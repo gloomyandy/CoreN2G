@@ -109,6 +109,8 @@ size_t USBSerial::readBytes(char *buffer, size_t length) noexcept
   uint16_t read;
   auto rest = static_cast<uint16_t>(length);
   read = CDC_ReceiveQueue_Read(&ReceiveQueue, reinterpret_cast<uint8_t *>(buffer), rest);
+  // Resume receive process, if possible
+  CDC_resume_receive();
   return read;
 #if 0
   _startMillis = millis();
