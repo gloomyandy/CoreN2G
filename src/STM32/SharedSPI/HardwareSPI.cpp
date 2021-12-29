@@ -1,9 +1,11 @@
 //Hardware SPI
 #include "HardwareSPI.h"
 
+#ifdef RTOS
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
+#endif
 #include "spi_com.h"
 #include "Cache.h"
 
@@ -47,7 +49,9 @@ static constexpr uint32_t MinDMALength = 0;
 #define CAN_USE_DMA(ptr, len) (true)
 
 // Create SPI devices the actual configuration is set later
+#ifdef RTOS
 HardwareSPI HardwareSPI::SSP1(SPI1);
+#endif
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
 HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_CHANNEL_0, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_CHANNEL_0, DMA1_Stream5_IRQn);
 #endif
@@ -197,6 +201,7 @@ bool HardwareSPI::waitForTxEmpty() noexcept
     return false;
 }
 
+#ifdef RTOS
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
 {
@@ -204,6 +209,7 @@ void transferComplete(HardwareSPI *spiDevice) noexcept
     vTaskNotifyGiveFromISR(spiDevice->waitingTask, &higherPriorityTaskWoken);
     portYIELD_FROM_ISR(higherPriorityTaskWoken);
 }
+#endif
 
 void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs) noexcept
 {
@@ -387,6 +393,7 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
 {
     if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
     {
+#ifdef RTOS
         waitingTask = xTaskGetCurrentTaskHandle();
         startTransfer(tx_data, rx_data, len, transferComplete);
         spi_status_t ret = SPI_OK;
@@ -395,8 +402,23 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
         {
             ret = SPI_TIMEOUT;
             debugPrintf("SPI timeout\n");
+            stopTransfer();
         }
         waitingTask = 0;
+#else
+        startTransfer(tx_data, rx_data, len, nullptr);
+        spi_status_t ret = SPI_OK;
+        uint32_t start = millis();
+        while(transferActive && millis() - start < SPITimeoutMillis)
+        {
+        }
+        if (transferActive)
+        {
+            ret = SPI_TIMEOUT;
+            debugPrintf("SPI timeout\n");
+            stopTransfer();
+        }
+#endif
         if (rx_data != nullptr) Cache::InvalidateAfterDMAReceive(rx_data, len);
         return ret;
     }

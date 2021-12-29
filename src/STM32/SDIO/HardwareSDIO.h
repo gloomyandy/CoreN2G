@@ -1,9 +1,11 @@
 #ifndef __HARDWARESDIO_H
 #define __HARDWARESDIO_H
 #include "Core.h"
+#ifdef RTOS
 #include "FreeRTOS.h"
 #include "task.h"
 #include "RTOSIface/RTOSIface.h"
+#endif
 
 
 #define SD_PRESENT               ((uint8_t)0x01)
@@ -43,7 +45,9 @@ private:
     SD_HandleTypeDef hsd;
     DMA_HandleTypeDef dmaRx;
     DMA_HandleTypeDef dmaTx;
+#ifdef RTOS
     TaskHandle waitingTask;
+#endif
     volatile bool ioComplete;
 
     friend void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsdio);

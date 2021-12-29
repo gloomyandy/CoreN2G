@@ -1,9 +1,11 @@
 
 #include "HardwareSDIO.h"
 #include "CoreImp.h"
+#ifdef RTOS
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
+#endif
 
 #if STM32H7
 #define SDIO_CLOCK_EDGE_RISING SDMMC_CLOCK_EDGE_RISING
@@ -23,13 +25,17 @@ HardwareSDIO HardwareSDIO::SDIO1;
 extern "C" void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsdio)
 {
   HardwareSDIO::SDIO1.ioComplete = true;
+#ifdef RTOS
   TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask);
+#endif
 }
 
 extern "C" void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsdio)
 {
   HardwareSDIO::SDIO1.ioComplete = true;
+#ifdef RTOS
   TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask);
+#endif
 }    
 
 #if STM32H7
@@ -165,7 +171,9 @@ uint8_t HardwareSDIO::Init(void) noexcept
   __HAL_LINKDMA(&hsd, hdmarx, dmaRx);
   __HAL_LINKDMA(&hsd, hdmatx, dmaTx);
 #endif
+#ifdef RTOS
   waitingTask = 0;
+#endif
   // Some SD cards are not happy writing when using 48MHz
   // so for now we stick with 24.
 #if USE_SD_HIGHSPEED
@@ -201,8 +209,12 @@ uint8_t HardwareSDIO::ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t Nu
       return MSD_ERROR;
     }
   }
-  
+
+#ifdef RTOS
   waitingTask = TaskBase::GetCallerTaskHandle();
+#else
+  start = millis();
+#endif
   ioComplete = false;
   HAL_StatusTypeDef stat = HAL_SD_ReadBlocks_DMA(&hsd, (uint8_t *)pData, ReadAddr, NumOfBlocks);
   if (stat != HAL_OK) {
@@ -211,13 +223,21 @@ uint8_t HardwareSDIO::ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t Nu
   }
   // The SBC code can sometimes spam us with task notifications, check that our operation has finished
   while (!ioComplete)
+  {
+#ifdef RTOS
     if(!TaskBase::Take(Timeout)) // timed out
+#else
+    if (millis() - start > Timeout)
+#endif
     {
         sd_state = MSD_ERROR;
         debugPrintf("SDIO Read SD timeout\n");
         break;
     }
+  }
+  #ifdef RTOS
   waitingTask = 0;
+  #endif
   return sd_state;
 }
 
@@ -241,7 +261,12 @@ uint8_t HardwareSDIO::WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t 
       return MSD_ERROR;
     }
   }
+
+#ifdef RTOS
   waitingTask = TaskBase::GetCallerTaskHandle();
+#else
+  start = millis();
+#endif
   ioComplete = false;
   HAL_StatusTypeDef stat = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)pData, WriteAddr, NumOfBlocks);
   if (stat != HAL_OK) {
@@ -250,13 +275,22 @@ uint8_t HardwareSDIO::WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t 
   }
   // The SBC code can sometimes spam us with task notifications, check that our operation has finished
   while (!ioComplete)
+  {
+#ifdef RTOS
     if(!TaskBase::Take(Timeout)) // timed out
+#else
+    if (millis() - start > Timeout)
+#endif
     {
         sd_state = MSD_ERROR;
         debugPrintf("SDIO Write SD timeout\n");
         break;
     }
+
+  }
+  #ifdef RTOS
   waitingTask = 0;
+  #endif
 
   return sd_state;
 }

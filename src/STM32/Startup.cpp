@@ -60,11 +60,6 @@ __attribute__((constructor(101))) void premain()
 
   /* Configure the system clock */
   SystemClock_Config();
-
-#if defined (USBCON) && defined(USBD_USE_CDC) && !defined(RTOS)
-  USBD_CDC_init();
-#endif
-
 }
 
 /*

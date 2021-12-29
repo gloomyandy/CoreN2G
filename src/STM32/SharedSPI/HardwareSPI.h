@@ -4,8 +4,10 @@
 #include "CoreImp.h"
 #include "SPI.h"
 
+#ifdef RTOS
 #include "FreeRTOS.h"
 #include "task.h"
+#endif
 #include "spi_com.h"
 #if SPI1DMA
 extern "C" void DMA2_Stream2_IRQHandler(void) noexcept;
@@ -64,7 +66,9 @@ private:
     uint32_t curBits;
     uint32_t curClockMode;
     SPICallbackFunction callback;
+#ifdef RTOS
     TaskHandle_t waitingTask;
+#endif
     bool initComplete;
     bool transferActive;
     bool usingDma;

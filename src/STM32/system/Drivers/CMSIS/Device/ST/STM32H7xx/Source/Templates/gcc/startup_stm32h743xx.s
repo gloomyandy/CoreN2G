@@ -59,7 +59,9 @@ defined in linker script */
   .weak  Reset_Handler
   .type  Reset_Handler, %function
 Reset_Handler:
-  ldr   sp, =_estack      /* set stack pointer */
+#ifdef RTOS
+  ldr   sp, =_estack    /* set stack pointer */
+#endif
 #if HAL_RRF
   cpsid if                /* ensure interrupts are off during startup */
 #endif

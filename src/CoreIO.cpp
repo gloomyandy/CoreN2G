@@ -30,7 +30,9 @@
 # include <rstc/rstc.h>
 #elif STM32F4
 #include <CoreImp.h>
+#ifdef RTOS
 #include <HybridPWM.h>
+#endif
 static WWDG_HandleTypeDef wdHandle;
 #elif LPC17xx
 #include <CoreImp.h>
@@ -63,7 +65,8 @@ void SetPinMode(Pin pin, enum PinMode ulMode, uint32_t debounceCutoff = 0) noexc
             pin_function(pin, STM_PIN_DATA(STM_MODE_OUTPUT_PP, GPIO_NOPULL, 0));
             fastDigitalWriteHigh(pin);
             break;
-            
+
+#ifdef RTOS            
         case OUTPUT_PWM_LOW:
             HybridPWMPin::allocate(pin, 0.0f);
             break;
@@ -76,6 +79,7 @@ void SetPinMode(Pin pin, enum PinMode ulMode, uint32_t debounceCutoff = 0) noexc
             //analog in
             pin_function(pin, STM_PIN_DATA(STM_MODE_ANALOG, GPIO_NOPULL, 0));
             break;
+#endif
 
         default:
             break;

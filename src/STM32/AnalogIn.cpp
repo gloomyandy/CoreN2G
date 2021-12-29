@@ -17,6 +17,7 @@ the conversion time is 12 cycles. This gives a per channel time of...
 Total time for for 16 channels 47*16 = 750uS or approx 1333 full samples per second.
 Each channel is oversampled 16 times to increase the resolution by 2 bits to 14 bits
 */
+#ifdef RTOS
 #include <CoreImp.h>
 #include <AnalogIn.h>
 #include <Cache.h>
@@ -396,4 +397,5 @@ namespace LegacyAnalogIn
         return CHAN_VREFINT;
     }
 }
+#endif
 // End
