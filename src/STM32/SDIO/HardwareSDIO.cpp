@@ -126,6 +126,10 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
   hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
   hsd.Init.ClockDiv = 0;
   sd_state = HAL_SD_Init(&hsd);
+  // HAL_SD_Init does not report an error if there is no card to talk to, HAL_SD_InitCard
+  // does, so call that to check.
+  if (sd_state == MSD_OK)
+    sd_state = HAL_SD_InitCard(&hsd);
   /* Configure SD Bus width (4 bits mode selected) */
   if (sd_state == MSD_OK) {
     /* Enable wide operation */
