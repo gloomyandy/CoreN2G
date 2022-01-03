@@ -56,9 +56,6 @@
 /* Entry Point */
 ENTRY(Reset_Handler)
 
-/* Highest address of the user mode stack */
-_estack = 0x24080000;	/* end of "RAM_D1" Ram type memory */
-
 _Min_Heap_Size = 0x200;	/* required amount of heap  */
 _Min_Stack_Size = 0x400;	/* required amount of stack */
 
@@ -67,10 +64,13 @@ MEMORY
 {
     DTCMRAM	(xrw)	: ORIGIN = 0x20000000,	LENGTH = 128K
     ITCMRAM	(xrw)	: ORIGIN = 0x00000000,	LENGTH = 64K
-    RAM_D1	(xrw)	: ORIGIN = 0x24000000,	LENGTH = 512K
+    RAM_D1	(xrw)	: ORIGIN = 0x24000000,	LENGTH = 512K - 64K
+    RAM_D1NC (xrw)	: ORIGIN = 0x24070000,	LENGTH = 64K
     RAM_D2	(xrw)	: ORIGIN = 0x30000000,	LENGTH = 288K
     RAM_D3	(xrw)	: ORIGIN = 0x38000000,	LENGTH = 64K
-    FLASH	(rx)	: ORIGIN = 0x8020000,	LENGTH = 2048K - 128K - 128K
+    /* We currently don't have a bootloader for the Fly H7 board so load us at the start address */
+    /*FLASH	(rx)	: ORIGIN = 0x8020000,	LENGTH = 2048K - 128K - 128K*/
+    FLASH	(rx)	: ORIGIN = 0x8000000,	LENGTH = 2048K - 128K
     RESETDATA (rx) : ORIGIN = 0x81E0000, LENGTH = 128K
 
 }
@@ -206,6 +206,16 @@ SECTIONS
     . = ALIGN(8);
   } >RAM_D1
 
+ 	.ram_nocache2 (NOLOAD) :
+	{
+        . = ALIGN(4);
+        _szero_nocache2 = .;
+		*(.CanMessage .CanMessage.*)
+		*(.ram_nocache2 .ram_nocache2.*)
+        . = ALIGN(4);
+        _ezero_nocache2 = .;
+ 	} >RAM_D1NC
+
  	.ram_nocache (NOLOAD) :
 	{
         . = ALIGN(4);
@@ -214,7 +224,7 @@ SECTIONS
 		*(.ram_nocache .ram_nocache.*)
         . = ALIGN(4);
         _ezero_nocache = .;
- 	} > RAM_D2
+ 	} >RAM_D2
 
   /* Remove information from the compiler libraries */
   /DISCARD/ :
@@ -227,4 +237,8 @@ SECTIONS
   .ARM.attributes 0 : { *(.ARM.attributes) }
   PROVIDE(_nocache_ram_start = ORIGIN(RAM_D2));
   PROVIDE(_nocache_ram_end = ORIGIN(RAM_D2) + LENGTH(RAM_D2));
+  PROVIDE(_nocache2_ram_start = ORIGIN(RAM_D1NC));
+  PROVIDE(_nocache2_ram_end = ORIGIN(RAM_D1NC) + LENGTH(RAM_D1NC));
+  PROVIDE(_estack = ORIGIN(RAM_D1) + LENGTH(RAM_D1));
+
 }

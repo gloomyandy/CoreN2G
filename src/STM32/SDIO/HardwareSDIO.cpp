@@ -12,6 +12,7 @@
 #define SDIO_CLOCK_POWER_SAVE_DISABLE SDMMC_CLOCK_POWER_SAVE_DISABLE
 #define SDIO_BUS_WIDE_1B SDMMC_BUS_WIDE_1B
 #define SDIO_HARDWARE_FLOW_CONTROL_DISABLE SDMMC_HARDWARE_FLOW_CONTROL_DISABLE
+#define SDIO_HARDWARE_FLOW_CONTROL_ENABLE SDMMC_HARDWARE_FLOW_CONTROL_ENABLE
 #define SDIO_BUS_WIDE_4B SDMMC_BUS_WIDE_4B
 #else
 #endif
@@ -113,23 +114,30 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
 
   /* HAL SD initialization */
 #if STM32H7
+  __HAL_RCC_SDMMC1_FORCE_RESET();
+  __HAL_RCC_SDMMC1_RELEASE_RESET();
   hsd.Instance = SDMMC1;
+  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
+  hsd.Init.ClockDiv = 2;
 #else
   hsd.Instance = SDIO;
-#endif
-  hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
-#if !STM32H7
-  hsd.Init.ClockBypass = (highspeed ? SDIO_CLOCK_BYPASS_ENABLE : SDIO_CLOCK_BYPASS_DISABLE);
-#endif
-  hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
-  hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
   hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
   hsd.Init.ClockDiv = 0;
+  hsd.Init.ClockBypass = (highspeed ? SDIO_CLOCK_BYPASS_ENABLE : SDIO_CLOCK_BYPASS_DISABLE);
+#endif
+  hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
+  hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
+  hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
+
   sd_state = HAL_SD_Init(&hsd);
   // HAL_SD_Init does not report an error if there is no card to talk to, HAL_SD_InitCard
   // does, so call that to check.
   if (sd_state == MSD_OK)
+  {
     sd_state = HAL_SD_InitCard(&hsd);
+    debugPrintf("HAL_SD_InitCard returns %x\n", sd_state);
+  }
+
   /* Configure SD Bus width (4 bits mode selected) */
   if (sd_state == MSD_OK) {
     /* Enable wide operation */
