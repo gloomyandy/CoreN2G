@@ -1792,7 +1792,7 @@ static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t
     ((DMA_Stream_TypeDef *)hdma->Instance)->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR|DMA_SxCR_MINC|DMA_SxCR_PINC));
     ((DMA_Stream_TypeDef *)hdma->Instance)->CR |= (hdma->Init.Direction | hdma->Init.PeriphInc | hdma->Init.MemInc);
 #else
-    /* Clear DBM bit, and set direction */
+    /* Clear DBM bit */
     ((DMA_Stream_TypeDef *)hdma->Instance)->CR &= (uint32_t)(~DMA_SxCR_DBM);
 #endif
 

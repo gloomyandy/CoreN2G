@@ -273,6 +273,11 @@
     defined(STM32F469xx) || defined(STM32F479xx) || defined(STM32F412Zx) || defined(STM32F412Vx) || \
     defined(STM32F412Rx) || defined(STM32F412Cx) || defined(STM32F413xx) || defined(STM32F423xx)
 
+#if HAL_RRF
+  // This file contains a number of changes to fix problems with the V1.7.6 driver
+  // please use diff to identify them.
+#endif
+
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /** @addtogroup SD_Private_Defines

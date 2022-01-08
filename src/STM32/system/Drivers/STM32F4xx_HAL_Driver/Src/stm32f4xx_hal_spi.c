@@ -911,8 +911,14 @@ HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *hspi, uint8_t *pData, uint1
   if ((hspi->Init.Mode == SPI_MODE_MASTER) && (hspi->Init.Direction == SPI_DIRECTION_2LINES))
   {
     hspi->State = HAL_SPI_STATE_BUSY_RX;
+#if HAL_RRF
+    // We use a modified versions of TransmitReceive to always clock out 0xff when performing just
+    // a read operation. Some devices (like SD cards) work better with this rather than just random data
+    return HAL_SPI_TransmitReceive(hspi, NULL, pData, Size, Timeout);
+#else
     /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
     return HAL_SPI_TransmitReceive(hspi, pData, pData, Size, Timeout);
+#endif
   }
 
   /* Process Locked */
@@ -1097,6 +1103,10 @@ error :
 HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData, uint16_t Size,
                                           uint32_t Timeout)
 {
+#if HAL_RRF
+  uint32_t   dummyData = 0xffffffff;
+  uint32_t   txInc;
+#endif
   uint16_t             initial_TxXferCount;
   uint32_t             tmp_mode;
   HAL_SPI_StateTypeDef tmp_state;
@@ -1127,7 +1137,12 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
     goto error;
   }
 
-  if ((pTxData == NULL) || (pRxData == NULL) || (Size == 0U))
+#if HAL_RRF
+// pTxData == NULL means generate dummy data
+  if ((pRxData == NULL) || (Size == 0UL))
+#else
+  if ((pTxData == NULL) || (pRxData == NULL) || (Size == 0UL))
+#endif
   {
     errorcode = HAL_ERROR;
     goto error;
@@ -1144,7 +1159,12 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
   hspi->pRxBuffPtr  = (uint8_t *)pRxData;
   hspi->RxXferCount = Size;
   hspi->RxXferSize  = Size;
+#if HAL_RRF
+  hspi->pTxBuffPtr  = (pTxData ? (uint8_t *)pTxData : (uint8_t *)&dummyData);
+  txInc = (pTxData) ? sizeof(uint8_t) : 0;
+#else
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
+#endif
   hspi->TxXferCount = Size;
   hspi->TxXferSize  = Size;
 
@@ -1218,7 +1238,11 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
     if ((hspi->Init.Mode == SPI_MODE_SLAVE) || (initial_TxXferCount == 0x01U))
     {
       *((__IO uint8_t *)&hspi->Instance->DR) = (*hspi->pTxBuffPtr);
+#if HAL_RRF
+      hspi->pTxBuffPtr += txInc;
+#else
       hspi->pTxBuffPtr += sizeof(uint8_t);
+#endif
       hspi->TxXferCount--;
     }
     while ((hspi->TxXferCount > 0U) || (hspi->RxXferCount > 0U))
@@ -1227,7 +1251,11 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
       if ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXE)) && (hspi->TxXferCount > 0U) && (txallowed == 1U))
       {
         *(__IO uint8_t *)&hspi->Instance->DR = (*hspi->pTxBuffPtr);
+#if HAL_RRF
+        hspi->pTxBuffPtr += txInc;
+#else
         hspi->pTxBuffPtr++;
+#endif
         hspi->TxXferCount--;
         /* Next Data is a reception (Rx). Tx not allowed */
         txallowed = 0U;
@@ -1694,9 +1722,13 @@ HAL_StatusTypeDef HAL_SPI_Receive_DMA(SPI_HandleTypeDef *hspi, uint8_t *pData, u
 
     /* Check tx dma handle */
     assert_param(IS_SPI_DMA_HANDLE(hspi->hdmatx));
-
+#if HAL_RRF
+    /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
+    return HAL_SPI_TransmitReceive_DMA(hspi, NULL, pData, Size);
+#else
     /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
     return HAL_SPI_TransmitReceive_DMA(hspi, pData, pData, Size);
+#endif
   }
 
   /* Process Locked */
@@ -1799,6 +1831,10 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
   uint32_t             tmp_mode;
   HAL_SPI_StateTypeDef tmp_state;
   HAL_StatusTypeDef errorcode = HAL_OK;
+#if HAL_RRF
+  static uint32_t dummyDMAdata = 0xffffffff;
+  uint32_t savedMemInc;
+#endif
 
   /* Check rx & tx dma handles */
   assert_param(IS_SPI_DMA_HANDLE(hspi->hdmarx));
@@ -1821,7 +1857,12 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
     goto error;
   }
 
-  if ((pTxData == NULL) || (pRxData == NULL) || (Size == 0U))
+#if HAL_RRF
+  // pTxData == NULL means generate dummy data
+  if ((pRxData == NULL) || (Size == 0UL))
+#else
+  if ((pTxData == NULL) || (pRxData == NULL) || (Size == 0UL))
+#endif
   {
     errorcode = HAL_ERROR;
     goto error;
@@ -1835,7 +1876,11 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
 
   /* Set the transaction information */
   hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
+#if HAL_RRF
+  hspi->pTxBuffPtr  = (pTxData) ? (uint8_t *)pTxData : (uint8_t *)&dummyDMAdata;
+#else
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
+#endif
   hspi->TxXferSize  = Size;
   hspi->TxXferCount = Size;
   hspi->pRxBuffPtr  = (uint8_t *)pRxData;
@@ -1854,6 +1899,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
   }
 #endif /* USE_SPI_CRC */
 
+#if !HAL_RRF
   /* Check if we are in Rx only or in Rx/Tx Mode and configure the DMA transfer complete callback */
   if (hspi->State == HAL_SPI_STATE_BUSY_RX)
   {
@@ -1862,6 +1908,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
     hspi->hdmarx->XferCpltCallback     = SPI_DMAReceiveCplt;
   }
   else
+#endif
   {
     /* Set the SPI Tx/Rx DMA Half transfer complete callback */
     hspi->hdmarx->XferHalfCpltCallback = SPI_DMAHalfTransmitReceiveCplt;
@@ -1895,9 +1942,19 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
   hspi->hdmatx->XferErrorCallback    = NULL;
   hspi->hdmatx->XferAbortCallback    = NULL;
 
+#if HAL_RRF
+  // If we are generating dummy data, we need to turn off memory increment
+  savedMemInc = hspi->hdmatx->Init.MemInc;
+  if (pTxData == NULL)
+    hspi->hdmatx->Init.MemInc = 0;
+#endif
+
   /* Enable the Tx DMA Stream/Channel  */
   if (HAL_OK != HAL_DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->DR, hspi->TxXferCount))
   {
+#if HAL_RRF
+    hspi->hdmatx->Init.MemInc = savedMemInc;
+#endif
     /* Update SPI error code */
     SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_DMA);
     errorcode = HAL_ERROR;
@@ -1905,6 +1962,9 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
     hspi->State = HAL_SPI_STATE_READY;
     goto error;
   }
+#if HAL_RRF
+  hspi->hdmatx->Init.MemInc = savedMemInc;
+#endif
 
   /* Check if the SPI is already enabled */
   if ((hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE)

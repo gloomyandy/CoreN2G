@@ -1150,10 +1150,14 @@ uint32_t HAL_DMA_GetError(DMA_HandleTypeDef *hdma)
   */
 static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength)
 {
+#if HAL_RRF
+  /* Clear DBM bit, and set inc and direction */
+  hdma->Instance->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR|DMA_SxCR_MINC|DMA_SxCR_PINC));
+  hdma->Instance->CR |= (hdma->Init.Direction | hdma->Init.PeriphInc | hdma->Init.MemInc);
+#else
   /* Clear DBM bit */
-  hdma->Instance->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR));
-  hdma->Instance->CR |= hdma->Init.Direction;
-
+  hdma->Instance->CR &= (uint32_t)(~DMA_SxCR_DBM);
+#endif
   /* Configure DMA Stream data length */
   hdma->Instance->NDTR = DataLength;
 
