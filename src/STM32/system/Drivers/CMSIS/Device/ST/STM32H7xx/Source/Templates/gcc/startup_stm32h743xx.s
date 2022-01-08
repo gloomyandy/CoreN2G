@@ -59,7 +59,7 @@ defined in linker script */
   .weak  Reset_Handler
   .type  Reset_Handler, %function
 Reset_Handler:
-#ifdef RTOS
+#ifndef NO_INITIAL_SP
   ldr   sp, =_estack    /* set stack pointer */
 #endif
 #if HAL_RRF
