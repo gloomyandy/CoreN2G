@@ -96,6 +96,9 @@
 #undef HAL_PCD_MODULE_ENABLED
 #endif
 
+#if SUPPORT_CAN && !defined(HAL_FDCAN_MODULE_ENABLED)
+#define HAL_FDCAN_MODULE_ENABLED
+#endif
 /*
  * Unused HAL modules
  */

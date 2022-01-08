@@ -28,6 +28,9 @@ static_assert(MaxRxBuffers <= 30);					// the hardware allows up to 64 but our c
 # if SAME70
 constexpr unsigned int NumCanDevices = 2;			// this driver supports both CAN devices on the SAME70
 typedef Mcan Can;
+#elif STM32H7
+typedef FDCAN_HandleTypeDef Can;
+constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
 #else
 constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
 # endif
@@ -192,6 +195,8 @@ public:
 	{
 #if SAME70
 		return hw->MCAN_TSCV;
+#elif STM32H7
+		return HAL_FDCAN_GetTimestampCounter(hw);
 #else
 		return hw->TSCV.reg;
 #endif
@@ -237,6 +242,7 @@ private:
 
 	void CopyMessageForTransmit(CanMessageBuffer *buffer, volatile TxBufferHeader *f) noexcept;
 	void CopyReceivedMessage(CanMessageBuffer *null buffer, const volatile RxBufferHeader *f) noexcept;
+
 
 	Can *hw;													// address of the CAN peripheral we are using
 
