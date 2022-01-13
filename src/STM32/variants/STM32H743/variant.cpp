@@ -180,67 +180,122 @@ void SystemClockStartupInit() {
 
   // Enable L1-Cache
   SCB_EnableICache();
-  //SCB_EnableDCache();
   SCB->CACR |= 1<<2;
+  RCC_OscInitTypeDef RCC_OscInitStruct = {};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {};
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {};
 
-  PWR->CR3 &= ~(1 << 2);  // SCUEN=0
-  PWR->D3CR |= 3 << 14;   // VOS=3,Scale1,1.15~1.26V core voltage
-  while((PWR->D3CR & (1 << 13)) == 0);	// Wait for the voltage to stabilize
-  RCC->CR |= 1<<16;       // Enable HSE
+  /** Supply configuration update enable
+  */
+  HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
+  /** Configure the main internal regulator output voltage
+   *  Run mode (VOS0 to VOS3)
+   *  Scale 0: boosted performance (available only with LDO regulator)
+   *  Scale 1: high performance
+   *  Scale 2: medium performance and consumption
+   *  Scale 3: optimized performance and low-power consumption
+   *
+  */
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
 
-  uint16_t timeout = 0;
-  while(((RCC->CR & (1 << 17)) == 0) && (timeout < 0X7FFF)) {
-    timeout++;            // Wait for HSE RDY
+  while (!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  /* PLL1 pclk is sysclk 480 Mhz */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  // 480 Mhz
+  RCC_OscInitStruct.PLL.PLLM = 5; // M div 5
+  RCC_OscInitStruct.PLL.PLLN = 96; // N mul 96
+  RCC_OscInitStruct.PLL.PLLP = 1; // P div 1
+  RCC_OscInitStruct.PLL.PLLQ = 10; // Q div 10 - USB 48 Mhz
+  RCC_OscInitStruct.PLL.PLLR = 10; // R unused
+  /*
+   * RCC_PLL1VCIRANGE_0  Clock range frequency between 1 and 2 MHz
+   * RCC_PLL1VCIRANGE_1  Clock range frequency between 2 and 4 MHz
+   * RCC_PLL1VCIRANGE_2  Clock range frequency between 4 and 8 MHz
+   * RCC_PLL1VCIRANGE_3  Clock range frequency between 8 and 16 MHz */
+  /* PLLRGE: RCC_PLL1VCIRANGE_2 Clock range frequency between 4 and 8 MHz  */
+  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_2;
+  /* VCOSEL PLL1VCOWIDE 2-16 Mhz */
+  RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
+  RCC_OscInitStruct.PLL.PLLFRACN = 0;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+    Error_Handler();
+  }
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
+                                | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2
+                                | RCC_CLOCKTYPE_D3PCLK1 | RCC_CLOCKTYPE_D1PCLK1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
+  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK) {
+    Error_Handler();
   }
 
-    if(timeout == 0X7FFF) {
+  PeriphClkInitStruct.PeriphClockSelection =   RCC_PERIPHCLK_SDMMC | RCC_PERIPHCLK_ADC
+                                             | RCC_PERIPHCLK_USART16
+                                             | RCC_PERIPHCLK_USART234578
+                                             | RCC_PERIPHCLK_SPI123
+                                             | RCC_PERIPHCLK_SPI45 | RCC_PERIPHCLK_SPI6
+                                             | RCC_PERIPHCLK_FDCAN;
+  PeriphClkInitStruct.PLL2.PLL2M = 5;  // M DIV 5 vco 25 / 5 = 5MHz
+  PeriphClkInitStruct.PLL2.PLL2N = 80; // N MUL 80 = 400
+  PeriphClkInitStruct.PLL2.PLL2P = 4;  // P div 4 = 100
+  PeriphClkInitStruct.PLL2.PLL2Q = 4;  // Q div 4 = 100
+  PeriphClkInitStruct.PLL2.PLL2R = 2;  // R div 2 = 200
+  // RCC_PLL1VCIRANGE_0  Clock range frequency between 4 and 8 MHz
+  PeriphClkInitStruct.PLL2.PLL2RGE = RCC_PLL2VCIRANGE_2;
+  PeriphClkInitStruct.PLL2.PLL2VCOSEL = RCC_PLL2VCOWIDE;
+  PeriphClkInitStruct.PLL2.PLL2FRACN = 0;
+#if 0
+  PeriphClkInitStruct.PLL3.PLL3M = 15; // M DIV 15 vco 25 / 15 ~ 1.667 Mhz
+  PeriphClkInitStruct.PLL3.PLL3N = 96; // N MUL 96
+  PeriphClkInitStruct.PLL3.PLL3P = 2;  // P div 2
+  PeriphClkInitStruct.PLL3.PLL3Q = 2;  // Q div 2
+  PeriphClkInitStruct.PLL3.PLL3R = 2;  // R div 2
+  // RCC_PLL1VCIRANGE_0  Clock range frequency between 1 and 2 MHz
+  PeriphClkInitStruct.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_0;
+  PeriphClkInitStruct.PLL3.PLL3VCOSEL = RCC_PLL3VCOMEDIUM;
+  PeriphClkInitStruct.PLL3.PLL3FRACN = 0;
+#endif
+  // ADC from PLL2 pclk
+  PeriphClkInitStruct.AdcClockSelection = RCC_ADCCLKSOURCE_PLL2;
+  // USB from PLL1 qclk
+  //PeriphClkInitStruct.UsbClockSelection = RCC_USBCLKSOURCE_PLL;
+  // QSPI from PLL1 qclk
+  //PeriphClkInitStruct.QspiClockSelection = RCC_QSPICLKSOURCE_PLL;
+  // SDMMC from PLL2 rclk
+  PeriphClkInitStruct.SdmmcClockSelection = RCC_SDMMCCLKSOURCE_PLL2;
+  // LPUART from PLL2 qclk
+  //PeriphClkInitStruct.Lpuart1ClockSelection = RCC_LPUART1CLKSOURCE_PLL2;
+  // USART from Bus
+  PeriphClkInitStruct.Usart16ClockSelection = RCC_USART16CLKSOURCE_D2PCLK2;
+  // USART from Bus
+  PeriphClkInitStruct.Usart234578ClockSelection = RCC_USART16CLKSOURCE_D2PCLK2;
+  // I2C123 from PLL3 rclk
+  //PeriphClkInitStruct.I2c123ClockSelection = RCC_I2C123CLKSOURCE_PLL3;
+  // I2C4 from PLL3 rclk
+  //PeriphClkInitStruct.I2c4ClockSelection = RCC_I2C4CLKSOURCE_PLL3;
+  // SPI123 from PLL2 pclk
+  PeriphClkInitStruct.Spi123ClockSelection = RCC_SPI123CLKSOURCE_PLL2;
+  // SPI45 from PLL2 qclk
+  PeriphClkInitStruct.Spi45ClockSelection = RCC_SPI45CLKSOURCE_PLL2;
+  // SPI6 from PLL2 qclk
+  PeriphClkInitStruct.Spi6ClockSelection = RCC_SPI6CLKSOURCE_PLL2;
+
+
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK) {
     Error_Handler();
-  } else {
-    RCC->PLLCKSELR |= 2 << 0;         // PLLSRC[1:0] = 2, HSE for PLL clock source
-    RCC->PLLCKSELR |= 5 << 4;         // DIVM1[5:0] = pllm,     Prescaler for PLL1
-    RCC->PLL1DIVR |= (160 - 1) << 0;  // DIVN1[8:0] = plln - 1, Multiplication factor for PLL1 VCO
-    RCC->PLL1DIVR |= (2 - 1) << 9;	  // DIVP1[6:0] = pllp - 1, PLL1 DIVP division factor
-    RCC->PLL1DIVR |= (4 - 1) << 16;   // DIVQ1[6:0] = pllq - 1, PLL1 DIVQ division factor
-    RCC->PLL1DIVR |= 1 << 24;		      // DIVR1[6:0] = pllr - 1, PLL1 DIVR division factor
-    RCC->PLLCFGR |= 2 << 2;           // PLL1 input (ref1_ck) clock range frequency is between 4 and 8 MHz
-    RCC->PLLCFGR |= 0 << 1;           // PLL1 VCO selection, 0: 192 to 836 MHz, 1 : 150 to 420 MHz
-    RCC->PLLCFGR |= 3 << 16;          // pll1_q_ck and pll1_p_ck output is enabled
-    RCC->CR |= 1 << 24;               // PLL1 enable
-    while((RCC->CR & (1 << 25)) == 0); // PLL1 clock ready flag
-
-    // PLL2 DIVR clock frequency = 220MHz, so that SDRAM clock can be set to 110MHz
-    RCC->PLLCKSELR |= 25 << 12;       // DIVM2[5:0] = 25, Prescaler for PLL2
-    RCC->PLL2DIVR |= (440 - 1) << 0;	// DIVN2[8:0] = 440 - 1, Multiplication factor for PLL2 VCO
-    RCC->PLL2DIVR |= (2 - 1) << 9;    // DIVP2[6:0] = 2-1, PLL2 DIVP division factor
-    RCC->PLL2DIVR |= (2 - 1) << 24;   // DIVR2[6:0] = 2-1, PLL2 DIVR division factor
-    RCC->PLLCFGR |= 0 << 6;           // PLL2RGE[1:0]=0, PLL2 input (ref2_ck) clock range frequency is between 1 and 2 MHz
-    RCC->PLLCFGR |= 0 << 5;           // PLL2 VCO selection, 0: 192 to 836 MHz, 1: 150 to 420 MHz
-    RCC->PLLCFGR |= 1 << 19;          // pll2_p_ck output is enabled
-    RCC->PLLCFGR |= 1 << 21;          // pll2_r_ck output is enabled
-    RCC->D1CCIPR &= ~(3 << 0);        // clear FMC kernel clock source selection
-    RCC->D1CCIPR |= 2 << 0;           // pll2_r_ck clock selected as kernel peripheral clock
-    RCC->CR |= 1 << 26;               // PLL2 enable
-    while((RCC->CR&(1<<27)) == 0);    // PLL2 clock ready flag
-
-    RCC->D1CFGR |= 8 << 0;  // rcc_hclk3 = sys_d1cpre_ck / 2 = 400 / 2 = 200MHz.  AHB1/2/3/4
-    RCC->D1CFGR |= 0 << 8;  // sys_ck not divided, sys_d1cpre_ck = sys_clk / 1 = 400 / 1 = 400MHz, System Clock = 400MHz
-    RCC->CFGR |= 3 << 0;    // PLL1 selected as system clock (pll1_p_ck). 400MHz
-    while(1) {
-      timeout = (RCC->CFGR & (7 << 3)) >> 3; // System clock switch status
-      if(timeout == 3) break; // Wait for SW[2:0] = 3 (011: PLL1 selected as system clock (pll1_p_ck))
-    }
-
-    FLASH->ACR |= 2 << 0;   // LATENCY[2:0] = 2 (@VOS1 Level,maxclock=210MHz)
-    FLASH->ACR |= 2 << 4;   // WRHIGHFREQ[1:0] = 2, flash access frequency < 285MHz
-
-    RCC->D1CFGR |= 4 << 4;  // D1PPRE[2:0] = 4, rcc_pclk3 = rcc_hclk3 / 2 = 100MHz, APB3.
-    RCC->D2CFGR |= 4 << 4;  // D2PPRE1[2:0] = 4, rcc_pclk1 = rcc_hclk1 / 2 = 100MHz, APB1.
-    RCC->D2CFGR |= 4 << 8;  // D2PPRE2[2:0] = 4, rcc_pclk2 = rcc_hclk1 / 2 = 100MHz, APB2.
-    RCC->D3CFGR |= 4 << 4;  // D3PPRE[2:0] = 4, rcc_pclk4 = rcc_hclk4 / 2 = 100MHz, APB4.
-
-    RCC->CR |= 1 << 7;      // CSI clock enable
-    RCC->APB4ENR |= 1 << 1; // SYSCFG peripheral clock enable
-    SYSCFG->CCCSR |= 1 << 0;
   }
 
   // USB clock, (use HSI48 clock)

@@ -1439,12 +1439,66 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
   {
     while ((initial_TxXferCount > 0UL) || (initial_RxXferCount > 0UL))
     {
+#if HAL_RRF
+      // Modified version of read/write code to avoid non aligned memory access and inout fifo
+      // overflow.
+      uint32_t delta = initial_RxXferCount - initial_TxXferCount;
+      /* check TXP flag and make sure there is no chance of rx fifo overflow NOTE: allow for smaller fifos on SPI4,5,6 */
+      if ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (initial_TxXferCount > 0UL) && delta < 8)
+      {
+        {
+          *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)hspi->pTxBuffPtr);
+#if HAL_RRF
+          hspi->pTxBuffPtr += txInc;
+#else
+          hspi->pTxBuffPtr += sizeof(uint8_t);
+#endif
+          hspi->TxXferCount--;
+          initial_TxXferCount = hspi->TxXferCount;
+        }
+      }
+      /* Wait until RXWNE/FRLVL flag is reset */
+      while (((hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL)) != 0UL) && (initial_RxXferCount > 0UL))
+      {
+        if ((hspi->Instance->SR & SPI_FLAG_RXWNE) != 0UL)
+        {
+          // avoid unaligned data access
+          uint32_t word = *((__IO uint32_t *)&hspi->Instance->RXDR);
+          uint8_t *p = (uint8_t *)&word;
+          *hspi->pRxBuffPtr++ = *p++;
+          *hspi->pRxBuffPtr++ = *p++;
+          *hspi->pRxBuffPtr++ = *p++;
+          *hspi->pRxBuffPtr++ = *p++;
+          hspi->RxXferCount -= (uint16_t)4UL;
+          initial_RxXferCount = hspi->RxXferCount;
+        }
+        else if ((hspi->Instance->SR & SPI_FLAG_FRLVL) > SPI_RX_FIFO_1PACKET)
+        {
+          uint16_t hword;
+          uint8_t *p = (uint8_t *)&hword;
+#if defined (__GNUC__)
+          hword = *prxdr_16bits;
+#else
+          *((uint16_t *)hspi->pRxBuffPtr) = *((__IO uint16_t *)&hspi->Instance->RXDR);
+#endif /* __GNUC__ */
+          *hspi->pRxBuffPtr++ = *p++;
+          *hspi->pRxBuffPtr++ = *p++;
+          hspi->RxXferCount -= (uint16_t)2UL;
+          initial_RxXferCount = hspi->RxXferCount;
+        }
+        else
+        {
+          *((uint8_t *)hspi->pRxBuffPtr) = *((__IO uint8_t *)&hspi->Instance->RXDR);
+          hspi->pRxBuffPtr += sizeof(uint8_t);
+          hspi->RxXferCount--;
+          initial_RxXferCount = hspi->RxXferCount;
+        }
+      }
+
+#else
       /* check TXP flag */
       if ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (initial_TxXferCount > 0UL))
       {
-// With RRF we use memory buffers that can only be accessed with aligned operations. Adding the code to check for this
-// actually results in slower code than just using byte access, so we don't bother
-#if !HAL_RRF
         if ((initial_TxXferCount > 3UL) && (hspi->Init.FifoThreshold > SPI_FIFO_THRESHOLD_03DATA))
         {
           *((__IO uint32_t *)&hspi->Instance->TXDR) = *((uint32_t *)hspi->pTxBuffPtr);
@@ -1464,14 +1518,9 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
           initial_TxXferCount = hspi->TxXferCount;
         }
         else
-#endif
         {
           *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)hspi->pTxBuffPtr);
-#if HAL_RRF
-          hspi->pTxBuffPtr += txInc;
-#else
           hspi->pTxBuffPtr += sizeof(uint8_t);
-#endif
           hspi->TxXferCount--;
           initial_TxXferCount = hspi->TxXferCount;
         }
@@ -1480,7 +1529,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
       /* Wait until RXWNE/FRLVL flag is reset */
       if (((hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL)) != 0UL) && (initial_RxXferCount > 0UL))
       {
-#if !HAL_RRF
         if ((hspi->Instance->SR & SPI_FLAG_RXWNE) != 0UL)
         {
           *((uint32_t *)hspi->pRxBuffPtr) = *((__IO uint32_t *)&hspi->Instance->RXDR);
@@ -1500,7 +1548,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
           initial_RxXferCount = hspi->RxXferCount;
         }
         else
-#endif
         {
           *((uint8_t *)hspi->pRxBuffPtr) = *((__IO uint8_t *)&hspi->Instance->RXDR);
           hspi->pRxBuffPtr += sizeof(uint8_t);
@@ -1508,13 +1555,13 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
           initial_RxXferCount = hspi->RxXferCount;
         }
       }
-
+#endif
       /* Timeout management */
       if ((((HAL_GetTick() - tickstart) >=  Timeout) && (Timeout != HAL_MAX_DELAY)) || (Timeout == 0U))
       {
         /* Call standard close procedure with error check */
         SPI_CloseTransfer(hspi);
-
+        debugPrintf("SPI timeout delta %d\n", (unsigned)delta);
         /* Process Unlocked */
         __HAL_UNLOCK(hspi);
 

@@ -15,7 +15,7 @@
 #define TEMPSENSOR_CAL1_DEF 931
 #define TEMPSENSOR_CAL2_DEF 1197
 #define VREFINT_CAL_DEF 1500
-#define GET_ADC_CAL(CAL, DEF) (*CAL == 0xffff ? DEF : *CAL)
+#define GET_ADC_CAL(CAL, DEF) (*CAL == 0xffff ? DEF : ((*CAL)>>4))
 #elif STM32F4
 #include "stm32f4xx_ll_adc.h"
 // ADC VREF and MCU Temperature calibration values

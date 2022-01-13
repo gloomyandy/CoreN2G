@@ -5,6 +5,9 @@
  *      Author: David
  */
 
+#if STM32F4
+#include <stm32CanDevice.h>
+#else
 #ifndef SRC_CANDEVICE_H_
 #define SRC_CANDEVICE_H_
 
@@ -28,9 +31,6 @@ static_assert(MaxRxBuffers <= 30);					// the hardware allows up to 64 but our c
 # if SAME70
 constexpr unsigned int NumCanDevices = 2;			// this driver supports both CAN devices on the SAME70
 typedef Mcan Can;
-#elif STM32H7
-typedef FDCAN_HandleTypeDef Can;
-constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
 #else
 constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
 # endif
@@ -195,8 +195,6 @@ public:
 	{
 #if SAME70
 		return hw->MCAN_TSCV;
-#elif STM32H7
-		return HAL_FDCAN_GetTimestampCounter(hw);
 #else
 		return hw->TSCV.reg;
 #endif
@@ -285,3 +283,4 @@ private:
 #endif
 
 #endif /* SRC_CANDEVICE_H_ */
+#endif

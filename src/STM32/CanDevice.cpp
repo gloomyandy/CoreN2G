@@ -15,6 +15,8 @@
 #include <General/Bitmap.h>
 #include <cstring>
 
+extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
+
 
 /**@}*/
 /**
@@ -182,6 +184,14 @@ struct CanDevice::ExtendedMessageFilterElement
 	__IO union F1Type F1;
 };
 
+static FDCAN_GlobalTypeDef * const CanInstance[2] = {FDCAN1, FDCAN2};
+static Can CanPorts[2];
+//static const IRQn IRQnsByPort[2] = { CAN0_IRQn, CAN1_IRQn };
+static CanDevice *devicesByPort[2] = { nullptr, nullptr };
+
+CanDevice CanDevice::devices[NumCanDevices];
+
+
 
 inline uint32_t CanDevice::GetRxBufferSize() const noexcept { return sizeof(RxBufferHeader)/sizeof(uint32_t) + (config->dataSize >> 2); }
 inline uint32_t CanDevice::GetTxBufferSize() const noexcept { return sizeof(TxBufferHeader)/sizeof(uint32_t) + (config->dataSize >> 2); }
@@ -194,7 +204,6 @@ inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept 
 // Initialise a CAN device and return a pointer to it
 /*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
 {
-#if 0
 	if (   p_whichCan >= NumCanDevices									// device number out of range
 		|| p_whichPort >= 2												// CAN instance number out of range
 		|| devicesByPort[p_whichPort] != nullptr						// CAN instance number already in use
@@ -212,11 +221,21 @@ inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept 
 	// Set up device number, peripheral number, hardware address etc.
 	dev.whichCan = p_whichCan;
 	dev.whichPort = p_whichPort;
-	dev.hw = CanPorts[p_whichPort];
+	dev.hw = &CanPorts[p_whichPort];
 	dev.config = &p_config;
 	dev.txCallback = p_txCallback;
 	devicesByPort[p_whichPort] = &dev;
 
+	dev.hw->Instance = CanInstance[p_whichPort];
+	FDCAN_InitTypeDef& Init = dev.hw->Init;
+	Init.FrameFormat = FDCAN_FRAME_FD_BRS;
+	Init.Mode = FDCAN_MODE_NORMAL;
+	Init.AutoRetransmission = ENABLE;
+	Init.TransmitPause = DISABLE;
+	Init.ProtocolException = ENABLE;
+	dev.UpdateLocalCanTiming(timing);
+
+#if 0
 	// Set up pointers to the individual parts of the buffer memory
 	memset(memStart, 0, p_config.GetMemorySize());						// clear out filters, transmit pending flags etc.
 
@@ -245,7 +264,7 @@ inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept 
 	dev.txEventFifo = (TxEvent*)memStart;
 	memStart += p_config.GetTxEventFifoMemSize();
 	dev.txBuffers = memStart;
-
+#endif
 	dev.useFDMode = (p_config.dataSize > 8);							// assume we want standard CAN if the max data size is 8
 	dev.messagesQueuedForSending = dev.messagesReceived = dev.messagesLost = dev.busOffCount = 0;
 #ifdef RTOS
@@ -255,7 +274,7 @@ inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept 
 #endif
 
 	dev.UpdateLocalCanTiming(timing);									// sets NBTP and DBTP
-
+#if 0
 	// Enable the clock
 #if SAME5x || SAMC21
 	if (p_whichPort == 0)
@@ -888,6 +907,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 		return false;
 	}
 #endif
+	delay(100);
 	return false;
 }
 
@@ -1042,14 +1062,13 @@ void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
 
 void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 {
-#if 0
 	// Sort out the bit timing
 	uint32_t period = timing.period;
 	uint32_t tseg1 = timing.tseg1;
 	uint32_t jumpWidth = timing.jumpWidth;
 	uint32_t prescaler = 1;						// 48MHz main clock
-	uint32_t tseg2;
-
+	uint32_t tseg2 = period - tseg1 - 1;
+debugPrintf("Can timing before period %d tseg1 %d tseg2 %d jump %d prescale %d\n", (int)period, (int)tseg1, (int)tseg2, (int)jumpWidth, (int)prescaler);
 	for (;;)
 	{
 		tseg2 = period - tseg1 - 1;
@@ -1064,11 +1083,21 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 		tseg1 >>= 1;
 		jumpWidth >>= 1;
 	}
-
 #if !SAME70
 	bitPeriod = period * prescaler;				// the actual CAN normal bit period, in 48MHz clocks
 #endif
+debugPrintf("Can timing after period %d tseg1 %d tseg2 %d jump %d prescale %d\n", (int)period, (int)tseg1, (int)tseg2, (int)jumpWidth, (int)prescaler);
+	FDCAN_InitTypeDef& Init = hw->Init;
+	Init.NominalPrescaler = prescaler; /* tq = NominalPrescaler x (1/fdcan_ker_ck) */
+	Init.NominalSyncJumpWidth = jumpWidth;
+  	Init.NominalTimeSeg1 = tseg1 - 1; /* NominalTimeSeg1 = Propagation_segment + Phase_segment_1 */
+  	Init.NominalTimeSeg2 = tseg2;
+	Init.DataPrescaler = prescaler;
+	Init.DataSyncJumpWidth = jumpWidth;
+	Init.DataTimeSeg1 = tseg1 - 1; /* DataTimeSeg1 = Propagation_segment + Phase_segment_1 */
+	Init.DataTimeSeg2 = tseg2;
 
+#if 0
 	nbtp = ((tseg1 - 1) << CAN_(NBTP_NTSEG1_Pos))
 		| ((tseg2 - 1) << CAN_(NBTP_NTSEG2_Pos))
 		| ((jumpWidth - 1) << CAN_(NBTP_NSJW_Pos))
