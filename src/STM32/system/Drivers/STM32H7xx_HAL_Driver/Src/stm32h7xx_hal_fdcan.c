@@ -3285,7 +3285,7 @@ uint32_t HAL_FDCAN_IsRxBufferMessageAvailable(FDCAN_HandleTypeDef *hfdcan, uint3
   {
     return 0;
   }
-
+#if !HAL_RRF
   /* Clear the New Data flag of the current Rx buffer */
   if (RxBufferIndex < 32U)
   {
@@ -3295,7 +3295,7 @@ uint32_t HAL_FDCAN_IsRxBufferMessageAvailable(FDCAN_HandleTypeDef *hfdcan, uint3
   {
     hfdcan->Instance->NDAT2 = ((uint32_t)1 << (RxBufferIndex & 0x1FU));
   }
-
+#endif
   return 1;
 }
 
@@ -5278,7 +5278,6 @@ void HAL_FDCAN_IRQHandler(FDCAN_HandleTypeDef *hfdcan)
   Errors &= hfdcan->Instance->IE;
   ErrorStatusITs = hfdcan->Instance->IR & FDCAN_ERROR_STATUS_MASK;
   ErrorStatusITs &= hfdcan->Instance->IE;
-
   /* High Priority Message interrupt management *******************************/
   if (__HAL_FDCAN_GET_IT_SOURCE(hfdcan, FDCAN_IT_RX_HIGH_PRIORITY_MSG) != 0U)
   {

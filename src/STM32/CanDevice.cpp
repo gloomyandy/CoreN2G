@@ -8,7 +8,7 @@
 #include "CanDevice.h"
 
 #if SUPPORT_CAN
-
+#include <CoreImp.h>
 #include <Cache.h>
 #include <CanSettings.h>
 #include <CanMessageBuffer.h>
@@ -186,7 +186,7 @@ struct CanDevice::ExtendedMessageFilterElement
 
 static FDCAN_GlobalTypeDef * const CanInstance[2] = {FDCAN1, FDCAN2};
 static Can CanPorts[2];
-//static const IRQn IRQnsByPort[2] = { CAN0_IRQn, CAN1_IRQn };
+static const IRQn_Type IRQnsByPort[2][2] = { {FDCAN1_IT0_IRQn, FDCAN1_IT1_IRQn}, {FDCAN1_IT0_IRQn, FDCAN1_IT1_IRQn} };
 static CanDevice *devicesByPort[2] = { nullptr, nullptr };
 
 CanDevice CanDevice::devices[NumCanDevices];
@@ -217,7 +217,7 @@ inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept 
 	{
 		return nullptr;
 	}
-
+debugPrintf("Init Can device %d port %d\n", p_whichCan, p_whichPort);
 	// Set up device number, peripheral number, hardware address etc.
 	dev.whichCan = p_whichCan;
 	dev.whichPort = p_whichPort;
@@ -225,86 +225,105 @@ inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept 
 	dev.config = &p_config;
 	dev.txCallback = p_txCallback;
 	devicesByPort[p_whichPort] = &dev;
+	uint32_t dataSize = 0;
+	if (p_config.dataSize == 64)
+		dataSize = FDCAN_DATA_BYTES_64;
+	else if (p_config.dataSize == 8)
+		dataSize = FDCAN_DATA_BYTES_8;
+	else
+	{
+		dataSize = FDCAN_DATA_BYTES_64;
+		debugPrintf("Unxepected Can data size %d\n", p_config.dataSize);
+	}
 
-	dev.hw->Instance = CanInstance[p_whichPort];
+	//dev.hw->Instance = CanInstance[p_whichPort];
+	dev.hw->Instance = CanInstance[0];
 	FDCAN_InitTypeDef& Init = dev.hw->Init;
-	Init.FrameFormat = FDCAN_FRAME_FD_BRS;
+	Init.FrameFormat = (dataSize != FDCAN_DATA_BYTES_8 ? FDCAN_FRAME_FD_BRS : FDCAN_FRAME_CLASSIC);
 	Init.Mode = FDCAN_MODE_NORMAL;
 	Init.AutoRetransmission = ENABLE;
-	Init.TransmitPause = DISABLE;
+	Init.TransmitPause = ENABLE;
 	Init.ProtocolException = ENABLE;
 	dev.UpdateLocalCanTiming(timing);
+	Init.MessageRAMOffset = 0;
+	Init.StdFiltersNbr = p_config.numShortFilterElements;
+	Init.ExtFiltersNbr = p_config.numExtendedFilterElements;
+	Init.RxFifo0ElmtsNbr = p_config.rxFifo0Size;
+	Init.RxFifo0ElmtSize = dataSize;
+	Init.RxFifo1ElmtsNbr = p_config.rxFifo1Size;
+	Init.RxFifo1ElmtSize = dataSize;
+	Init.RxBuffersNbr = p_config.numRxBuffers;
+	Init.RxBufferSize = dataSize;
+	Init.TxEventsNbr = p_config.txEventFifoSize;
+	Init.TxBuffersNbr = p_config.numTxBuffers;
+	Init.TxFifoQueueElmtsNbr = p_config.txFifoSize;
+	Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
+	Init.TxElmtSize = dataSize;
+	// setup the hardware
+	__HAL_RCC_FDCAN_CLK_ENABLE();
+  	pinmap_pinout(PB_8, PinMap_CAN_RD);
+  	pinmap_pinout(PB_9, PinMap_CAN_TD);
 
-#if 0
-	// Set up pointers to the individual parts of the buffer memory
-	memset(memStart, 0, p_config.GetMemorySize());						// clear out filters, transmit pending flags etc.
+	HAL_StatusTypeDef status = HAL_FDCAN_Init(dev.hw);
+	if (status != HAL_OK)
+	{
+		debugPrintf("FDCAN init failed %x\n", status);
+		return nullptr;
+	}
+	for(int i = 0; i < Init.StdFiltersNbr; i++)
+		dev.DisableShortFilterElement(i);
+	for(int i = 0; i < Init.ExtFiltersNbr; i++)
+		dev.DisableExtendedFilterElement(i);
+	status = HAL_FDCAN_ConfigGlobalFilter(dev.hw, FDCAN_REJECT, FDCAN_REJECT,
+                                               		FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
+	if (status != HAL_OK)
+	{
+		debugPrintf("Failed to set global filter %x\n", status);
+	}
+	HAL_FDCAN_ConfigRxFifoOverwrite(dev.hw, FDCAN_RX_FIFO0, FDCAN_RX_FIFO_BLOCKING);
+	HAL_FDCAN_ConfigRxFifoOverwrite(dev.hw, FDCAN_RX_FIFO1, FDCAN_RX_FIFO_BLOCKING);
+	HAL_FDCAN_ConfigFifoWatermark(dev.hw, FDCAN_CFG_RX_FIFO0, 0);
+	HAL_FDCAN_ConfigFifoWatermark(dev.hw, FDCAN_CFG_RX_FIFO1, 0);
+	HAL_FDCAN_ConfigFifoWatermark(dev.hw, FDCAN_CFG_TX_EVENT_FIFO, 0);
+	// For now set the timestamp prescaler to match other values, might consider changing this to get
+	// a higher resolution at some point.
+	status = HAL_FDCAN_ConfigTimestampCounter(dev.hw, FDCAN_TIMESTAMP_PRESC_1);
+	if (status != HAL_OK)
+	{
+		debugPrintf("FDCAN failed to set t/s prescaler %x\n", status);
+	}
+	// and enable it using the internal counter
+	status = HAL_FDCAN_EnableTimestampCounter(dev.hw, FDCAN_TIMESTAMP_INTERNAL);
+	if (status != HAL_OK)
+	{
+		debugPrintf("FDCAN failed to enable t/s counter %x\n", status);
+	}
+	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
+	// all interrupts go via int line 0
+	status = HAL_FDCAN_ConfigInterruptLines(dev.hw, FDCAN_IT_TX_COMPLETE|FDCAN_IT_RX_BUFFER_NEW_MESSAGE|FDCAN_IT_TX_EVT_FIFO_NEW_DATA|
+													FDCAN_IT_RX_FIFO0_NEW_MESSAGE|FDCAN_IT_RX_FIFO1_NEW_MESSAGE|FDCAN_IT_BUS_OFF, FDCAN_INTERRUPT_LINE0);
+	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
+	if (status != HAL_OK)
+	{
+		debugPrintf("FDCAN failed to configure interrupts %x\n", status);
+	}
+	// Enable the tx complete notification, buffer selection happens later
+	status = HAL_FDCAN_ActivateNotification(dev.hw, FDCAN_IT_TX_COMPLETE, 0);
+	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
+	if (status != HAL_OK)
+	{
+		debugPrintf("FDCAN failed to enable tx complete interrupt %x\n", status);
+	}
+	status = HAL_FDCAN_ActivateNotification(dev.hw, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
+	status = HAL_FDCAN_ActivateNotification(dev.hw, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0);
+	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
+	status = HAL_FDCAN_ActivateNotification(dev.hw, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
+	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
+	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][0]);
+  	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][1]);
 
-#if SAME70
-	// Set upper 16 bits of DMA addresses. The CAN memory must not cross a 64kb boundary.
-	if (dev.whichPort == 0)
-	{
-		MATRIX->CCFG_CAN0 = (MATRIX->CCFG_CAN0 & 0x0000FFFF) | (reinterpret_cast<uint32_t>(memStart) & 0xFFFF0000);
-	}
-	else
-	{
-		MATRIX->CCFG_SYSIO = (MATRIX->CCFG_SYSIO & 0x0000FFFF) | (reinterpret_cast<uint32_t>(memStart) & 0xFFFF0000);
-	}
-#endif
-
-	dev.rxStdFilter = (StandardMessageFilterElement*)memStart;
-	memStart += p_config.GetStandardFiltersMemSize();
-	dev.rxExtFilter = (ExtendedMessageFilterElement*)memStart;
-	memStart += p_config.GetExtendedFiltersMemSize();
-	dev.rx0Fifo = memStart;
-	memStart += p_config.rxFifo0Size * p_config.GetRxBufferSize();
-	dev.rx1Fifo = memStart;
-	memStart += p_config.rxFifo1Size * p_config.GetRxBufferSize();
-	dev.rxBuffers = memStart;
-	memStart += p_config.numRxBuffers * p_config.GetRxBufferSize();
-	dev.txEventFifo = (TxEvent*)memStart;
-	memStart += p_config.GetTxEventFifoMemSize();
-	dev.txBuffers = memStart;
-#endif
-	dev.useFDMode = (p_config.dataSize > 8);							// assume we want standard CAN if the max data size is 8
-	dev.messagesQueuedForSending = dev.messagesReceived = dev.messagesLost = dev.busOffCount = 0;
-#ifdef RTOS
-	for (volatile TaskHandle& h : dev.txTaskWaiting) { h = nullptr; }
-	for (volatile TaskHandle& h : dev.rxTaskWaiting) { h = nullptr; }
-	dev.rxBuffersWaiting = 0;
-#endif
-
-	dev.UpdateLocalCanTiming(timing);									// sets NBTP and DBTP
-#if 0
-	// Enable the clock
-#if SAME5x || SAMC21
-	if (p_whichPort == 0)
-	{
-		MCLK->AHBMASK.reg |= MCLK_AHBMASK_CAN0;
-		hri_gclk_write_PCHCTRL_reg(GCLK, CAN0_GCLK_ID, GclkNum48MHz | GCLK_PCHCTRL_CHEN);
-	}
-	else
-	{
-		MCLK->AHBMASK.reg |= MCLK_AHBMASK_CAN1;
-		hri_gclk_write_PCHCTRL_reg(GCLK, CAN1_GCLK_ID, GclkNum48MHz | GCLK_PCHCTRL_CHEN);
-	}
-#elif SAME70
-	pmc_disable_pck(PMC_PCK_5);
-	pmc_switch_pck_to_upllck(PMC_PCK_5, PMC_PCK_PRES(9));				// run PCLK5 at 48MHz
-	pmc_enable_pck(PMC_PCK_5);
-
-	if (p_whichPort == 0)
-	{
-		pmc_enable_periph_clk(ID_MCAN0);
-	}
-	else
-	{
-		pmc_enable_periph_clk(ID_MCAN1);
-	}
-#endif
-
-	dev.DoHardwareInit();
-#endif
-	return nullptr;
+	return &dev;
 }
 
 // get bits 2..15 of an address
@@ -316,177 +335,76 @@ static inline uint32_t Bits2to15(const volatile void *addr) noexcept
 // Do the low level hardware initialisation
 void CanDevice::DoHardwareInit() noexcept
 {
-#if 0
-	Disable();
 
-	if (useFDMode)
-	{
-		hw->REG(CCCR) |= CAN_(CCCR_FDOE) | CAN_(CCCR_BRSE);
-	}
-	else
-	{
-		hw->REG(CCCR) &= ~(CAN_(CCCR_FDOE) | CAN_(CCCR_BRSE));
-	}
-
-	hw->REG(CCCR) |= CAN_(CCCR_TXP);										// enable transmit pause
-
-#if SAME5x || SAMC21
-	hw->MRCFG.reg = CAN_MRCFG_QOS_MEDIUM;
-#endif
-	hw->REG(TDCR) = 0;														// use just the measured transceiver delay
-	hw->REG(NBTP) = nbtp;
-	hw->REG(DBTP) = dbtp;
-	hw->REG(RXF0C) = 														// configure receive FIFO 0
-		  (0 << CAN_(RXF0C_F0OM_Pos))										// blocking mode not overwrite mode
-		| CAN_(RXF0C_F0WM)(0)												// no watermark interrupt
-		| CAN_(RXF0C_F0S)(config->rxFifo0Size)								// number of entries
-		| Bits2to15(rx0Fifo);												// address - don't use CAN_(RXF0C_F0SA) here, it is defined strangely on the SAME70
-	hw->REG(RXF1C) = 														// configure receive FIFO 1
-		  (0 << CAN_(RXF1C_F1OM_Pos))										// blocking mode not overwrite mode
-		| CAN_(RXF1C_F1WM)(0)												// no watermark interrupt
-		| CAN_(RXF1C_F1S)(config->rxFifo1Size)								// number of entries
-		| Bits2to15(rx1Fifo);												// address - don't use CAN_(RXF0C_F1SA) here, it is defined strangely on the SAME70
-	hw->REG(RXBC) = Bits2to15(rxBuffers);									// dedicated buffers start address - don't use CAN_(RXBC_RBSA) here, it is defined strangely on the SAME70
-
-	const uint32_t dataSizeCode = (config->dataSize <= 24) ? (config->dataSize >> 2) - 2 : (config->dataSize >> 4) + 3;
-	hw->REG(RXESC) = CAN_(RXESC_F0DS)(dataSizeCode)							// receive fifo 0 data size
-					| CAN_(RXESC_F1DS)(dataSizeCode)						// receive fifo 1 data size
-					| CAN_(RXESC_RBDS)(dataSizeCode);						// receive buffer data size
-	hw->REG(TXESC) = CAN_(TXESC_TBDS)(dataSizeCode);						// transmit buffer data size
-	hw->REG(TXBC) = 														// configure transmit buffers
-		  (0 << CAN_(TXBC_TFQM_Pos))										// FIFO not queue
-		| CAN_(TXBC_TFQS)(config->txFifoSize)								// number of Tx fifo entries
-		| CAN_(TXBC_NDTB)(config->numTxBuffers)								// number of dedicated Tx buffers
-		| Bits2to15(txBuffers);												// address - don't use CAN_(TXBC_TBSA) here, it is defined strangely on the SAME70
-	hw->REG(TXEFC) =  														// configure Tx event fifo
-		  CAN_(TXEFC_EFWM)(0)												// no watermark interrupt
-		| CAN_(TXEFC_EFS)(config->txEventFifoSize)							// event FIFO size
-		| Bits2to15(txEventFifo);											// address - don't use CAN_(TXEFC_EFSA) here, it is defined strangely on the SAME70
-	hw->REG(GFC) =
-#if SAME70
-		  MCAN_GFC_ANFE(2)													// reject non-matching frames extended
-		| MCAN_GFC_ANFS(2)													// reject non-matching frames standard
-#else
-		  CAN_(GFC_ANFS_REJECT)
-		| CAN_(GFC_ANFE_REJECT)
-#endif
-		| CAN_(GFC_RRFS)
-		| CAN_(GFC_RRFE);
-	hw->REG(SIDFC) = CAN_(SIDFC_LSS)(config->numShortFilterElements)		// number of short filter elements
-					| Bits2to15(rxStdFilter);								// short filter start address - don't use CAN_(SIDFC_FLSSA) here, it is defined strangely on the SAME70
-	hw->REG(XIDFC) = CAN_(XIDFC_LSE)(config->numExtendedFilterElements)		// number of extended filter elements
-					| Bits2to15(rxExtFilter);								// extended filter start address - don't use CAN_(SIDFC_FLESA) here, it is defined strangely on the SAME70
-	hw->REG(XIDAM) = 0x1FFFFFFF;
-
-	hw->REG(IR) = 0xFFFFFFFF;												// clear all interrupt sources
-
-	// Set up the timestamp counter
-#if SAME70
-	// The datasheet says that when using CAN-FD, the external timestamp counter must be used, which is TC0. So TC0 must be the step clock lower 16 bits on SAME70 boards.
-	hw->MCAN_TSCC = MCAN_TSCC_TSS_EXT_TIMESTAMP;
-#else
-	hw->TSCC.reg = CAN_TSCC_TSS_INC | CAN_TSCC_TCP(0);						// run timestamp counter at CAN bit speed
-#endif
-
-#ifdef RTOS
-	const IRQn irqn = IRQnsByPort[whichPort];
-	NVIC_DisableIRQ(irqn);
-	NVIC_ClearPendingIRQ(irqn);
-
-	hw->REG(ILS) = 0;														// all interrupt sources assigned to interrupt line 0 for now
-	statusMask =         CAN_(IR_RF0N)  | CAN_(IR_RF1N)  | CAN_(IR_DRX)  | CAN_(IR_TC)  | CAN_(IR_BO)  | CAN_(IR_RF0L)  | CAN_(IR_RF1L);
-	uint32_t intEnable = CAN_(IE_RF0NE) | CAN_(IE_RF1NE) | CAN_(IE_DRXE) | CAN_(IE_TCE) | CAN_(IE_BOE) | CAN_(IE_RF0LE) | CAN_(IE_RF1LE);
-	if (txCallback != nullptr)
-	{
-		intEnable |= CAN_(IE_TEFNE);
-		statusMask |= CAN_(IR_TEFN);
-	}
-	hw->REG(IE) = intEnable;												// enable the interrupt sources that we want
-	hw->REG(ILE) = CAN_(ILE_EINT0);											// enable interrupt line 0
-
-	NVIC_EnableIRQ(irqn);
-#else
-	hw->REG(IE) = 0;														// disable all interrupt sources
-	hw->REG(ILE) = 0;
-#endif
-	// Leave the device disabled. Client must call Enable() to enable it after setting up the receive filters.
-#endif
 }
 
 // Set the extended ID mask. May only be used while the interface is disabled.
 void CanDevice::SetExtendedIdMask(uint32_t mask) noexcept
 {
-#if 0
-	hw->REG(XIDAM) = mask;
-#endif
+	debugPrintf("Set extended id mask %x\n", mask);
+	HAL_StatusTypeDef status = HAL_FDCAN_ConfigExtendedIdMask(hw, mask);
+	if (status != HAL_OK)
+		debugPrintf("Failed to set extended ID mask %x\n", status);
 }
 
 // Stop and free this device and the CAN port it uses
 void CanDevice::DeInit() noexcept
 {
-#if 0
 	if (hw != nullptr)
 	{
 		Disable();
-		NVIC_DisableIRQ(IRQnsByPort[whichPort]);
+  		HAL_NVIC_DisableIRQ(IRQnsByPort[whichPort][0]);
+  		HAL_NVIC_DisableIRQ(IRQnsByPort[whichPort][1]);
+		HAL_FDCAN_DeInit(hw);
+		__HAL_RCC_FDCAN_FORCE_RESET();
+		__HAL_RCC_FDCAN_RELEASE_RESET();
 		devicesByPort[whichPort] = nullptr;									// free the port
 		hw = nullptr;														// free the device
 	}
-#endif
 }
 
 // Enable this device
 void CanDevice::Enable() noexcept
 {
-#if 0
-	hw->REG(CCCR) &= ~CAN_(CCCR_INIT);
-	while ((hw->REG(CCCR) & CAN_(CCCR_INIT)) != 0) { }
-#endif
+	if (hw != nullptr)
+	{
+		HAL_StatusTypeDef status = HAL_FDCAN_Start(hw);
+		if (status != HAL_OK)
+			debugPrintf("Failed to enable can device %x\n", status);
+	}
+	else
+		debugPrintf("hw is null\n");
+	debugPrintf("Int enabled %x\n", hw->Instance->IE);
+	delay(1000);
 }
 
 // Disable this device
 void CanDevice::Disable() noexcept
 {
-#if 0
-	hw->REG(CCCR) |= CAN_(CCCR_INIT);
-	while ((hw->REG(CCCR) & CAN_(CCCR_INIT)) == 0) { }
-	hw->REG(CCCR) |= CAN_(CCCR_CCE);
-#endif
+	if (hw != nullptr)
+		HAL_FDCAN_Stop(hw);
 }
 
 // Drain the Tx event fifo. Can use this instead of supplying a Tx event callback in Init() if we don't expect many events.
 void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 {
-#if 0
-	uint32_t txefs;
-	while (((txefs = hw->REG(TXEFS)) & CAN_(TXEFS_EFFL_Msk)) != 0)
+	FDCAN_TxEventFifoTypeDef elem;
+	while(HAL_FDCAN_GetTxEvent(hw, &elem) == HAL_OK)
 	{
-		const uint32_t index = (txefs & CAN_(TXEFS_EFGI_Msk)) >> CAN_(TXEFS_EFGI_Pos);
-		const volatile TxEvent* const elem = GetTxEvent(index);
-		if (elem->R1.bit.ET == 1)
-		{
-			CanId id;
-			id.SetReceivedId(elem->R0.bit.ID);
-			p_txCallback(elem->R1.bit.MM, id, elem->R1.bit.TXTS);
-		}
-		hw->REG(TXEFA) = index;
-		__DSB();					// probably not needed, but just in case
+		CanId id;
+		id.SetReceivedId(elem.Identifier);
+		p_txCallback(elem.MessageMarker, id, elem.TxTimestamp);
 	}
-#endif
 }
 
 uint32_t CanDevice::GetErrorRegister() const noexcept
 {
-#if 0
-	return hw->REG(ECR);
-#endif
 	return 0;
 }
 
 // Return true if space is available to send using this buffer or FIFO
 bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) noexcept
 {
-#if 0
 #ifndef RTOS
 	const uint32_t start = millis();
 #endif
@@ -495,26 +413,26 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 	if (whichBuffer == TxBufferNumber::fifo)
 	{
 #ifdef RTOS
-		bufferFree = (READBITS(hw, TXFQS, TFQF) == 0);
+		bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(hw) != 0;
 		if (!bufferFree && timeout != 0)
 		{
-			const unsigned int bufferIndex = READBITS(hw, TXFQS, TFQPI);
+			// Get next buffer to be removed
+			const unsigned int bufferIndex = ((hw->Instance->TXFQS & FDCAN_TXFQS_TFGI) >> FDCAN_TXFQS_TFGI_Pos);
 			const uint32_t trigMask = (uint32_t)1 << bufferIndex;
-
 			txTaskWaiting[(unsigned int)whichBuffer] = TaskBase::GetCallerTaskHandle();
 
 			{
 				AtomicCriticalSectionLocker lock;
-				hw->REG(TXBTIE) |= trigMask;
+      			SET_BIT(hw->Instance->TXBTIE, trigMask);
 			}
 
-			bufferFree = (READBITS(hw, TXFQS, TFQF) == 0);
+			bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(hw) != 0;
 			// In the following, when we call TaskBase::Take() the Move task sometimes gets woken up early by by the DDA ring
 			// Therefore we loop calling Take() until either the call times out or the buffer is free
 			while (!bufferFree)
 			{
 				const bool timedOut = !TaskBase::Take(timeout);
-				bufferFree = (READBITS(hw, TXFQS, TFQF) == 0);
+				bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(hw) != 0;
 				if (timedOut)
 				{
 					break;
@@ -524,13 +442,13 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 
 			{
 				AtomicCriticalSectionLocker lock;
-				hw->REG(TXBTIE) &= ~trigMask;
+      			CLEAR_BIT(hw->Instance->TXBTIE, trigMask);
 			}
 		}
 #else
 		do
 		{
-			bufferFree = READBITS(hw, TXFQS, TFQF) == 0;
+			bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(hw) != 0;
 		} while (!bufferFree && millis() - start < timeout);
 #endif
 	}
@@ -539,43 +457,45 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 		const unsigned int bufferIndex = (unsigned int)whichBuffer - (unsigned int)TxBufferNumber::buffer0;
 		const uint32_t trigMask = (uint32_t)1 << bufferIndex;
 #ifdef RTOS
-		bufferFree = (hw->REG(TXBRP) & trigMask) == 0;
+		bufferFree = HAL_FDCAN_IsTxBufferMessagePending(hw, trigMask) == 0;
 		if (!bufferFree && timeout != 0)
 		{
+			debugPrintf("Wait space available buffer %d timeout %d\n", whichBuffer, timeout);
 			txTaskWaiting[(unsigned int)whichBuffer] = TaskBase::GetCallerTaskHandle();
 			{
 				AtomicCriticalSectionLocker lock;
-				hw->REG(TXBTIE) |= trigMask;
+      			SET_BIT(hw->Instance->TXBTIE, trigMask);
 			}
-			bufferFree = (hw->REG(TXBRP) & trigMask) == 0;
+			bufferFree = HAL_FDCAN_IsTxBufferMessagePending(hw, trigMask) == 0;
 
 			// In the following, when we call TaskBase::Take() assume that the task may get woken up early
 			// Therefore we loop calling Take() until either the call times out or the buffer is free
 			while (!bufferFree)
 			{
 				const bool timedOut = !TaskBase::Take(timeout);
-				bufferFree = (hw->REG(TXBRP) & trigMask) == 0;
+				bufferFree = HAL_FDCAN_IsTxBufferMessagePending(hw, trigMask) == 0;
 				if (timedOut)
 				{
+					debugPrintf("Space available timeout\n");
 					break;
 				}
 			}
 			txTaskWaiting[(unsigned int)whichBuffer] = nullptr;
 			{
 				AtomicCriticalSectionLocker lock;
-				hw->REG(TXBTIE) &= ~trigMask;
+      			CLEAR_BIT(hw->Instance->TXBTIE, trigMask);
 			}
 		}
+		//else
+			//debugPrintf("found buffer free\n");
 #else
 		do
 		{
-			bufferFree = (hw->REG(TXBRP) & trigMask) == 0;
+			bufferFree = HAL_FDCAN_IsTxBufferMessagePending(hw, bufferIndex) == 0;
 		} while (!bufferFree && millis() - start < timeout);
 #endif
 	}
 	return bufferFree;
-#endif
-	return 0;
 }
 
 #if 0	// not currently used
@@ -594,9 +514,9 @@ unsigned int CanDevice::NumTxMessagesPending(TxBufferNumber whichBuffer) noexcep
 
 #endif
 
+#if 0
 void CanDevice::CopyMessageForTransmit(CanMessageBuffer *buffer, volatile TxBufferHeader *f) noexcept
 {
-#if 0
 	if (buffer->extId)
 	{
 		f->T0.val = buffer->id.GetWholeId();
@@ -667,47 +587,78 @@ void CanDevice::CopyMessageForTransmit(CanMessageBuffer *buffer, volatile TxBuff
 	f->T1.bit.BRS = buffer->useBrs;
 
 	++messagesQueuedForSending;
-#endif
 }
+#endif
+
+static const uint8_t DLCtoBytes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64};
+static const uint8_t BytesToDLC[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 10, 10, 
+									 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13, 
+                                     14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+									 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15};
 
 // Queue a message for sending via a buffer or FIFO. If the buffer isn't free, cancel the previous message (or oldest message in the fifo) and send it anyway.
 // On return the caller must free or re-use the buffer.
 uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
-#if 0
 	uint32_t cancelledId = 0;
+	//debugPrintf("Send message buffer %d num Tx %d\n", whichBuffer, config->numTxBuffers);
 	if ((uint32_t)whichBuffer < (uint32_t)TxBufferNumber::buffer0 + config->numTxBuffers)
 	{
 		const bool bufferFree = IsSpaceAvailable(whichBuffer, timeout);
 		const uint32_t bufferIndex = (whichBuffer == TxBufferNumber::fifo)
-										? READBITS(hw, TXFQS, TFQPI)
+										? ((hw->Instance->TXFQS & FDCAN_TXFQS_TFGI) >> FDCAN_TXFQS_TFGI_Pos)
 											: (uint32_t)whichBuffer - (uint32_t)TxBufferNumber::buffer0;
 		const uint32_t trigMask = (uint32_t)1 << bufferIndex;
 		if (!bufferFree)
 		{
+			//debugPrintf("about to cancel message\n");
 			// Retrieve details of the packet we are about to cancel
-			cancelledId = GetTxBuffer(bufferIndex)->T0.bit.ID;
-			// Cancel transmission of the oldest packet
-			hw->REG(TXBCR) = trigMask;
+			// FIXME can we get the ID ?
+			cancelledId = 1;
+			HAL_FDCAN_AbortTxRequest(hw, trigMask);		
 			do
 			{
 				delay(1);
 			}
-			while ((hw->REG(TXBRP) & trigMask) != 0 || (whichBuffer == TxBufferNumber::fifo && READBITS(hw, TXFQS, TFQF)));
+			while (HAL_FDCAN_IsTxBufferMessagePending(hw, trigMask) != 0 || (whichBuffer == TxBufferNumber::fifo && HAL_FDCAN_GetTxFifoFreeLevel(hw) == 0));
+			//debugPrintf("Cancel complete\n");
+		}
+		FDCAN_TxHeaderTypeDef hdr;
+		hdr.Identifier = buffer->id.GetWholeId();
+		hdr.IdType = (buffer->extId ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID);
+		hdr.TxFrameType = (buffer->remote ? FDCAN_REMOTE_FRAME : FDCAN_DATA_FRAME);
+		hdr.DataLength = BytesToDLC[buffer->dataLength] << 16;
+		hdr.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+		hdr.BitRateSwitch = (buffer->useBrs ? FDCAN_BRS_ON : FDCAN_BRS_OFF);
+		hdr.FDFormat = (buffer->fdMode ? FDCAN_FD_CAN : FDCAN_CLASSIC_CAN);
+		hdr.TxEventFifoControl = (buffer->reportInFifo ? FDCAN_STORE_TX_EVENTS : FDCAN_NO_TX_EVENTS);
+		hdr.MessageMarker = buffer->marker;
+		HAL_StatusTypeDef status;
+		if (whichBuffer == TxBufferNumber::fifo)
+		{
+			status = HAL_FDCAN_AddMessageToTxFifoQ(hw, &hdr, buffer->msg.raw);
+			HAL_FDCAN_EnableTxBufferRequest(hw, HAL_FDCAN_GetLatestTxFifoQRequestBuffer(hw));
+		}
+		else
+		{
+			status = HAL_FDCAN_AddMessageToTxBuffer(hw, &hdr, buffer->msg.raw, trigMask);
+			HAL_FDCAN_EnableTxBufferRequest(hw, trigMask);
 		}
 
-		CopyMessageForTransmit(buffer, GetTxBuffer(bufferIndex));
+		if (status != HAL_OK)
+		{
+			debugPrintf("Failed to send CAN message %x %x\n", status, hw->ErrorCode);
+		}
+		else
+			++messagesQueuedForSending;
 		__DSB();								// this is needed on the SAME70, otherwise incorrect data sometimes gets transmitted
-		hw->REG(TXBAR) = trigMask;
 	}
 	return cancelledId;
-#endif
-	return 0;
 }
 
-void CanDevice::CopyReceivedMessage(CanMessageBuffer *null buffer, const volatile RxBufferHeader *f) noexcept
-{
 #if 0
+void CanDevice::CopyReceivedMessage(CanMessageBuffer *buffer, const volatile RxBufferHeader *f) noexcept
+{
 	// The CAN has written the message directly to memory, so we must invalidate the cache before we read it
 	Cache::InvalidateAfterDMAReceive(f, sizeof(RxBufferHeader) + 64);						// flush the header and up to 64 bytes of data
 
@@ -773,24 +724,34 @@ void CanDevice::CopyReceivedMessage(CanMessageBuffer *null buffer, const volatil
   }
 
 	++messagesReceived;
+}
 #endif
+
+void CanDevice::CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr) noexcept
+{
+	buffer->extId = (hdr->IdType == FDCAN_EXTENDED_ID ? 1 : 0);
+	buffer->id.SetReceivedId(hdr->Identifier);
+	buffer->remote = (hdr->RxFrameType == FDCAN_REMOTE_FRAME ? 1 : 0);
+	buffer->timeStamp = hdr->RxTimestamp;
+	buffer->dataLength = DLCtoBytes[hdr->DataLength >> 16];
+	++messagesReceived;
 }
 
+
 // Receive a message in a buffer or fifo, with timeout. Returns true if successful, false if no message available even after the timeout period.
-bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *null buffer) noexcept
+bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
-#if 0
 #ifndef RTOS
 	const uint32_t start = millis();
 #endif
-
+	FDCAN_RxHeaderTypeDef hdr;
 	switch (whichBuffer)
 	{
 	case RxBufferNumber::fifo0:
 		{
 			// Check for a received message and wait if necessary
 #ifdef RTOS
-			if (READBITS(hw, RXF0S, F0FL) == 0)
+			if (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) == 0)
 			{
 				if (timeout == 0)
 				{
@@ -799,15 +760,16 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				TaskBase::ClearNotifyCount();
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
-				const bool success = (READBITS(hw, RXF0S, F0FL) != 0) || (TaskBase::Take(timeout), READBITS(hw, RXF0S, F0FL) != 0);
+				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) != 0);
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
 				{
+					debugPrintf("Fifo 0 timeout\n");
 					return false;
 				}
 			}
 #else
-			while (READBITS(hw, RXF0S, F0FL) == 0)
+			while (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) == 0)
 			{
 				if (millis() - start >= timeout)
 				{
@@ -815,12 +777,13 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #endif
-			// Process the received message into the buffer
-			const uint32_t getIndex = READBITS(hw, RXF0S, F0GI);
-			CopyReceivedMessage(buffer, GetRxFifo0Buffer(getIndex));
-
-			// Tell the hardware that we have taken the message
-			WRITEBITS(hw, RXF0A, F0AI, getIndex);
+			//debugPrintf("FIFO0 attempt read\n");
+			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(hw, FDCAN_RX_FIFO0, &hdr, buffer->msg.raw);
+			if (status != HAL_OK)
+			{
+				debugPrintf("Failed to read fifo0 %x\n", status);
+			}
+			CopyHeader(buffer, &hdr);
 		}
 		return true;
 
@@ -828,16 +791,17 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 		// Check for a received message and wait if necessary
 		{
 #ifdef RTOS
-			if (READBITS(hw, RXF1S, F1FL) == 0)
+			if (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) == 0)
 			{
 				if (timeout == 0)
 				{
+					debugPrintf("Fifo 1 timeout\n");
 					return false;
 				}
 				TaskBase::ClearNotifyCount();
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
-				const bool success = (READBITS(hw, RXF1S, F1FL) != 0) || (TaskBase::Take(timeout), READBITS(hw, RXF1S, F1FL) != 0);
+				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) != 0);
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
 				{
@@ -845,7 +809,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #else
-			while (READBITS(hw, RXF1S, F1FL) == 0)
+			while (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) == 0)
 			{
 				if (millis() - start >= timeout)
 				{
@@ -853,12 +817,13 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #endif
-			// Process the received message into the buffer
-			const uint32_t getIndex = READBITS(hw, RXF1S, F1GI);
-			CopyReceivedMessage(buffer, GetRxFifo1Buffer(getIndex));
-
-			// Tell the hardware that we have taken the message
-			WRITEBITS(hw, RXF1A, F1AI, getIndex);
+			debugPrintf("FIFO1 attempt read\n");
+			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(hw, FDCAN_RX_FIFO1, &hdr, buffer->msg.raw);
+			if (status != HAL_OK)
+			{
+				debugPrintf("Failed to read fifo1 %x\n", status);
+			}
+			CopyHeader(buffer, &hdr);
 		}
 		return true;
 
@@ -870,17 +835,18 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			const uint32_t bufferNumber = (unsigned int)whichBuffer - (unsigned int)RxBufferNumber::buffer0;
 			const uint32_t ndatMask = (uint32_t)1 << bufferNumber;
 #ifdef RTOS
-			if ((hw->REG(NDAT1) & ndatMask) == 0)
+			if (HAL_FDCAN_IsRxBufferMessageAvailable(hw, bufferNumber) == 0)
 			{
 				if (timeout == 0)
 				{
+					debugPrintf("Buffer %d timeout\n", bufferNumber);
 					return false;
 				}
 				TaskBase::ClearNotifyCount();
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
 				rxBuffersWaiting |= ndatMask;
-				const bool success = (hw->REG(NDAT1) & ndatMask) != 0 || (TaskBase::Take(timeout), (hw->REG(NDAT1) & ndatMask) != 0);
+				const bool success = (HAL_FDCAN_IsRxBufferMessageAvailable(hw, bufferNumber) != 0 || (TaskBase::Take(timeout), HAL_FDCAN_IsRxBufferMessageAvailable(hw, bufferNumber) != 0));
 				rxBuffersWaiting &= ~ndatMask;
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
@@ -889,7 +855,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #else
-			while ((hw->REG(NDAT1) & ndatMask) == 0)
+			while (HAL_FDCAN_IsRxBufferMessageAvailable(hw, bufferNumber) == 0)
 			{
 				if (millis() - start >= timeout)
 				{
@@ -897,167 +863,216 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #endif
-			// Process the received message into the buffer
-			CopyReceivedMessage(buffer, GetRxBuffer(bufferNumber));
-
-			// Tell the hardware that we have taken the message
-			hw->REG(NDAT1) = ndatMask;
+			debugPrintf("Attempt to read from buffer %d\n", bufferNumber);
+			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(hw, bufferNumber, &hdr, buffer->msg.raw);
+			if (status != HAL_OK)
+			{
+				debugPrintf("Failed to read buffer %x\n", status);
+			}
+			CopyHeader(buffer, &hdr);
+			//hw->Instance->NDAT1 = ndatMask;
 			return true;
 		}
 		return false;
 	}
-#endif
 	delay(100);
 	return false;
 }
 
 bool CanDevice::IsMessageAvailable(RxBufferNumber whichBuffer) noexcept
 {
-#if 0
 	switch (whichBuffer)
 	{
 	case RxBufferNumber::fifo0:
-		return READBITS(hw, RXF0S, F0FL) != 0;
+		//return HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) != 0;
+		if (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) != 0)
+		{
+			debugPrintf("Data in fifo 0\n");
+			return true;
+		}
+		return false;
 	case RxBufferNumber::fifo1:
-		return READBITS(hw, RXF1S, F1FL) != 0;
+		//return HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) != 0;
+		if (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) != 0)
+		{
+			debugPrintf("Data in fifo 1\n");
+			return true;
+		}
+		return false;
+
 	default:
 		// We assume that not more than 32 dedicated receive buffers have been configured, so we only need to look at the NDAT1 register
-		return (hw->REG(NDAT1) & ((uint32_t)1 << ((uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0))) != 0;
+		//return HAL_FDCAN_IsRxBufferMessageAvailable(hw, (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0) != 0;
+		if (HAL_FDCAN_IsRxBufferMessageAvailable(hw, (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0) != 0)
+		{
+			debugPrintf("Data in buffer %d\n", (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0);
+			return true;
+		}
+		return false;
 	}
-#endif
 	return false;
 }
 
 // Disable a short ID filter element
 void CanDevice::DisableShortFilterElement(unsigned int index) noexcept
 {
-#if 0
 	if (index < config->numShortFilterElements)
 	{
-		rxStdFilter[index].S0.val = 0;
+		debugPrintf("Disable short filter\n");
+		FDCAN_FilterTypeDef efd;
+		efd.IdType = FDCAN_STANDARD_ID;
+		efd.FilterIndex = index;
+		efd.FilterType = FDCAN_FILTER_MASK;
+		efd.FilterID1 = 0;
+		efd.IsCalibrationMsg = 0;
+		efd.FilterConfig = FDCAN_FILTER_DISABLE;
+		efd.FilterID2 = 0;
+		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(hw, &efd);
+		if (status != HAL_OK)
+		{
+			debugPrintf("Failed to disable extended filter %x\n", status);
+		}
 	}
-#endif
 }
 
 // Set a short ID field filter element. To disable the filter element, use a zero mask parameter.
 // If whichBuffer is a buffer number not a fifo number, the mask field is ignored except that a zero mask disables the filter element; so only the XIDAM mask filters the ID.
 void CanDevice::SetShortFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
 {
-#if 0
 	if (index < config->numShortFilterElements)
 	{
-		StandardMessageFilterElement::S0Type s0;
-		s0.val = 0;										// disable filter, clear reserved fields
-		s0.bit.SFID1 = id;
-		s0.bit.SFT = 0x02;							// classic filter
+		debugPrintf("Set short filter\n");
+		FDCAN_FilterTypeDef efd;
+		efd.IdType = FDCAN_STANDARD_ID;
+		efd.FilterIndex = index;
+		efd.FilterType = FDCAN_FILTER_MASK;
+		efd.FilterID1 = id;
+		efd.IsCalibrationMsg = 0;
 		switch (whichBuffer)
 		{
 		case RxBufferNumber::fifo0:
-			s0.bit.SFEC = 0x01;						// store in FIFO 0
-			s0.bit.SFID2 = mask;
+			efd.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+			efd.FilterID2 = mask;
 			break;
 		case RxBufferNumber::fifo1:
-			s0.bit.SFEC = 0x02;						// store in FIFO 1
-			s0.bit.SFID2 = mask;
+			efd.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
+			efd.FilterID2 = mask;
 			break;
 		default:
 			if ((uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0 < config->numRxBuffers)
 			{
-				s0.bit.SFEC = 0x07;					// store in buffer
-				s0.bit.SFID2 = (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0;
+				efd.FilterConfig = FDCAN_FILTER_TO_RXBUFFER;
+				efd.FilterID2 = (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0;
 			}
 			else
 			{
-				s0.bit.SFEC = 0x00;					// discard message
-				s0.bit.SFID2 = mask;
+				efd.FilterConfig = FDCAN_FILTER_DISABLE;
+				efd.FilterID2 = mask;
 			}
 			break;
 		}
-		rxStdFilter[index].S0.val = s0.val;
+		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(hw, &efd);
+		if (status != HAL_OK)
+		{
+			debugPrintf("Failed to configure standard filter %x\n", status);
+		}
 	}
-#endif
 }
 
 // Disable an extended ID filter element
 void CanDevice::DisableExtendedFilterElement(unsigned int index) noexcept
 {
-#if 0
 	if (index < config->numExtendedFilterElements)
 	{
-		rxExtFilter[index].F0.val = 0;									// disable filter
+		debugPrintf("disable filter %d\n", index);
+		FDCAN_FilterTypeDef efd;
+		efd.IdType = FDCAN_EXTENDED_ID;
+		efd.FilterIndex = index;
+		efd.FilterType = FDCAN_FILTER_MASK;
+		efd.FilterID1 = 0;
+		efd.IsCalibrationMsg = 0;
+		efd.FilterConfig = FDCAN_FILTER_DISABLE;
+		efd.FilterID2 = 0;
+		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(hw, &efd);
+		if (status != HAL_OK)
+		{
+			debugPrintf("Failed to disable extended filter %x\n", status);
+		}
+
 	}
-#endif
 }
 
 // Set an extended ID field filter element. To disable the filter element, use a zero mask parameter.
 // If whichBuffer is a buffer number not a fifo number, the mask field is ignored except that a zero mask disables the filter element; so only the XIDAM mask filters the ID.
 void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
 {
-#if 0
 	if (index < config->numExtendedFilterElements)
 	{
-		volatile ExtendedMessageFilterElement& efp = rxExtFilter[index];
-		efp.F0.val = 0;									// disable filter
-
-		ExtendedMessageFilterElement::F0Type f0;
-		ExtendedMessageFilterElement::F1Type f1;
-		f0.val = 0;									// clear all fields
-		f1.val = 0;									// clear all fields
-		f1.bit.EFT  = 0x02;							// classic filter
-		f0.bit.EFID1 = id;
+		debugPrintf("Add filter index %d buffer %d id %x mask %x\n", index, whichBuffer, id, mask);
+		FDCAN_FilterTypeDef efd;
+		efd.IdType = FDCAN_EXTENDED_ID;
+		efd.FilterIndex = index;
+		efd.FilterType = FDCAN_FILTER_MASK;
+		efd.FilterID1 = id;
+		efd.IsCalibrationMsg = 0;
 		switch (whichBuffer)
 		{
 		case RxBufferNumber::fifo0:
-			f0.bit.EFEC = 0x01;						// store in FIFO 0
-			f1.bit.EFID2 = mask;
+			efd.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+			efd.FilterID2 = mask;
 			break;
 		case RxBufferNumber::fifo1:
-			f0.bit.EFEC = 0x02;						// store in FIFO 1
-			f1.bit.EFID2 = mask;
+			efd.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;
+			efd.FilterID2 = mask;
 			break;
 		default:
 			if ((uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0 < config->numRxBuffers)
 			{
-				f0.bit.EFEC = 0x07;
-				f1.bit.EFID2 = (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0;
+				efd.FilterConfig = FDCAN_FILTER_TO_RXBUFFER;
+				efd.FilterID2 = (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0;
 			}
 			else
 			{
-				f0.bit.EFEC = 0x00;					// discard message
-				f1.bit.EFID2 = mask;
+				efd.FilterConfig = FDCAN_FILTER_DISABLE;
+				efd.FilterID2 = mask;
 			}
 			break;
 		}
-
-		efp.F1.val = f1.val;						// update second word first while the filter is disabled
-		efp.F0.val = f0.val;						// update first word and enable filter
+		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(hw, &efd);
+		if (status != HAL_OK)
+		{
+			debugPrintf("Failed to configure extended filter %x\n", status);
+		}
 	}
-#endif
 }
 
 void CanDevice::GetLocalCanTiming(CanTiming &timing) noexcept
 {
-#if 0
-	const uint32_t localNbtp = hw->REG(NBTP);
-	const uint32_t tseg1 = (localNbtp & CAN_(NBTP_NTSEG1_Msk)) >> CAN_(NBTP_NTSEG1_Pos);
-	const uint32_t tseg2 = (localNbtp & CAN_(NBTP_NTSEG2_Msk)) >> CAN_(NBTP_NTSEG2_Pos);
-	const uint32_t jw = (localNbtp & CAN_(NBTP_NSJW_Msk)) >> CAN_(NBTP_NSJW_Pos);
-	const uint32_t brp = (localNbtp & CAN_(NBTP_NBRP_Msk)) >> CAN_(NBTP_NBRP_Pos);
+
+	const uint32_t localNbtp = hw->Instance->NBTP;
+	const uint32_t tseg1 = (localNbtp & FDCAN_NBTP_NTSEG1_Msk) >> FDCAN_NBTP_NTSEG1_Pos;
+	const uint32_t tseg2 = (localNbtp & FDCAN_NBTP_NTSEG2_Msk) >> FDCAN_NBTP_NTSEG2_Pos;
+	const uint32_t jw = (localNbtp & FDCAN_NBTP_NSJW_Msk) >> FDCAN_NBTP_NSJW_Pos;
+	const uint32_t brp = (localNbtp & FDCAN_NBTP_NBRP_Msk) >> FDCAN_NBTP_NBRP_Pos;
 	timing.period = (tseg1 + tseg2 + 3) * (brp + 1);
 	timing.tseg1 = (tseg1 + 1) * (brp + 1);
 	timing.jumpWidth = (jw + 1) * (brp + 1);
-#endif
 }
 
 void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
 {
-#if 0
 	UpdateLocalCanTiming(timing);				// set up nbtp and dbtp variables
 	Disable();
-	hw->REG(NBTP) = nbtp;
-	hw->REG(DBTP) = dbtp;
+  	hw->Instance->NBTP = ((((uint32_t)hw->Init.NominalSyncJumpWidth - 1U) << FDCAN_NBTP_NSJW_Pos) |
+                            (((uint32_t)hw->Init.NominalTimeSeg1 - 1U) << FDCAN_NBTP_NTSEG1_Pos)    |
+                            (((uint32_t)hw->Init.NominalTimeSeg2 - 1U) << FDCAN_NBTP_NTSEG2_Pos)    |
+                            (((uint32_t)hw->Init.NominalPrescaler - 1U) << FDCAN_NBTP_NBRP_Pos));
+
+    hw->Instance->DBTP = ((((uint32_t)hw->Init.DataSyncJumpWidth - 1U) << FDCAN_DBTP_DSJW_Pos) |
+                              (((uint32_t)hw->Init.DataTimeSeg1 - 1U) << FDCAN_DBTP_DTSEG1_Pos)    |
+                              (((uint32_t)hw->Init.DataTimeSeg2 - 1U) << FDCAN_DBTP_DTSEG2_Pos)    |
+                              (((uint32_t)hw->Init.DataPrescaler - 1U) << FDCAN_DBTP_DBRP_Pos));
 	Enable();
-#endif
 }
 
 void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
@@ -1090,30 +1105,16 @@ debugPrintf("Can timing after period %d tseg1 %d tseg2 %d jump %d prescale %d\n"
 	FDCAN_InitTypeDef& Init = hw->Init;
 	Init.NominalPrescaler = prescaler; /* tq = NominalPrescaler x (1/fdcan_ker_ck) */
 	Init.NominalSyncJumpWidth = jumpWidth;
-  	Init.NominalTimeSeg1 = tseg1 - 1; /* NominalTimeSeg1 = Propagation_segment + Phase_segment_1 */
+  	Init.NominalTimeSeg1 = tseg1; /* NominalTimeSeg1 = Propagation_segment + Phase_segment_1 */
   	Init.NominalTimeSeg2 = tseg2;
 	Init.DataPrescaler = prescaler;
 	Init.DataSyncJumpWidth = jumpWidth;
-	Init.DataTimeSeg1 = tseg1 - 1; /* DataTimeSeg1 = Propagation_segment + Phase_segment_1 */
+	Init.DataTimeSeg1 = tseg1; /* DataTimeSeg1 = Propagation_segment + Phase_segment_1 */
 	Init.DataTimeSeg2 = tseg2;
-
-#if 0
-	nbtp = ((tseg1 - 1) << CAN_(NBTP_NTSEG1_Pos))
-		| ((tseg2 - 1) << CAN_(NBTP_NTSEG2_Pos))
-		| ((jumpWidth - 1) << CAN_(NBTP_NSJW_Pos))
-		| ((prescaler - 1) << CAN_(NBTP_NBRP_Pos));
-
-	// The fast data rate defaults to the same timing
-	dbtp = ((tseg1 - 1) << CAN_(DBTP_DTSEG1_Pos))
-		| ((tseg2 - 1) << CAN_(DBTP_DTSEG2_Pos))
-		| ((jumpWidth - 1) << CAN_(DBTP_DSJW_Pos))
-		| ((prescaler - 1) << CAN_(DBTP_DBRP_Pos));
-#endif
 }
 
 void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept
 {
-#if 0
 	AtomicCriticalSectionLocker lock;
 
 	rMessagesQueuedForSending = messagesQueuedForSending;
@@ -1121,7 +1122,6 @@ void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsign
 	rMessagesLost = messagesLost;
 	rBusOffCount = busOffCount;
 	messagesQueuedForSending = messagesReceived = messagesLost = busOffCount = 0;
-#endif
 }
 
 #ifdef RTOS
@@ -1221,19 +1221,105 @@ void CanDevice::Interrupt() noexcept
 }
 
 // Interrupt handlers
-
-void CAN0_Handler() noexcept
+extern "C" void FDCAN1_IT0_IRQHandler(void) noexcept
 {
-#if 0
-	devicesByPort[0]->Interrupt();
-#endif
+  HAL_FDCAN_IRQHandler(&CanPorts[1]);
 }
 
-void CAN1_Handler() noexcept
+extern "C" void FDCAN2_IT0_IRQHandler(void) noexcept
 {
-#if 0
-	devicesByPort[1]->Interrupt();
-#endif
+  HAL_FDCAN_IRQHandler(&CanPorts[0]);
+}
+
+extern "C" void FDCAN1_IT1_IRQHandler(void) noexcept
+{
+  HAL_FDCAN_IRQHandler(&CanPorts[1]);
+}
+
+extern "C" void FDCAN2_IT1_IRQHandler(void) noexcept
+{
+  HAL_FDCAN_IRQHandler(&CanPorts[0]);
+}
+
+extern "C" void FDCAN_CAL_IRQHandler(void) noexcept
+{
+  HAL_FDCAN_IRQHandler(&CanPorts[1]);
+}
+
+extern "C" void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEventFifoITs)
+{
+	if ((TxEventFifoITs & FDCAN_IT_TX_EVT_FIFO_NEW_DATA) != 0)
+	{
+		FDCAN_TxEventFifoTypeDef elem;
+		while(HAL_FDCAN_GetTxEvent(hfdcan, &elem) == HAL_OK)
+		{
+			CanId id;
+			id.SetReceivedId(elem.Identifier);
+			if (hfdcan == &CanPorts[0])
+				devicesByPort[0]->txCallback(elem.MessageMarker, id, elem.TxTimestamp);
+			else
+				devicesByPort[1]->txCallback(elem.MessageMarker, id, elem.TxTimestamp);
+		}
+	}
+
+}
+
+extern "C" void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t transmitDone)
+{
+	CanDevice *dev = devicesByPort[hfdcan == &CanPorts[0] ? 0 : 1];
+	while (transmitDone != 0)
+	{
+		const unsigned int bufferNumber = LowestSetBit(transmitDone);
+		transmitDone &= ~((uint32_t)1 << bufferNumber);
+		if (bufferNumber <= dev->hw->Init.TxBuffersNbr )
+		{
+			// Completed transmission from a dedicated transmit buffer
+			const unsigned int waitingIndex = bufferNumber + (unsigned int)CanDevice::TxBufferNumber::buffer0;
+			if (waitingIndex < ARRAY_SIZE(dev->txTaskWaiting))
+			{
+				TaskBase::GiveFromISR(dev->txTaskWaiting[waitingIndex]);
+			}
+		}
+		else
+		{
+			// Completed transmission from a transmit FIFO buffer
+			TaskBase::GiveFromISR(dev->txTaskWaiting[(unsigned int)CanDevice::TxBufferNumber::fifo]);
+		}
+	}
+}
+
+extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+	CanDevice *dev = devicesByPort[hfdcan == &CanPorts[0] ? 0 : 1];
+	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0)
+	{
+		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo0]);
+	}
+}
+
+extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
+{
+	CanDevice *dev = devicesByPort[hfdcan == &CanPorts[0] ? 0 : 1];
+	if ((RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE) != 0)
+	{
+		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo1]);
+	}
+}
+
+extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan)
+{
+	CanDevice *dev = devicesByPort[hfdcan == &CanPorts[0] ? 0 : 1];
+	uint32_t newData;
+	while (((newData = dev->hw->Instance->NDAT1) & dev->rxBuffersWaiting) != 0)
+	{
+		const unsigned int rxBufferNumber = LowestSetBit(newData);
+		dev->rxBuffersWaiting &= ~((uint32_t)1 << rxBufferNumber);
+		const unsigned int waitingIndex = rxBufferNumber + (unsigned int)CanDevice::RxBufferNumber::buffer0;
+		if (waitingIndex < ARRAY_SIZE(dev->rxTaskWaiting))
+		{
+			TaskBase::GiveFromISR(dev->rxTaskWaiting[waitingIndex]);
+		}
+	}
 }
 
 #endif

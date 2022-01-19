@@ -30,6 +30,11 @@ constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one
 
 class CanMessageBuffer;
 class CanTiming;
+extern "C" void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEventFifoITs);
+extern "C" void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t transmitDone);
+extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs);
+extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs);
+extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan);
 
 class CanDevice
 {
@@ -186,8 +191,7 @@ public:
 
 	uint16_t ReadTimeStampCounter() noexcept
 	{
-		return 0;
-		//return HAL_FDCAN_GetTimestampCounter(hw);
+		return HAL_FDCAN_GetTimestampCounter(hw);
 	}
 
 #if !SAME70
@@ -228,9 +232,9 @@ private:
 	TxBufferHeader *GetTxBuffer(uint32_t index) const noexcept;
 	TxEvent *GetTxEvent(uint32_t index) const noexcept;
 
-	void CopyMessageForTransmit(CanMessageBuffer *buffer, volatile TxBufferHeader *f) noexcept;
-	void CopyReceivedMessage(CanMessageBuffer *null buffer, const volatile RxBufferHeader *f) noexcept;
-
+	//void CopyMessageForTransmit(CanMessageBuffer *buffer, volatile TxBufferHeader *f) noexcept;
+	//void CopyReceivedMessage(CanMessageBuffer *null buffer, const volatile RxBufferHeader *f) noexcept;
+	void CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr) noexcept;
 
 	Can *hw;													// address of the CAN peripheral we are using
 
@@ -268,6 +272,12 @@ private:
 #endif
 
 	bool useFDMode;
+
+	friend void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEventFifoITs);
+	friend void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t transmitDone);
+	friend void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs);
+	friend void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs);
+	friend void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan);
 };
 
 #endif

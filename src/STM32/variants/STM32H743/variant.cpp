@@ -211,7 +211,7 @@ void SystemClockStartupInit() {
   RCC_OscInitStruct.PLL.PLLM = 5; // M div 5
   RCC_OscInitStruct.PLL.PLLN = 96; // N mul 96
   RCC_OscInitStruct.PLL.PLLP = 1; // P div 1
-  RCC_OscInitStruct.PLL.PLLQ = 10; // Q div 10 - USB 48 Mhz
+  RCC_OscInitStruct.PLL.PLLQ = 10; // Q div 10 - CANFD 48 Mhz
   RCC_OscInitStruct.PLL.PLLR = 10; // R unused
   /*
    * RCC_PLL1VCIRANGE_0  Clock range frequency between 1 and 2 MHz
@@ -292,7 +292,8 @@ void SystemClockStartupInit() {
   PeriphClkInitStruct.Spi45ClockSelection = RCC_SPI45CLKSOURCE_PLL2;
   // SPI6 from PLL2 qclk
   PeriphClkInitStruct.Spi6ClockSelection = RCC_SPI6CLKSOURCE_PLL2;
-
+  // FDCAN from Q clock
+  PeriphClkInitStruct.FdcanClockSelection = RCC_FDCANCLKSOURCE_PLL;
 
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK) {
     Error_Handler();
