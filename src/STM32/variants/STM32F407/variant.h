@@ -292,6 +292,9 @@ extern "C" {
 //#define PIN_SERIALLP1_RX        x // For LPUART1 RX
 //#define PIN_SERIALLP1_TX        x // For LPUART1 TX
 
+#define SWDIO_PIN PA_13
+#define SWCLK_PIN PA_14
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

@@ -193,6 +193,9 @@ extern "C" {
 //#define HAL_DAC_MODULE_ENABLED
 //#define HAL_ETH_MODULE_ENABLED
 
+#define SWDIO_PIN PA_13
+#define SWCLK_PIN PA_14
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
