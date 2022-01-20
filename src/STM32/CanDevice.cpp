@@ -18,188 +18,11 @@
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 
-/**@}*/
-/**
- * \brief CAN receive FIFO element.
- */
-struct CanDevice::RxBufferHeader
-{
-	union
-	{
-		struct
-		{
-			uint32_t ID : 29; /*!< Identifier */
-			uint32_t RTR : 1; /*!< Remote Transmission Request */
-			uint32_t XTD : 1; /*!< Extended Identifier */
-			uint32_t ESI : 1; /*!< Error State Indicator */
-		} bit;
-		uint32_t val; /*!< Type used for register access */
-	} R0;
-	union
-	{
-		struct
-		{
-			uint32_t RXTS : 16; /*!< Rx Timestamp */
-			uint32_t DLC : 4;   /*!< Data Length Code */
-			uint32_t BRS : 1;   /*!< Bit Rate Switch */
-			uint32_t FDF : 1;   /*!< FD Format */
-			uint32_t : 2;       /*!< Reserved */
-			uint32_t FIDX : 7;  /*!< Filter Index */
-			uint32_t ANMF : 1;  /*!< Accepted Non-matching Frame */
-		} bit;
-		uint32_t val; /*!< Type used for register access */
-	} R1;
-
-	const volatile uint32_t *GetDataPointer() const volatile { return (volatile uint32_t*)this + (sizeof(*this)/sizeof(uint32_t)); }
-};
-
-template<size_t DataLength> struct CanRxBufferEntry : public CanDevice::RxBufferHeader
-{
-	uint8_t data[DataLength];
-};
-
-/**
- * \brief CAN transmit FIFO element.
- */
-struct CanDevice::TxBufferHeader
-{
-	union
-	{
-		struct
-		{
-			uint32_t ID : 29; /*!< Identifier */
-			uint32_t RTR : 1; /*!< Remote Transmission Request */
-			uint32_t XTD : 1; /*!< Extended Identifier */
-			uint32_t ESI : 1; /*!< Error State Indicator */
-		} bit;
-		uint32_t val; /*!< Type used for register access */
-	} T0;
-	union
-	{
-		struct
-		{
-			uint32_t : 16;    /*!< Reserved */
-			uint32_t DLC : 4; /*!< Data Length Code */
-			uint32_t BRS : 1; /*!< Bit Rate Switch */
-			uint32_t FDF : 1; /*!< FD Format */
-			uint32_t : 1;     /*!< Reserved */
-			uint32_t EFCbit : 1; /*!< Event FIFO Control */
-			uint32_t MM : 8;  /*!< Message Marker */
-		} bit;
-		uint32_t val; /*!< Type used for register access */
-	} T1;
-
-	volatile uint32_t *GetDataPointer() volatile { return (volatile uint32_t*)this + (sizeof(*this)/sizeof(uint32_t)); }
-};
-
-template<size_t DataLength> struct CanTxBufferEntry : public CanDevice::TxBufferHeader
-{
-	uint8_t data[DataLength];
-};
-
-/**@}*/
-/**
- * \brief CAN transmit event FIFO element.
- */
-struct CanDevice::TxEvent
-{
-	union
-	{
-		struct
-		{
-			uint32_t ID : 29; /*!< Identifier */
-			uint32_t RTR : 1; /*!< Remote Transmission Request */
-			uint32_t XTD : 1; /*!< Extended Identifier */
-			uint32_t ESI : 1; /*!< Error State Indicator */
-		} bit;
-		uint32_t val; /*!< Type used for register access */
-	} R0;
-	union
-	{
-		struct
-		{
-			uint32_t TXTS : 16; /*!< Tx Timestamp */
-			uint32_t DLC : 4;   /*!< Data Length Code */
-			uint32_t BRS : 1;   /*!< Bit Rate Switch */
-			uint32_t FDF : 1;   /*!< FD Format */
-			uint32_t ET : 2;    /*!< Event type */
-			uint32_t MM : 8;    /*!< Message marker */
-		} bit;
-		uint32_t val; /*!< Type used for register access */
-	} R1;
-};
-
-/**
- * \brief CAN standard message ID filter element structure.
- *
- *  Common element structure for standard message ID filter element.
- */
-struct CanDevice::StandardMessageFilterElement
-{
-	union S0Type
-	{
-		struct
-		{
-			uint32_t SFID2 : 11; /*!< Standard Filter ID 2 */
-			uint32_t : 5;        /*!< Reserved */
-			uint32_t SFID1 : 11; /*!< Standard Filter ID 1 */
-			uint32_t SFEC : 3;   /*!< Standard Filter Configuration */
-			uint32_t SFT : 2;    /*!< Standard Filter Type */
-		} bit;
-		uint32_t val; /*!< Type used for register access */
-	};
-
-	__IO S0Type S0;
-};
-
-/**
- * \brief CAN extended message ID filter element structure.
- *
- *  Common element structure for extended message ID filter element.
- */
-struct CanDevice::ExtendedMessageFilterElement
-{
-	union F0Type
-	{
-		struct
-		{
-			uint32_t EFID1 : 29;	//!< bit: Extended Filter ID 1
-			uint32_t EFEC : 3;		//!< bit: Extended Filter Configuration
-		} bit;
-		uint32_t val;				//!< Type used for register access
-	};
-
-	union F1Type
-	{
-		struct
-		{
-			uint32_t EFID2 : 29;	//!< bit: Extended Filter ID 2
-			uint32_t : 1;			//!< bit: Reserved
-			uint32_t EFT : 2;		//!< bit: Extended Filter Type
-		} bit;
-		uint32_t val;				//!< Type used for register access
-	};
-
-	__IO union F0Type F0;
-	__IO union F1Type F1;
-};
-
 static FDCAN_GlobalTypeDef * const CanInstance[2] = {FDCAN1, FDCAN2};
-static Can CanPorts[2];
-static const IRQn_Type IRQnsByPort[2][2] = { {FDCAN1_IT0_IRQn, FDCAN1_IT1_IRQn}, {FDCAN1_IT0_IRQn, FDCAN1_IT1_IRQn} };
+static const IRQn_Type IRQnsByPort[2][2] = { {FDCAN1_IT0_IRQn, FDCAN1_IT1_IRQn}, {FDCAN2_IT0_IRQn, FDCAN2_IT1_IRQn} };
 static CanDevice *devicesByPort[2] = { nullptr, nullptr };
-
+static Can *hwByPort[2] = {nullptr, nullptr};
 CanDevice CanDevice::devices[NumCanDevices];
-
-
-
-inline uint32_t CanDevice::GetRxBufferSize() const noexcept { return sizeof(RxBufferHeader)/sizeof(uint32_t) + (config->dataSize >> 2); }
-inline uint32_t CanDevice::GetTxBufferSize() const noexcept { return sizeof(TxBufferHeader)/sizeof(uint32_t) + (config->dataSize >> 2); }
-inline CanDevice::RxBufferHeader *CanDevice::GetRxFifo0Buffer(uint32_t index) const noexcept { return (RxBufferHeader*)(rx0Fifo + (index * GetRxBufferSize())); }
-inline CanDevice::RxBufferHeader *CanDevice::GetRxFifo1Buffer(uint32_t index) const noexcept { return (RxBufferHeader*)(rx1Fifo + (index * GetRxBufferSize())); }
-inline CanDevice::RxBufferHeader *CanDevice::GetRxBuffer(uint32_t index) const noexcept { return (RxBufferHeader*)(rxBuffers + (index * GetRxBufferSize())); }
-inline CanDevice::TxBufferHeader *CanDevice::GetTxBuffer(uint32_t index) const noexcept { return (TxBufferHeader*)(txBuffers + (index * GetTxBufferSize())); }
-inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept { return &txEventFifo[index]; }
 
 // Initialise a CAN device and return a pointer to it
 /*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
@@ -213,18 +36,18 @@ inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept 
 	}
 
 	CanDevice& dev = devices[p_whichCan];
-	if (dev.hw != nullptr)												// device instance already in use
+	if (dev.hw.Instance != nullptr)												// device instance already in use
 	{
 		return nullptr;
 	}
-debugPrintf("Init Can device %d port %d\n", p_whichCan, p_whichPort);
+	debugPrintf("Init Can device %d port %d\n", p_whichCan, p_whichPort);
 	// Set up device number, peripheral number, hardware address etc.
 	dev.whichCan = p_whichCan;
 	dev.whichPort = p_whichPort;
-	dev.hw = &CanPorts[p_whichPort];
 	dev.config = &p_config;
 	dev.txCallback = p_txCallback;
 	devicesByPort[p_whichPort] = &dev;
+	hwByPort[p_whichPort] = &dev.hw;
 	uint32_t dataSize = 0;
 	if (p_config.dataSize == 64)
 		dataSize = FDCAN_DATA_BYTES_64;
@@ -236,9 +59,8 @@ debugPrintf("Init Can device %d port %d\n", p_whichCan, p_whichPort);
 		debugPrintf("Unxepected Can data size %d\n", p_config.dataSize);
 	}
 
-	//dev.hw->Instance = CanInstance[p_whichPort];
-	dev.hw->Instance = CanInstance[0];
-	FDCAN_InitTypeDef& Init = dev.hw->Init;
+	dev.hw.Instance = CanInstance[p_whichPort];
+	FDCAN_InitTypeDef& Init = dev.hw.Init;
 	Init.FrameFormat = (dataSize != FDCAN_DATA_BYTES_8 ? FDCAN_FRAME_FD_BRS : FDCAN_FRAME_CLASSIC);
 	Init.Mode = FDCAN_MODE_NORMAL;
 	Init.AutoRetransmission = ENABLE;
@@ -264,62 +86,52 @@ debugPrintf("Init Can device %d port %d\n", p_whichCan, p_whichPort);
   	pinmap_pinout(PB_8, PinMap_CAN_RD);
   	pinmap_pinout(PB_9, PinMap_CAN_TD);
 
-	HAL_StatusTypeDef status = HAL_FDCAN_Init(dev.hw);
+	HAL_StatusTypeDef status = HAL_FDCAN_Init(&dev.hw);
 	if (status != HAL_OK)
 	{
 		debugPrintf("FDCAN init failed %x\n", status);
 		return nullptr;
 	}
-	for(int i = 0; i < Init.StdFiltersNbr; i++)
+	for(uint32_t i = 0; i < Init.StdFiltersNbr; i++)
 		dev.DisableShortFilterElement(i);
-	for(int i = 0; i < Init.ExtFiltersNbr; i++)
+	for(uint32_t i = 0; i < Init.ExtFiltersNbr; i++)
 		dev.DisableExtendedFilterElement(i);
-	status = HAL_FDCAN_ConfigGlobalFilter(dev.hw, FDCAN_REJECT, FDCAN_REJECT,
+	status = HAL_FDCAN_ConfigGlobalFilter(&dev.hw, FDCAN_REJECT, FDCAN_REJECT,
                                                		FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
 	if (status != HAL_OK)
 	{
 		debugPrintf("Failed to set global filter %x\n", status);
 	}
-	HAL_FDCAN_ConfigRxFifoOverwrite(dev.hw, FDCAN_RX_FIFO0, FDCAN_RX_FIFO_BLOCKING);
-	HAL_FDCAN_ConfigRxFifoOverwrite(dev.hw, FDCAN_RX_FIFO1, FDCAN_RX_FIFO_BLOCKING);
-	HAL_FDCAN_ConfigFifoWatermark(dev.hw, FDCAN_CFG_RX_FIFO0, 0);
-	HAL_FDCAN_ConfigFifoWatermark(dev.hw, FDCAN_CFG_RX_FIFO1, 0);
-	HAL_FDCAN_ConfigFifoWatermark(dev.hw, FDCAN_CFG_TX_EVENT_FIFO, 0);
+	HAL_FDCAN_ConfigRxFifoOverwrite(&dev.hw, FDCAN_RX_FIFO0, FDCAN_RX_FIFO_BLOCKING);
+	HAL_FDCAN_ConfigRxFifoOverwrite(&dev.hw, FDCAN_RX_FIFO1, FDCAN_RX_FIFO_BLOCKING);
+	HAL_FDCAN_ConfigFifoWatermark(&dev.hw, FDCAN_CFG_RX_FIFO0, 0);
+	HAL_FDCAN_ConfigFifoWatermark(&dev.hw, FDCAN_CFG_RX_FIFO1, 0);
+	HAL_FDCAN_ConfigFifoWatermark(&dev.hw, FDCAN_CFG_TX_EVENT_FIFO, 0);
 	// For now set the timestamp prescaler to match other values, might consider changing this to get
 	// a higher resolution at some point.
-	status = HAL_FDCAN_ConfigTimestampCounter(dev.hw, FDCAN_TIMESTAMP_PRESC_1);
+	status = HAL_FDCAN_ConfigTimestampCounter(&dev.hw, FDCAN_TIMESTAMP_PRESC_1);
 	if (status != HAL_OK)
 	{
 		debugPrintf("FDCAN failed to set t/s prescaler %x\n", status);
 	}
 	// and enable it using the internal counter
-	status = HAL_FDCAN_EnableTimestampCounter(dev.hw, FDCAN_TIMESTAMP_INTERNAL);
+	status = HAL_FDCAN_EnableTimestampCounter(&dev.hw, FDCAN_TIMESTAMP_INTERNAL);
 	if (status != HAL_OK)
 	{
 		debugPrintf("FDCAN failed to enable t/s counter %x\n", status);
 	}
-	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
 	// all interrupts go via int line 0
-	status = HAL_FDCAN_ConfigInterruptLines(dev.hw, FDCAN_IT_TX_COMPLETE|FDCAN_IT_RX_BUFFER_NEW_MESSAGE|FDCAN_IT_TX_EVT_FIFO_NEW_DATA|
+	status = HAL_FDCAN_ConfigInterruptLines(&dev.hw, FDCAN_IT_TX_COMPLETE|FDCAN_IT_RX_BUFFER_NEW_MESSAGE|FDCAN_IT_TX_EVT_FIFO_NEW_DATA|
 													FDCAN_IT_RX_FIFO0_NEW_MESSAGE|FDCAN_IT_RX_FIFO1_NEW_MESSAGE|FDCAN_IT_BUS_OFF, FDCAN_INTERRUPT_LINE0);
-	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
 	if (status != HAL_OK)
 	{
 		debugPrintf("FDCAN failed to configure interrupts %x\n", status);
 	}
 	// Enable the tx complete notification, buffer selection happens later
-	status = HAL_FDCAN_ActivateNotification(dev.hw, FDCAN_IT_TX_COMPLETE, 0);
-	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
-	if (status != HAL_OK)
-	{
-		debugPrintf("FDCAN failed to enable tx complete interrupt %x\n", status);
-	}
-	status = HAL_FDCAN_ActivateNotification(dev.hw, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
-	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
-	status = HAL_FDCAN_ActivateNotification(dev.hw, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0);
-	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
-	status = HAL_FDCAN_ActivateNotification(dev.hw, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
-	debugPrintf("Int enabled %x\n", dev.hw->Instance->IE);
+	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_TX_COMPLETE, 0);
+	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0);
+	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
 	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][0]);
   	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][1]);
 
@@ -341,8 +153,7 @@ void CanDevice::DoHardwareInit() noexcept
 // Set the extended ID mask. May only be used while the interface is disabled.
 void CanDevice::SetExtendedIdMask(uint32_t mask) noexcept
 {
-	debugPrintf("Set extended id mask %x\n", mask);
-	HAL_StatusTypeDef status = HAL_FDCAN_ConfigExtendedIdMask(hw, mask);
+	HAL_StatusTypeDef status = HAL_FDCAN_ConfigExtendedIdMask(&hw, mask);
 	if (status != HAL_OK)
 		debugPrintf("Failed to set extended ID mask %x\n", status);
 }
@@ -350,46 +161,44 @@ void CanDevice::SetExtendedIdMask(uint32_t mask) noexcept
 // Stop and free this device and the CAN port it uses
 void CanDevice::DeInit() noexcept
 {
-	if (hw != nullptr)
+	if (hw.Instance != nullptr)
 	{
 		Disable();
   		HAL_NVIC_DisableIRQ(IRQnsByPort[whichPort][0]);
   		HAL_NVIC_DisableIRQ(IRQnsByPort[whichPort][1]);
-		HAL_FDCAN_DeInit(hw);
+		HAL_FDCAN_DeInit(&hw);
 		__HAL_RCC_FDCAN_FORCE_RESET();
 		__HAL_RCC_FDCAN_RELEASE_RESET();
 		devicesByPort[whichPort] = nullptr;									// free the port
-		hw = nullptr;														// free the device
+		hw.Instance = nullptr;														// free the device
 	}
 }
 
 // Enable this device
 void CanDevice::Enable() noexcept
 {
-	if (hw != nullptr)
+	if (hw.Instance != nullptr)
 	{
-		HAL_StatusTypeDef status = HAL_FDCAN_Start(hw);
+		HAL_StatusTypeDef status = HAL_FDCAN_Start(&hw);
 		if (status != HAL_OK)
 			debugPrintf("Failed to enable can device %x\n", status);
 	}
 	else
 		debugPrintf("hw is null\n");
-	debugPrintf("Int enabled %x\n", hw->Instance->IE);
-	delay(1000);
 }
 
 // Disable this device
 void CanDevice::Disable() noexcept
 {
-	if (hw != nullptr)
-		HAL_FDCAN_Stop(hw);
+	if (hw.Instance != nullptr)
+		HAL_FDCAN_Stop(&hw);
 }
 
 // Drain the Tx event fifo. Can use this instead of supplying a Tx event callback in Init() if we don't expect many events.
 void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 {
 	FDCAN_TxEventFifoTypeDef elem;
-	while(HAL_FDCAN_GetTxEvent(hw, &elem) == HAL_OK)
+	while(HAL_FDCAN_GetTxEvent(&hw, &elem) == HAL_OK)
 	{
 		CanId id;
 		id.SetReceivedId(elem.Identifier);
@@ -413,26 +222,26 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 	if (whichBuffer == TxBufferNumber::fifo)
 	{
 #ifdef RTOS
-		bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(hw) != 0;
+		bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(&hw) != 0;
 		if (!bufferFree && timeout != 0)
 		{
 			// Get next buffer to be removed
-			const unsigned int bufferIndex = ((hw->Instance->TXFQS & FDCAN_TXFQS_TFGI) >> FDCAN_TXFQS_TFGI_Pos);
+			const unsigned int bufferIndex = ((hw.Instance->TXFQS & FDCAN_TXFQS_TFGI) >> FDCAN_TXFQS_TFGI_Pos);
 			const uint32_t trigMask = (uint32_t)1 << bufferIndex;
 			txTaskWaiting[(unsigned int)whichBuffer] = TaskBase::GetCallerTaskHandle();
 
 			{
 				AtomicCriticalSectionLocker lock;
-      			SET_BIT(hw->Instance->TXBTIE, trigMask);
+      			SET_BIT(hw.Instance->TXBTIE, trigMask);
 			}
 
-			bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(hw) != 0;
+			bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(&hw) != 0;
 			// In the following, when we call TaskBase::Take() the Move task sometimes gets woken up early by by the DDA ring
 			// Therefore we loop calling Take() until either the call times out or the buffer is free
 			while (!bufferFree)
 			{
 				const bool timedOut = !TaskBase::Take(timeout);
-				bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(hw) != 0;
+				bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(&hw) != 0;
 				if (timedOut)
 				{
 					break;
@@ -442,13 +251,13 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 
 			{
 				AtomicCriticalSectionLocker lock;
-      			CLEAR_BIT(hw->Instance->TXBTIE, trigMask);
+      			CLEAR_BIT(hw.Instance->TXBTIE, trigMask);
 			}
 		}
 #else
 		do
 		{
-			bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(hw) != 0;
+			bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(&hw) != 0;
 		} while (!bufferFree && millis() - start < timeout);
 #endif
 	}
@@ -457,33 +266,33 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 		const unsigned int bufferIndex = (unsigned int)whichBuffer - (unsigned int)TxBufferNumber::buffer0;
 		const uint32_t trigMask = (uint32_t)1 << bufferIndex;
 #ifdef RTOS
-		bufferFree = HAL_FDCAN_IsTxBufferMessagePending(hw, trigMask) == 0;
+		bufferFree = HAL_FDCAN_IsTxBufferMessagePending(&hw, trigMask) == 0;
 		if (!bufferFree && timeout != 0)
 		{
-			debugPrintf("Wait space available buffer %d timeout %d\n", whichBuffer, timeout);
+			//debugPrintf("Wait space available buffer %d timeout %d\n", whichBuffer, timeout);
 			txTaskWaiting[(unsigned int)whichBuffer] = TaskBase::GetCallerTaskHandle();
 			{
 				AtomicCriticalSectionLocker lock;
-      			SET_BIT(hw->Instance->TXBTIE, trigMask);
+      			SET_BIT(hw.Instance->TXBTIE, trigMask);
 			}
-			bufferFree = HAL_FDCAN_IsTxBufferMessagePending(hw, trigMask) == 0;
+			bufferFree = HAL_FDCAN_IsTxBufferMessagePending(&hw, trigMask) == 0;
 
 			// In the following, when we call TaskBase::Take() assume that the task may get woken up early
 			// Therefore we loop calling Take() until either the call times out or the buffer is free
 			while (!bufferFree)
 			{
 				const bool timedOut = !TaskBase::Take(timeout);
-				bufferFree = HAL_FDCAN_IsTxBufferMessagePending(hw, trigMask) == 0;
+				bufferFree = HAL_FDCAN_IsTxBufferMessagePending(&hw, trigMask) == 0;
 				if (timedOut)
 				{
-					debugPrintf("Space available timeout\n");
+					//debugPrintf("Space available timeout\n");
 					break;
 				}
 			}
 			txTaskWaiting[(unsigned int)whichBuffer] = nullptr;
 			{
 				AtomicCriticalSectionLocker lock;
-      			CLEAR_BIT(hw->Instance->TXBTIE, trigMask);
+      			CLEAR_BIT(hw.Instance->TXBTIE, trigMask);
 			}
 		}
 		//else
@@ -491,7 +300,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 #else
 		do
 		{
-			bufferFree = HAL_FDCAN_IsTxBufferMessagePending(hw, bufferIndex) == 0;
+			bufferFree = HAL_FDCAN_IsTxBufferMessagePending(&hw, bufferIndex) == 0;
 		} while (!bufferFree && millis() - start < timeout);
 #endif
 	}
@@ -606,7 +415,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 	{
 		const bool bufferFree = IsSpaceAvailable(whichBuffer, timeout);
 		const uint32_t bufferIndex = (whichBuffer == TxBufferNumber::fifo)
-										? ((hw->Instance->TXFQS & FDCAN_TXFQS_TFGI) >> FDCAN_TXFQS_TFGI_Pos)
+										? ((hw.Instance->TXFQS & FDCAN_TXFQS_TFGI) >> FDCAN_TXFQS_TFGI_Pos)
 											: (uint32_t)whichBuffer - (uint32_t)TxBufferNumber::buffer0;
 		const uint32_t trigMask = (uint32_t)1 << bufferIndex;
 		if (!bufferFree)
@@ -615,12 +424,12 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 			// Retrieve details of the packet we are about to cancel
 			// FIXME can we get the ID ?
 			cancelledId = 1;
-			HAL_FDCAN_AbortTxRequest(hw, trigMask);		
+			HAL_FDCAN_AbortTxRequest(&hw, trigMask);		
 			do
 			{
 				delay(1);
 			}
-			while (HAL_FDCAN_IsTxBufferMessagePending(hw, trigMask) != 0 || (whichBuffer == TxBufferNumber::fifo && HAL_FDCAN_GetTxFifoFreeLevel(hw) == 0));
+			while (HAL_FDCAN_IsTxBufferMessagePending(&hw, trigMask) != 0 || (whichBuffer == TxBufferNumber::fifo && HAL_FDCAN_GetTxFifoFreeLevel(&hw) == 0));
 			//debugPrintf("Cancel complete\n");
 		}
 		FDCAN_TxHeaderTypeDef hdr;
@@ -636,18 +445,18 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		HAL_StatusTypeDef status;
 		if (whichBuffer == TxBufferNumber::fifo)
 		{
-			status = HAL_FDCAN_AddMessageToTxFifoQ(hw, &hdr, buffer->msg.raw);
-			HAL_FDCAN_EnableTxBufferRequest(hw, HAL_FDCAN_GetLatestTxFifoQRequestBuffer(hw));
+			status = HAL_FDCAN_AddMessageToTxFifoQ(&hw, &hdr, buffer->msg.raw);
+			HAL_FDCAN_EnableTxBufferRequest(&hw, HAL_FDCAN_GetLatestTxFifoQRequestBuffer(&hw));
 		}
 		else
 		{
-			status = HAL_FDCAN_AddMessageToTxBuffer(hw, &hdr, buffer->msg.raw, trigMask);
-			HAL_FDCAN_EnableTxBufferRequest(hw, trigMask);
+			status = HAL_FDCAN_AddMessageToTxBuffer(&hw, &hdr, buffer->msg.raw, trigMask);
+			HAL_FDCAN_EnableTxBufferRequest(&hw, trigMask);
 		}
 
 		if (status != HAL_OK)
 		{
-			debugPrintf("Failed to send CAN message %x %x\n", status, hw->ErrorCode);
+			debugPrintf("Failed to send CAN message %x %x\n", status, hw.ErrorCode);
 		}
 		else
 			++messagesQueuedForSending;
@@ -751,7 +560,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 		{
 			// Check for a received message and wait if necessary
 #ifdef RTOS
-			if (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) == 0)
+			if (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) == 0)
 			{
 				if (timeout == 0)
 				{
@@ -760,7 +569,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				TaskBase::ClearNotifyCount();
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
-				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) != 0);
+				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0);
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
 				{
@@ -769,7 +578,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #else
-			while (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) == 0)
+			while (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) == 0)
 			{
 				if (millis() - start >= timeout)
 				{
@@ -778,7 +587,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			}
 #endif
 			//debugPrintf("FIFO0 attempt read\n");
-			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(hw, FDCAN_RX_FIFO0, &hdr, buffer->msg.raw);
+			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(&hw, FDCAN_RX_FIFO0, &hdr, buffer->msg.raw);
 			if (status != HAL_OK)
 			{
 				debugPrintf("Failed to read fifo0 %x\n", status);
@@ -791,7 +600,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 		// Check for a received message and wait if necessary
 		{
 #ifdef RTOS
-			if (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) == 0)
+			if (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) == 0)
 			{
 				if (timeout == 0)
 				{
@@ -801,7 +610,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				TaskBase::ClearNotifyCount();
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
-				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) != 0);
+				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0);
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
 				{
@@ -809,7 +618,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #else
-			while (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) == 0)
+			while (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) == 0)
 			{
 				if (millis() - start >= timeout)
 				{
@@ -817,8 +626,8 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #endif
-			debugPrintf("FIFO1 attempt read\n");
-			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(hw, FDCAN_RX_FIFO1, &hdr, buffer->msg.raw);
+			//debugPrintf("FIFO1 attempt read\n");
+			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(&hw, FDCAN_RX_FIFO1, &hdr, buffer->msg.raw);
 			if (status != HAL_OK)
 			{
 				debugPrintf("Failed to read fifo1 %x\n", status);
@@ -835,7 +644,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			const uint32_t bufferNumber = (unsigned int)whichBuffer - (unsigned int)RxBufferNumber::buffer0;
 			const uint32_t ndatMask = (uint32_t)1 << bufferNumber;
 #ifdef RTOS
-			if (HAL_FDCAN_IsRxBufferMessageAvailable(hw, bufferNumber) == 0)
+			if (HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) == 0)
 			{
 				if (timeout == 0)
 				{
@@ -846,7 +655,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
 				rxBuffersWaiting |= ndatMask;
-				const bool success = (HAL_FDCAN_IsRxBufferMessageAvailable(hw, bufferNumber) != 0 || (TaskBase::Take(timeout), HAL_FDCAN_IsRxBufferMessageAvailable(hw, bufferNumber) != 0));
+				const bool success = (HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) != 0 || (TaskBase::Take(timeout), HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) != 0));
 				rxBuffersWaiting &= ~ndatMask;
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
@@ -855,7 +664,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #else
-			while (HAL_FDCAN_IsRxBufferMessageAvailable(hw, bufferNumber) == 0)
+			while (HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) == 0)
 			{
 				if (millis() - start >= timeout)
 				{
@@ -863,14 +672,13 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				}
 			}
 #endif
-			debugPrintf("Attempt to read from buffer %d\n", bufferNumber);
-			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(hw, bufferNumber, &hdr, buffer->msg.raw);
+			//debugPrintf("Attempt to read from buffer %d\n", bufferNumber);
+			HAL_StatusTypeDef status = HAL_FDCAN_GetRxMessage(&hw, bufferNumber, &hdr, buffer->msg.raw);
 			if (status != HAL_OK)
 			{
 				debugPrintf("Failed to read buffer %x\n", status);
 			}
 			CopyHeader(buffer, &hdr);
-			//hw->Instance->NDAT1 = ndatMask;
 			return true;
 		}
 		return false;
@@ -884,31 +692,14 @@ bool CanDevice::IsMessageAvailable(RxBufferNumber whichBuffer) noexcept
 	switch (whichBuffer)
 	{
 	case RxBufferNumber::fifo0:
-		//return HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) != 0;
-		if (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO0) != 0)
-		{
-			debugPrintf("Data in fifo 0\n");
-			return true;
-		}
-		return false;
+		return HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0;
+
 	case RxBufferNumber::fifo1:
-		//return HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) != 0;
-		if (HAL_FDCAN_GetRxFifoFillLevel(hw, FDCAN_RX_FIFO1) != 0)
-		{
-			debugPrintf("Data in fifo 1\n");
-			return true;
-		}
-		return false;
+		return HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0;
 
 	default:
 		// We assume that not more than 32 dedicated receive buffers have been configured, so we only need to look at the NDAT1 register
-		//return HAL_FDCAN_IsRxBufferMessageAvailable(hw, (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0) != 0;
-		if (HAL_FDCAN_IsRxBufferMessageAvailable(hw, (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0) != 0)
-		{
-			debugPrintf("Data in buffer %d\n", (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0);
-			return true;
-		}
-		return false;
+		return HAL_FDCAN_IsRxBufferMessageAvailable(&hw, (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0) != 0;
 	}
 	return false;
 }
@@ -927,7 +718,7 @@ void CanDevice::DisableShortFilterElement(unsigned int index) noexcept
 		efd.IsCalibrationMsg = 0;
 		efd.FilterConfig = FDCAN_FILTER_DISABLE;
 		efd.FilterID2 = 0;
-		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(hw, &efd);
+		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(&hw, &efd);
 		if (status != HAL_OK)
 		{
 			debugPrintf("Failed to disable extended filter %x\n", status);
@@ -971,7 +762,7 @@ void CanDevice::SetShortFilterElement(unsigned int index, RxBufferNumber whichBu
 			}
 			break;
 		}
-		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(hw, &efd);
+		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(&hw, &efd);
 		if (status != HAL_OK)
 		{
 			debugPrintf("Failed to configure standard filter %x\n", status);
@@ -993,7 +784,7 @@ void CanDevice::DisableExtendedFilterElement(unsigned int index) noexcept
 		efd.IsCalibrationMsg = 0;
 		efd.FilterConfig = FDCAN_FILTER_DISABLE;
 		efd.FilterID2 = 0;
-		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(hw, &efd);
+		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(&hw, &efd);
 		if (status != HAL_OK)
 		{
 			debugPrintf("Failed to disable extended filter %x\n", status);
@@ -1038,7 +829,7 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 			}
 			break;
 		}
-		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(hw, &efd);
+		HAL_StatusTypeDef status = HAL_FDCAN_ConfigFilter(&hw, &efd);
 		if (status != HAL_OK)
 		{
 			debugPrintf("Failed to configure extended filter %x\n", status);
@@ -1049,7 +840,7 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 void CanDevice::GetLocalCanTiming(CanTiming &timing) noexcept
 {
 
-	const uint32_t localNbtp = hw->Instance->NBTP;
+	const uint32_t localNbtp = hw.Instance->NBTP;
 	const uint32_t tseg1 = (localNbtp & FDCAN_NBTP_NTSEG1_Msk) >> FDCAN_NBTP_NTSEG1_Pos;
 	const uint32_t tseg2 = (localNbtp & FDCAN_NBTP_NTSEG2_Msk) >> FDCAN_NBTP_NTSEG2_Pos;
 	const uint32_t jw = (localNbtp & FDCAN_NBTP_NSJW_Msk) >> FDCAN_NBTP_NSJW_Pos;
@@ -1063,15 +854,15 @@ void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
 {
 	UpdateLocalCanTiming(timing);				// set up nbtp and dbtp variables
 	Disable();
-  	hw->Instance->NBTP = ((((uint32_t)hw->Init.NominalSyncJumpWidth - 1U) << FDCAN_NBTP_NSJW_Pos) |
-                            (((uint32_t)hw->Init.NominalTimeSeg1 - 1U) << FDCAN_NBTP_NTSEG1_Pos)    |
-                            (((uint32_t)hw->Init.NominalTimeSeg2 - 1U) << FDCAN_NBTP_NTSEG2_Pos)    |
-                            (((uint32_t)hw->Init.NominalPrescaler - 1U) << FDCAN_NBTP_NBRP_Pos));
+  	hw.Instance->NBTP = ((((uint32_t)hw.Init.NominalSyncJumpWidth - 1U) << FDCAN_NBTP_NSJW_Pos) |
+                            (((uint32_t)hw.Init.NominalTimeSeg1 - 1U) << FDCAN_NBTP_NTSEG1_Pos)    |
+                            (((uint32_t)hw.Init.NominalTimeSeg2 - 1U) << FDCAN_NBTP_NTSEG2_Pos)    |
+                            (((uint32_t)hw.Init.NominalPrescaler - 1U) << FDCAN_NBTP_NBRP_Pos));
 
-    hw->Instance->DBTP = ((((uint32_t)hw->Init.DataSyncJumpWidth - 1U) << FDCAN_DBTP_DSJW_Pos) |
-                              (((uint32_t)hw->Init.DataTimeSeg1 - 1U) << FDCAN_DBTP_DTSEG1_Pos)    |
-                              (((uint32_t)hw->Init.DataTimeSeg2 - 1U) << FDCAN_DBTP_DTSEG2_Pos)    |
-                              (((uint32_t)hw->Init.DataPrescaler - 1U) << FDCAN_DBTP_DBRP_Pos));
+    hw.Instance->DBTP = ((((uint32_t)hw.Init.DataSyncJumpWidth - 1U) << FDCAN_DBTP_DSJW_Pos) |
+                              (((uint32_t)hw.Init.DataTimeSeg1 - 1U) << FDCAN_DBTP_DTSEG1_Pos)    |
+                              (((uint32_t)hw.Init.DataTimeSeg2 - 1U) << FDCAN_DBTP_DTSEG2_Pos)    |
+                              (((uint32_t)hw.Init.DataPrescaler - 1U) << FDCAN_DBTP_DBRP_Pos));
 	Enable();
 }
 
@@ -1083,7 +874,7 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 	uint32_t jumpWidth = timing.jumpWidth;
 	uint32_t prescaler = 1;						// 48MHz main clock
 	uint32_t tseg2 = period - tseg1 - 1;
-debugPrintf("Can timing before period %d tseg1 %d tseg2 %d jump %d prescale %d\n", (int)period, (int)tseg1, (int)tseg2, (int)jumpWidth, (int)prescaler);
+	debugPrintf("Can timing before period %d tseg1 %d tseg2 %d jump %d prescale %d\n", (int)period, (int)tseg1, (int)tseg2, (int)jumpWidth, (int)prescaler);
 	for (;;)
 	{
 		tseg2 = period - tseg1 - 1;
@@ -1101,8 +892,8 @@ debugPrintf("Can timing before period %d tseg1 %d tseg2 %d jump %d prescale %d\n
 #if !SAME70
 	bitPeriod = period * prescaler;				// the actual CAN normal bit period, in 48MHz clocks
 #endif
-debugPrintf("Can timing after period %d tseg1 %d tseg2 %d jump %d prescale %d\n", (int)period, (int)tseg1, (int)tseg2, (int)jumpWidth, (int)prescaler);
-	FDCAN_InitTypeDef& Init = hw->Init;
+	debugPrintf("Can timing after period %d tseg1 %d tseg2 %d jump %d prescale %d\n", (int)period, (int)tseg1, (int)tseg2, (int)jumpWidth, (int)prescaler);
+	FDCAN_InitTypeDef& Init = hw.Init;
 	Init.NominalPrescaler = prescaler; /* tq = NominalPrescaler x (1/fdcan_ker_ck) */
 	Init.NominalSyncJumpWidth = jumpWidth;
   	Init.NominalTimeSeg1 = tseg1; /* NominalTimeSeg1 = Propagation_segment + Phase_segment_1 */
@@ -1223,27 +1014,27 @@ void CanDevice::Interrupt() noexcept
 // Interrupt handlers
 extern "C" void FDCAN1_IT0_IRQHandler(void) noexcept
 {
-  HAL_FDCAN_IRQHandler(&CanPorts[1]);
+  HAL_FDCAN_IRQHandler(hwByPort[0]);
 }
 
 extern "C" void FDCAN2_IT0_IRQHandler(void) noexcept
 {
-  HAL_FDCAN_IRQHandler(&CanPorts[0]);
+  HAL_FDCAN_IRQHandler(hwByPort[1]);
 }
 
 extern "C" void FDCAN1_IT1_IRQHandler(void) noexcept
 {
-  HAL_FDCAN_IRQHandler(&CanPorts[1]);
+  HAL_FDCAN_IRQHandler(hwByPort[0]);
 }
 
 extern "C" void FDCAN2_IT1_IRQHandler(void) noexcept
 {
-  HAL_FDCAN_IRQHandler(&CanPorts[0]);
+  HAL_FDCAN_IRQHandler(hwByPort[1]);
 }
 
 extern "C" void FDCAN_CAL_IRQHandler(void) noexcept
 {
-  HAL_FDCAN_IRQHandler(&CanPorts[1]);
+  HAL_FDCAN_IRQHandler(hwByPort[0]);
 }
 
 extern "C" void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEventFifoITs)
@@ -1255,7 +1046,7 @@ extern "C" void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint3
 		{
 			CanId id;
 			id.SetReceivedId(elem.Identifier);
-			if (hfdcan == &CanPorts[0])
+			if (hfdcan == hwByPort[0])
 				devicesByPort[0]->txCallback(elem.MessageMarker, id, elem.TxTimestamp);
 			else
 				devicesByPort[1]->txCallback(elem.MessageMarker, id, elem.TxTimestamp);
@@ -1266,12 +1057,12 @@ extern "C" void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint3
 
 extern "C" void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t transmitDone)
 {
-	CanDevice *dev = devicesByPort[hfdcan == &CanPorts[0] ? 0 : 1];
+	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
 	while (transmitDone != 0)
 	{
 		const unsigned int bufferNumber = LowestSetBit(transmitDone);
 		transmitDone &= ~((uint32_t)1 << bufferNumber);
-		if (bufferNumber <= dev->hw->Init.TxBuffersNbr )
+		if (bufferNumber <= dev->hw.Init.TxBuffersNbr )
 		{
 			// Completed transmission from a dedicated transmit buffer
 			const unsigned int waitingIndex = bufferNumber + (unsigned int)CanDevice::TxBufferNumber::buffer0;
@@ -1290,7 +1081,7 @@ extern "C" void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, 
 
 extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
-	CanDevice *dev = devicesByPort[hfdcan == &CanPorts[0] ? 0 : 1];
+	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
 	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0)
 	{
 		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo0]);
@@ -1299,7 +1090,7 @@ extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 
 extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
 {
-	CanDevice *dev = devicesByPort[hfdcan == &CanPorts[0] ? 0 : 1];
+	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
 	if ((RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE) != 0)
 	{
 		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo1]);
@@ -1308,9 +1099,9 @@ extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 
 extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan)
 {
-	CanDevice *dev = devicesByPort[hfdcan == &CanPorts[0] ? 0 : 1];
+	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
 	uint32_t newData;
-	while (((newData = dev->hw->Instance->NDAT1) & dev->rxBuffersWaiting) != 0)
+	while (((newData = dev->hw.Instance->NDAT1) & dev->rxBuffersWaiting) != 0)
 	{
 		const unsigned int rxBufferNumber = LowestSetBit(newData);
 		dev->rxBuffersWaiting &= ~((uint32_t)1 << rxBufferNumber);

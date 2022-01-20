@@ -191,7 +191,7 @@ public:
 
 	uint16_t ReadTimeStampCounter() noexcept
 	{
-		return HAL_FDCAN_GetTimestampCounter(hw);
+		return HAL_FDCAN_GetTimestampCounter(&hw);
 	}
 
 #if !SAME70
@@ -213,30 +213,15 @@ public:
 	static constexpr size_t Can0DataSize = 64;
 
 private:
-	struct TxEvent;
-	struct StandardMessageFilterElement;
-	struct ExtendedMessageFilterElement;
-	class RxBufferHeader;
-	class TxBufferHeader;
-
 	static CanDevice devices[NumCanDevices];
 
 	CanDevice() noexcept { }
 	void DoHardwareInit() noexcept;
 	void UpdateLocalCanTiming(const CanTiming& timing) noexcept;
-	uint32_t GetRxBufferSize() const noexcept;
-	uint32_t GetTxBufferSize() const noexcept;
-	RxBufferHeader *GetRxFifo0Buffer(uint32_t index) const noexcept;
-	RxBufferHeader *GetRxFifo1Buffer(uint32_t index) const noexcept;
-	RxBufferHeader *GetRxBuffer(uint32_t index) const noexcept;
-	TxBufferHeader *GetTxBuffer(uint32_t index) const noexcept;
-	TxEvent *GetTxEvent(uint32_t index) const noexcept;
 
-	//void CopyMessageForTransmit(CanMessageBuffer *buffer, volatile TxBufferHeader *f) noexcept;
-	//void CopyReceivedMessage(CanMessageBuffer *null buffer, const volatile RxBufferHeader *f) noexcept;
 	void CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr) noexcept;
 
-	Can *hw;													// address of the CAN peripheral we are using
+	Can hw;														// HAL structure for the can device
 
 	unsigned int whichCan;										// which CAN device we are
 	unsigned int whichPort;										// which CAN port number we use, 0 or 1
@@ -245,14 +230,6 @@ private:
 	uint32_t statusMask;
 
 	const Config *config;										//!< Configuration parameters
-	volatile uint32_t *rx0Fifo;									//!< Receive message fifo start
-	volatile uint32_t *rx1Fifo;									//!< Receive message fifo start
-	volatile uint32_t *rxBuffers;								//!< Receive direct buffers start
-	uint32_t *txBuffers;										//!< Transmit direct buffers start (the Tx fifo buffers follow them)
-	TxEvent *txEventFifo;										//!< Transfer event fifo
-	StandardMessageFilterElement *rxStdFilter;					//!< Standard filter List
-	ExtendedMessageFilterElement *rxExtFilter;					//!< Extended filter List
-
 	unsigned int messagesQueuedForSending;
 	unsigned int messagesReceived;
 	unsigned int messagesLost;									// count of received messages lost because the receive FIFO was full
