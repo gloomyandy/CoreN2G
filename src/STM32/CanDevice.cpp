@@ -122,7 +122,9 @@ CanDevice CanDevice::devices[NumCanDevices];
 	}
 	// all interrupts go via int line 0
 	status = HAL_FDCAN_ConfigInterruptLines(&dev.hw, FDCAN_IT_TX_COMPLETE|FDCAN_IT_RX_BUFFER_NEW_MESSAGE|FDCAN_IT_TX_EVT_FIFO_NEW_DATA|
-													FDCAN_IT_RX_FIFO0_NEW_MESSAGE|FDCAN_IT_RX_FIFO1_NEW_MESSAGE|FDCAN_IT_BUS_OFF, FDCAN_INTERRUPT_LINE0);
+													 FDCAN_IT_RX_FIFO0_NEW_MESSAGE|FDCAN_IT_RX_FIFO1_NEW_MESSAGE|FDCAN_IT_BUS_OFF|
+													 FDCAN_IT_RX_FIFO0_MESSAGE_LOST|FDCAN_IT_RX_FIFO1_MESSAGE_LOST, 
+													 FDCAN_INTERRUPT_LINE0);
 	if (status != HAL_OK)
 	{
 		debugPrintf("FDCAN failed to configure interrupts %x\n", status);
@@ -131,7 +133,10 @@ CanDevice CanDevice::devices[NumCanDevices];
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_TX_COMPLETE, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0);
+	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO0_MESSAGE_LOST, 0);
+	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO1_MESSAGE_LOST, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
+	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_BUS_OFF, 0);
 	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][0]);
   	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][1]);
 
@@ -323,81 +328,7 @@ unsigned int CanDevice::NumTxMessagesPending(TxBufferNumber whichBuffer) noexcep
 
 #endif
 
-#if 0
-void CanDevice::CopyMessageForTransmit(CanMessageBuffer *buffer, volatile TxBufferHeader *f) noexcept
-{
-	if (buffer->extId)
-	{
-		f->T0.val = buffer->id.GetWholeId();
-		f->T0.bit.XTD = 1;
-	}
-	else
-	{
-		/* A standard identifier is stored into ID[28:18] */
-		f->T0.val = buffer->id.GetWholeId() << 18;
-		f->T0.bit.XTD = 0;
-	}
 
-	f->T0.bit.RTR = buffer->remote;
-
-	f->T1.bit.MM = buffer->marker;
-	f->T1.bit.EFCbit = buffer->reportInFifo;
-	uint32_t dataLength = buffer->dataLength;
-	volatile uint32_t *dataPtr = f->GetDataPointer();
-	if (dataLength <= 8)
-	{
-		f->T1.bit.DLC = dataLength;
-		dataPtr[0] = buffer->msg.raw32[0];
-		dataPtr[1] = buffer->msg.raw32[1];
-	}
-	else
-	{
-		while (dataLength & 3)
-		{
-			buffer->msg.raw[dataLength++] = 0;				// pad length to a multiple of 4 bytes, setting any additional bytes we send to zero in case the message ends with a string
-		}
-
-		if (dataLength <= 24)
-		{
-			// DLC values 9, 10, 11, 12 code for lengths 12, 16, 20, 24
-			uint8_t dlc = (dataLength >> 2) + 6;
-			f->T1.bit.DLC = dlc;
-			const uint32_t *p = buffer->msg.raw32;
-			do
-			{
-				*dataPtr++ = *p++;
-				--dlc;
-			} while (dlc != 6);								// copy 3, 4, 5 or 6 words
-		}
-		else
-		{
-			// DLC values 13, 14, 15 code for lengths 32, 48, 64
-			while (dataLength & 12)
-			{
-				buffer->msg.raw32[dataLength >> 2] = 0;		// pad length to a multiple of 16 bytes, setting any additional bytes we send to zero in case the message ends with a string
-				dataLength += 4;
-			}
-
-			uint8_t dlc = (dataLength >> 4) + 11;
-			f->T1.bit.DLC = dlc;
-			const uint32_t *p = buffer->msg.raw32;
-			do
-			{
-				*dataPtr++ = *p++;
-				*dataPtr++ = *p++;
-				*dataPtr++ = *p++;
-				*dataPtr++ = *p++;
-				--dlc;
-			} while (dlc != 11);
-		}
-	}
-
-	f->T1.bit.FDF = buffer->fdMode;
-	f->T1.bit.BRS = buffer->useBrs;
-
-	++messagesQueuedForSending;
-}
-#endif
 
 static const uint8_t DLCtoBytes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64};
 static const uint8_t BytesToDLC[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 10, 10, 
@@ -436,7 +367,14 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		hdr.Identifier = buffer->id.GetWholeId();
 		hdr.IdType = (buffer->extId ? FDCAN_EXTENDED_ID : FDCAN_STANDARD_ID);
 		hdr.TxFrameType = (buffer->remote ? FDCAN_REMOTE_FRAME : FDCAN_DATA_FRAME);
-		hdr.DataLength = BytesToDLC[buffer->dataLength] << 16;
+		uint32_t dataLen = buffer->dataLength;
+		uint32_t dlcLen = BytesToDLC[dataLen];
+		hdr.DataLength = dlcLen << 16;
+		dlcLen = DLCtoBytes[dlcLen];
+		while (dataLen < dlcLen)
+		{
+			buffer->msg.raw[dataLen++] = 0;				// zero fill up to the CANFD buffer length
+		}
 		hdr.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
 		hdr.BitRateSwitch = (buffer->useBrs ? FDCAN_BRS_ON : FDCAN_BRS_OFF);
 		hdr.FDFormat = (buffer->fdMode ? FDCAN_FD_CAN : FDCAN_CLASSIC_CAN);
@@ -465,76 +403,6 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 	return cancelledId;
 }
 
-#if 0
-void CanDevice::CopyReceivedMessage(CanMessageBuffer *buffer, const volatile RxBufferHeader *f) noexcept
-{
-	// The CAN has written the message directly to memory, so we must invalidate the cache before we read it
-	Cache::InvalidateAfterDMAReceive(f, sizeof(RxBufferHeader) + 64);						// flush the header and up to 64 bytes of data
-
-	if (buffer != nullptr)
-	{
-		buffer->extId = f->R0.bit.XTD;
-		buffer->id.SetReceivedId((buffer->extId) ? f->R0.bit.ID : f->R0.bit.ID >> 18);			// a standard identifier is stored into ID[28:18]
-		buffer->remote = f->R0.bit.RTR;
-
-		const volatile uint32_t *data = f->GetDataPointer();
-		buffer->timeStamp = f->R1.bit.RXTS;
-		const uint8_t dlc = f->R1.bit.DLC;
-		static constexpr uint8_t dlc2len[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64};
-
-		switch (dlc)
-		{
-		case 4:
-		case 5:
-		case 6:
-		case 7:
-		case 8:
-			buffer->msg.raw32[1] = data[1];
-			// no break
-		case 0:
-		case 1:
-		case 2:
-		case 3:
-			buffer->msg.raw32[0] = data[0];
-			buffer->dataLength = dlc;
-			break;
-
-		case 15:		// 64 bytes
-			buffer->msg.raw32[12] = data[12];
-			buffer->msg.raw32[13] = data[13];
-			buffer->msg.raw32[14] = data[14];
-			buffer->msg.raw32[15] = data[15];
-			// no break
-		case 14:		// 48 bytes
-			buffer->msg.raw32[8] = data[8];
-			buffer->msg.raw32[9] = data[9];
-			buffer->msg.raw32[10] = data[10];
-			buffer->msg.raw32[11] = data[11];
-			// no break
-		case 13:		// 32 bytes
-			buffer->msg.raw32[6] = data[6];
-			buffer->msg.raw32[7] = data[7];
-			// no break
-		case 12:		// 24 bytes
-			buffer->msg.raw32[5] = data[5];
-			// no break
-		case 11:		// 20 bytes
-			buffer->msg.raw32[4] = data[4];
-			// no break
-		case 10:		// 16 bytes
-			buffer->msg.raw32[3] = data[3];
-			// no break
-		case 9:			// 12 bytes
-			buffer->msg.raw32[0] = data[0];
-			buffer->msg.raw32[1] = data[1];
-			buffer->msg.raw32[2] = data[2];
-			buffer->dataLength = dlc2len[dlc];
-		}
-  }
-
-	++messagesReceived;
-}
-#endif
 
 void CanDevice::CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr) noexcept
 {
@@ -799,7 +667,7 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 {
 	if (index < config->numExtendedFilterElements)
 	{
-		debugPrintf("Add filter index %d buffer %d id %x mask %x\n", index, whichBuffer, id, mask);
+		//debugPrintf("Add filter index %d buffer %d id %x mask %x\n", index, whichBuffer, id, mask);
 		FDCAN_FilterTypeDef efd;
 		efd.IdType = FDCAN_EXTENDED_ID;
 		efd.FilterIndex = index;
@@ -1086,6 +954,8 @@ extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 	{
 		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo0]);
 	}
+	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_MESSAGE_LOST) != 0)
+		dev->messagesLost++;
 }
 
 extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
@@ -1095,6 +965,8 @@ extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 	{
 		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo1]);
 	}
+	if ((RxFifo1ITs & FDCAN_IT_RX_FIFO1_MESSAGE_LOST) != 0)
+		dev->messagesLost++;
 }
 
 extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan)
@@ -1110,6 +982,17 @@ extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan
 		{
 			TaskBase::GiveFromISR(dev->rxTaskWaiting[waitingIndex]);
 		}
+	}
+}
+
+extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorStatusITs)
+{
+	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
+	if ((ErrorStatusITs & FDCAN_IT_BUS_OFF) != 0)
+	{
+		dev->busOffCount++;
+		dev->Disable();
+		dev->Enable();
 	}
 }
 
