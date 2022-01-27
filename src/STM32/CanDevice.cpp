@@ -17,16 +17,12 @@
 #include <HardwareTimer.h>
 
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
-uint32_t canLostFifo0 = 0;
-uint32_t canLostFifo1 = 0;
-
 
 static FDCAN_GlobalTypeDef * const CanInstance[2] = {FDCAN1, FDCAN2};
 static const IRQn_Type IRQnsByPort[2][2] = { {FDCAN1_IT0_IRQn, FDCAN1_IT1_IRQn}, {FDCAN2_IT0_IRQn, FDCAN2_IT1_IRQn} };
 static CanDevice *devicesByPort[2] = { nullptr, nullptr };
 static Can *hwByPort[2] = {nullptr, nullptr};
 CanDevice CanDevice::devices[NumCanDevices];
-HardwareTimer Timer3(TIM3);
 
 // Initialise a CAN device and return a pointer to it
 /*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
@@ -85,12 +81,6 @@ HardwareTimer Timer3(TIM3);
 	Init.TxFifoQueueElmtsNbr = p_config.txFifoSize;
 	Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
 	Init.TxElmtSize = dataSize;
-	// The STM32H7 ref manual says that when using FDCAN we can't use the built in timestamp, so we must use timer3
-	uint32_t preScale = Timer3.getTimerClkFreq()/750000;
-	debugPrintf("ST base freq %d setting presacle %d\n", static_cast<int>(Timer3.getTimerClkFreq()), static_cast<int>(preScale));
-	Timer3.setPrescaleFactor(preScale);
-	Timer3.setOverflow(0, TICK_FORMAT);
-	Timer3.resume();
 
 	// setup the hardware
 	__HAL_RCC_FDCAN_CLK_ENABLE();
@@ -118,8 +108,7 @@ HardwareTimer Timer3(TIM3);
 	HAL_FDCAN_ConfigFifoWatermark(&dev.hw, FDCAN_CFG_RX_FIFO0, 0);
 	HAL_FDCAN_ConfigFifoWatermark(&dev.hw, FDCAN_CFG_RX_FIFO1, 0);
 	HAL_FDCAN_ConfigFifoWatermark(&dev.hw, FDCAN_CFG_TX_EVENT_FIFO, 0);
-	// For now set the timestamp prescaler to match other values, might consider changing this to get
-	// a higher resolution at some point.
+	// Use one CAN bit time as the basis for our timestamps
 	status = HAL_FDCAN_ConfigTimestampCounter(&dev.hw, FDCAN_TIMESTAMP_PRESC_1);
 	if (status != HAL_OK)
 	{
@@ -127,7 +116,6 @@ HardwareTimer Timer3(TIM3);
 	}
 	// and enable it using the internal counter
 	status = HAL_FDCAN_EnableTimestampCounter(&dev.hw, FDCAN_TIMESTAMP_INTERNAL);
-	//status = HAL_FDCAN_EnableTimestampCounter(&dev.hw, FDCAN_TIMESTAMP_EXTERNAL);
 	if (status != HAL_OK)
 	{
 		debugPrintf("FDCAN failed to enable t/s counter %x\n", status);
@@ -187,7 +175,7 @@ void CanDevice::DeInit() noexcept
 		__HAL_RCC_FDCAN_FORCE_RESET();
 		__HAL_RCC_FDCAN_RELEASE_RESET();
 		devicesByPort[whichPort] = nullptr;									// free the port
-		hw.Instance = nullptr;														// free the device
+		hw.Instance = nullptr;												// free the device
 	}
 }
 
@@ -312,8 +300,6 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
       			CLEAR_BIT(hw.Instance->TXBTIE, trigMask);
 			}
 		}
-		//else
-			//debugPrintf("found buffer free\n");
 #else
 		do
 		{
@@ -439,8 +425,6 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 	case RxBufferNumber::fifo0:
 		{
 			// Check for a received message and wait if necessary
-			uint32_t f0cnt = HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0);
-			if (f0cnt > 1) debugPrintf("Fifo0 messages %d lost %d lost0 %d\n", f0cnt, messagesLost, canLostFifo0);
 #ifdef RTOS
 			if (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) == 0)
 			{
@@ -482,8 +466,6 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 		// Check for a received message and wait if necessary
 		{
 #ifdef RTOS
-			uint32_t f1cnt = HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1);
-			if (f1cnt > 0) debugPrintf("Fifo1 messages %d lost %d lost1 %d\n", f1cnt, messagesLost, canLostFifo1);
 			if (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) == 0)
 			{
 				if (timeout == 0)
@@ -567,7 +549,6 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 		}
 		return false;
 	}
-	debugPrintf("RX delay 100\n");
 	delay(100);
 	return false;
 }
@@ -594,7 +575,6 @@ void CanDevice::DisableShortFilterElement(unsigned int index) noexcept
 {
 	if (index < config->numShortFilterElements)
 	{
-		debugPrintf("Disable short filter\n");
 		FDCAN_FilterTypeDef efd;
 		efd.IdType = FDCAN_STANDARD_ID;
 		efd.FilterIndex = index;
@@ -617,7 +597,6 @@ void CanDevice::SetShortFilterElement(unsigned int index, RxBufferNumber whichBu
 {
 	if (index < config->numShortFilterElements)
 	{
-		debugPrintf("Set short filter\n");
 		FDCAN_FilterTypeDef efd;
 		efd.IdType = FDCAN_STANDARD_ID;
 		efd.FilterIndex = index;
@@ -660,7 +639,6 @@ void CanDevice::DisableExtendedFilterElement(unsigned int index) noexcept
 {
 	if (index < config->numExtendedFilterElements)
 	{
-		debugPrintf("disable filter %d\n", index);
 		FDCAN_FilterTypeDef efd;
 		efd.IdType = FDCAN_EXTENDED_ID;
 		efd.FilterIndex = index;
@@ -759,7 +737,6 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 	uint32_t jumpWidth = timing.jumpWidth;
 	uint32_t prescaler = 1;						// 48MHz main clock
 	uint32_t tseg2 = period - tseg1 - 1;
-	debugPrintf("Can timing before period %d tseg1 %d tseg2 %d jump %d prescale %d\n", (int)period, (int)tseg1, (int)tseg2, (int)jumpWidth, (int)prescaler);
 	for (;;)
 	{
 		tseg2 = period - tseg1 - 1;
@@ -776,9 +753,7 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 	}
 #if !SAME70
 	bitPeriod = period * prescaler;				// the actual CAN normal bit period, in 48MHz clocks
-	//bitPeriod = 1;
 #endif
-	debugPrintf("Can timing after period %d tseg1 %d tseg2 %d jump %d prescale %d\n", (int)period, (int)tseg1, (int)tseg2, (int)jumpWidth, (int)prescaler);
 	FDCAN_InitTypeDef& Init = hw.Init;
 	Init.NominalPrescaler = prescaler; /* tq = NominalPrescaler x (1/fdcan_ker_ck) */
 	Init.NominalSyncJumpWidth = jumpWidth;
@@ -974,7 +949,6 @@ extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 	}
 	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_MESSAGE_LOST) != 0)
 	{
-		canLostFifo0++;
 		dev->messagesLost++;
 	}
 }
@@ -988,7 +962,6 @@ extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 	}
 	if ((RxFifo1ITs & FDCAN_IT_RX_FIFO1_MESSAGE_LOST) != 0)
 	{
-		canLostFifo1++;
 		dev->messagesLost++;
 	}
 }
