@@ -65,11 +65,12 @@ MEMORY
     DTCMRAM	(xrw)	: ORIGIN = 0x20000000,	LENGTH = 128K
     ITCMRAM	(xrw)	: ORIGIN = 0x00000000,	LENGTH = 64K
     RAM_D1	(xrw)	: ORIGIN = 0x24000000,	LENGTH = 512K - 64K
-    RAM_D1NC (xrw)	: ORIGIN = 0x24070000,	LENGTH = 64K
+    /* We need buffer space that is not cached in D1 for use with SDIO and DMA */
+    RAM_D1NC (xrw): ORIGIN = 0x24070000,	LENGTH = 64K
     RAM_D2	(xrw)	: ORIGIN = 0x30000000,	LENGTH = 288K
     RAM_D3	(xrw)	: ORIGIN = 0x38000000,	LENGTH = 64K
-    /* We currently don't have a bootloader for the Fly H7 board so load us at the start address */
     FLASH	(rx)	: ORIGIN = 0x8020000,	LENGTH = 2048K - 128K - 128K
+    /* We currently don't have a bootloader for the Fly H7 board so load us at the start address */
     /*FLASH	(rx)	: ORIGIN = 0x8000000,	LENGTH = 2048K - 128K*/
     RESETDATA (rx) : ORIGIN = 0x81E0000, LENGTH = 128K
 
@@ -210,7 +211,6 @@ SECTIONS
 	{
         . = ALIGN(4);
         _szero_nocache2 = .;
-		*(.CanMessage .CanMessage.*)
 		*(.ram_nocache2 .ram_nocache2.*)
         . = ALIGN(4);
         _ezero_nocache2 = .;
