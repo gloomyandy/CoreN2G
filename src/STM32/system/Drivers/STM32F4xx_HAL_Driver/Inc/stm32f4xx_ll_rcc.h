@@ -102,9 +102,12 @@ typedef struct
   *           HW set-up.
   * @{
   */
+#if !HAL_RRF
+// We do not want to use default clock values ever!
 #if !defined  (HSE_VALUE)
 #define HSE_VALUE    25000000U  /*!< Value of the HSE oscillator in Hz */
 #endif /* HSE_VALUE */
+#endif
 
 #if !defined  (HSI_VALUE)
 #define HSI_VALUE    16000000U  /*!< Value of the HSI oscillator in Hz */

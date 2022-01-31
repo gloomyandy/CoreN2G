@@ -60,13 +60,16 @@
 /** @addtogroup STM32F4xx_System_Private_Includes
   * @{
   */
-
-
 #include "stm32f4xx.h"
 
+#if HAL_RRF
+// We do not want to use default HSE values
+#include "variant.h"
+#else
 #if !defined  (HSE_VALUE)
   #define HSE_VALUE    ((uint32_t)25000000) /*!< Default value of the External oscillator in Hz */
 #endif /* HSE_VALUE */
+#endif
 
 #if !defined  (HSI_VALUE)
   #define HSI_VALUE    ((uint32_t)16000000) /*!< Value of the Internal oscillator in Hz*/

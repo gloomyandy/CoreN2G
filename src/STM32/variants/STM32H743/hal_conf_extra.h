@@ -1,4 +1,5 @@
 #pragma once
+#include <variant.h>
 
 #define HAL_MODULE_ENABLED
 #define HAL_ADC_MODULE_ENABLED

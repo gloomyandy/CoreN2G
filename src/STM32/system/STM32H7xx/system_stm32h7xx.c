@@ -48,10 +48,14 @@
   */
 
 #include "stm32h7xx.h"
-
+#if HAL_RRF
+// We do not want to use default clock values ever, just in case!
+#include <variant.h>
+#else
 #if !defined  (HSE_VALUE)
 #define HSE_VALUE    ((uint32_t)25000000) /*!< Value of the External oscillator in Hz */
 #endif /* HSE_VALUE */
+#endif
 
 #if !defined  (CSI_VALUE)
   #define CSI_VALUE    ((uint32_t)4000000) /*!< Value of the Internal oscillator in Hz*/
