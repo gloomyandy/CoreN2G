@@ -67,7 +67,7 @@ extern "C" void SDIO_IRQHandler()
   HAL_SD_IRQHandler(&(HardwareSDIO::SDIO1.hsd));
 }
 
-void HardwareSDIO::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept
+void HardwareSDIO::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, NvicPriority prio, uint32_t dir, uint32_t minc) noexcept
 {
   hdma.Instance                 = inst;
   
@@ -90,6 +90,7 @@ void HardwareSDIO::initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *in
     debugPrintf("SDIO Failed to init DMA\n");
     delay(5000);
   }
+  NVIC_SetPriority(irq, prio);
   NVIC_EnableIRQ(irq);      
 }
 #endif
@@ -150,12 +151,16 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
   return sd_state;
 }
 
+void HardwareSDIO::InitPins(NvicPriority priority) noexcept
+{
+  this->priority = priority;
+}
 
 /**
   * @brief  Initializes the SD card device.
   * @retval SD status
   */
-uint8_t HardwareSDIO::Init(void) noexcept
+uint8_t HardwareSDIO::Init() noexcept
 {
   uint8_t sd_state = MSD_OK;
   /* Check if the SD card is plugged in the slot */
@@ -174,12 +179,14 @@ uint8_t HardwareSDIO::Init(void) noexcept
   pinmap_pinout(PC_12, PinMap_SD);
   pinmap_pinout(PD_2, PinMap_SD);
 #if STM32H7
+  NVIC_SetPriority(SDMMC1_IRQn, priority);
   NVIC_EnableIRQ(SDMMC1_IRQn);      
 #else
+  NVIC_SetPriority(SDIO_IRQn, priority);
   // DMA setup
   __HAL_RCC_DMA2_CLK_ENABLE();
-  initDmaStream(dmaRx, DMA2_Stream3, DMA_CHANNEL_4, DMA2_Stream3_IRQn, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
-  initDmaStream(dmaTx, DMA2_Stream6, DMA_CHANNEL_4, DMA2_Stream6_IRQn, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
+  initDmaStream(dmaRx, DMA2_Stream3, DMA_CHANNEL_4, DMA2_Stream3_IRQn, priority, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
+  initDmaStream(dmaTx, DMA2_Stream6, DMA_CHANNEL_4, DMA2_Stream6_IRQn, priority, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
   __HAL_LINKDMA(&hsd, hdmarx, dmaRx);
   __HAL_LINKDMA(&hsd, hdmatx, dmaTx);
 #endif

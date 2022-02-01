@@ -40,7 +40,7 @@ public:
     bool waitForTxEmpty() noexcept;
     void configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept; // Master mode
     void configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, bool hardwareCS) noexcept;
-    void initPins(Pin clk, Pin miso, Pin mosi, Pin cs = NoPin) noexcept;
+    void initPins(Pin sck, Pin miso, Pin mosi, Pin cs = NoPin, NvicPriority priority = -1) noexcept;
     void disable() noexcept;
     void flushRx() noexcept;
     void startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept;
@@ -74,7 +74,7 @@ private:
     bool usingDma;
     void configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, uint32_t dir, uint32_t minc) noexcept;
     void startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;
-    void initDma() noexcept;
+    void initDma(NvicPriority priority) noexcept;
 
 #if SPI1DMA
     friend void DMA2_Stream2_IRQHandler() noexcept;

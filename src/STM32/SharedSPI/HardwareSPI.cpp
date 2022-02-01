@@ -211,7 +211,7 @@ void transferComplete(HardwareSPI *spiDevice) noexcept
 }
 #endif
 
-void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs) noexcept
+void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, NvicPriority priority) noexcept
 {
     spi.pin_sclk = clk;
     spi.pin_miso = miso;
@@ -219,7 +219,7 @@ void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs) noexcept
     spi.pin_ssel = csPin = cs;
     if (usingDma)
     {
-        initDma();   
+        initDma(priority);   
     }
     initComplete = false;
 }
@@ -245,16 +245,19 @@ void HardwareSPI::configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef
     hdma.Init.PeriphBurst         = DMA_PBURST_SINGLE;
 }
 
-void HardwareSPI::initDma() noexcept
+void HardwareSPI::initDma(NvicPriority priority) noexcept
 {    
     __HAL_RCC_DMA2_CLK_ENABLE();
     __HAL_RCC_DMA1_CLK_ENABLE();
-    HAL_DMA_Init(&dmaRx); 
+    HAL_DMA_Init(&dmaRx);
+    NVIC_SetPriority(rxIrq, priority);
     NVIC_EnableIRQ(rxIrq);      
     __HAL_LINKDMA(&(spi.handle), hdmarx, dmaRx);
     HAL_DMA_Init(&dmaTx); 
+    NVIC_SetPriority(txIrq, priority);
     NVIC_EnableIRQ(txIrq);      
     __HAL_LINKDMA(&(spi.handle), hdmatx, dmaTx);
+    NVIC_SetPriority(spiIrq, priority);
     NVIC_EnableIRQ(spiIrq);      
 }
 

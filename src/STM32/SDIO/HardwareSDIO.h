@@ -30,7 +30,8 @@ class HardwareSDIO
 public:
     HardwareSDIO() noexcept;
 
-    uint8_t Init(void) noexcept;
+    void InitPins(NvicPriority priority) noexcept;
+    uint8_t Init() noexcept;
     uint8_t ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t NumOfBlocks, uint32_t Timeout) noexcept;
     uint8_t WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t NumOfBlocks, uint32_t Timeout) noexcept;
     uint8_t Erase(uint32_t StartAddr, uint32_t EndAddr) noexcept;
@@ -40,11 +41,12 @@ public:
     static HardwareSDIO SDIO1;
 
 private:
-    void initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, uint32_t dir, uint32_t minc) noexcept;
+    void initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, NvicPriority pri, uint32_t dir, uint32_t minc) noexcept;
     uint8_t tryInit(bool highspeed) noexcept;
     SD_HandleTypeDef hsd;
     DMA_HandleTypeDef dmaRx;
     DMA_HandleTypeDef dmaTx;
+    NvicPriority priority;
 #ifdef RTOS
     TaskHandle waitingTask;
 #endif

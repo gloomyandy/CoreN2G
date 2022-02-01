@@ -26,7 +26,7 @@ bool SoftwareSPI::waitForTxEmpty() noexcept
 }
 
 
-void SoftwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs) noexcept
+void SoftwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, NvicPriority priority) noexcept
 {
     this->sck = clk;
     this->miso = miso;
