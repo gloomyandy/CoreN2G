@@ -1,4 +1,5 @@
 
+#if USE_SDIO
 #include "HardwareSDIO.h"
 #include "CoreImp.h"
 #ifdef RTOS
@@ -369,3 +370,4 @@ uint8_t HardwareSDIO::IsDetected(void) noexcept
   __IO uint8_t status = SD_PRESENT;
   return status;
 }
+#endif

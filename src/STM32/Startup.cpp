@@ -30,12 +30,19 @@
 void initVariant() __attribute__((weak));
 void initVariant() { }
 
+// Weak empty pre init to allow the app to operate before
+// we set clocks etc. Used by bootloader
+void AppPreInit() __attribute__((weak));
+void AppPreInit() { }
+
 // Force init to be called *first*, i.e. before static object allocation.
 // Otherwise, statically allocated objects that need HAL may fail.
 __attribute__((constructor(101))) void premain()
 {
   // Make sure that we run the startup code with interrupts disabled
   IrqDisable();
+  // Allow App to get in very early
+  AppPreInit();
   // Required by FreeRTOS, see http://www.freertos.org/RTOS-Cortex-M3-M4.html
 #ifdef NVIC_PRIORITYGROUP_4
   HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);

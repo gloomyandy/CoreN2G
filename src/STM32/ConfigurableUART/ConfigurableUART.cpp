@@ -1,12 +1,18 @@
 //author: sdavi
+#if USE_UART0 || USE_UART1 || USE_UART2
 #include <CoreImp.h>
 #include "ConfigurableUART.h"
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
-
+#if USE_UART0
 ConfigurableUART UART_Slot0;
+#endif
+#if USE_UART1
 ConfigurableUART UART_Slot1;
+#endif
+#if USE_UART2
 ConfigurableUART UART_Slot2;
+#endif
 
 
 
@@ -289,3 +295,4 @@ ConfigurableUART::Errors ConfigurableUART::GetAndClearErrors() noexcept
     }
 	return errs;
 }
+#endif

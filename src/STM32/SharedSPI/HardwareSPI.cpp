@@ -28,7 +28,7 @@ point.
 
 Andy - 6/8/2020
 */
-
+#if USE_SSP1 || USE_SSP2 || USE_SSP3 || USE_SSP4 || USE_SSP5 || USE_SSP6
 // Create SPI devices the actual configuration is set later
 #if STM32H7
 // On the H7 we need to make sure that and dma address is within a none cached memory area
@@ -38,22 +38,38 @@ static constexpr uint32_t MinDMALength = 16;
 #define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_nocache_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache_ram_end)))
 
 // Create SPI devices the actual configuration is set later
+#if USE_SSP1
 HardwareSPI HardwareSPI::SSP1(SPI1);
+#endif
+#if USE_SSP2
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
+#endif
+#if USE_SSP3
 HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_REQUEST_SPI3_RX, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_REQUEST_SPI3_TX, DMA1_Stream5_IRQn);
+#endif
+#if USE_SSP4
 HardwareSPI HardwareSPI::SSP4(SPI4, SPI4_IRQn, DMA1_Stream1, DMA_REQUEST_SPI4_RX, DMA1_Stream1_IRQn, DMA1_Stream2, DMA_REQUEST_SPI4_TX, DMA1_Stream2_IRQn);
+#endif
+#if USE_SSP5
 HardwareSPI HardwareSPI::SSP5(SPI5);
+#endif
+#if USE_SSP6
 HardwareSPI HardwareSPI::SSP6(SPI6);
+#endif
 #else
 static constexpr uint32_t MinDMALength = 0;
 #define CAN_USE_DMA(ptr, len) (true)
 
 // Create SPI devices the actual configuration is set later
-#ifdef RTOS
+#if USE_SSP1
 HardwareSPI HardwareSPI::SSP1(SPI1);
 #endif
+#if USE_SSP2
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
+#endif
+#if USE_SSP3
 HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_CHANNEL_0, DMA1_Stream0_IRQn, DMA1_Stream5, DMA_CHANNEL_0, DMA1_Stream5_IRQn);
+#endif
 #endif
 
 //#define SSPI_DEBUG
@@ -431,3 +447,4 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
         return SPI_OK;
     }
 }
+#endif
