@@ -33,7 +33,7 @@
 #ifdef RTOS
 #include <HybridPWM.h>
 #endif
-static WWDG_HandleTypeDef wdHandle;
+static IWDG_HandleTypeDef wdHandle;
 #elif LPC17xx
 #include <CoreImp.h>
 #endif
@@ -652,20 +652,14 @@ void WatchdogInit() noexcept
 	WDT->WDT_MR = WDT_MR_WDRSTEN | WDT_MR_WDV(watchdogTicks) | WDT_MR_WDD(watchdogTicks);
 #elif STM32F4
 #if STM32H7
-    wdHandle.Instance = WWDG1;
-    wdHandle.Init.Prescaler = WWDG_PRESCALER_128;
+    wdHandle.Instance = IWDG1;
+	wdHandle.Init.Window = IWDG_WINDOW_DISABLE;
 #else
-    wdHandle.Instance = WWDG;
-    wdHandle.Init.Prescaler = WWDG_PRESCALER_8;
+    wdHandle.Instance = IWDG;
 #endif
-    wdHandle.Init.Window = 0x7f;
-    wdHandle.Init.Counter = 0x7f;
-    wdHandle.Init.EWIMode = WWDG_EWI_ENABLE;
-    __HAL_RCC_WWDG_CLK_ENABLE();
-    HAL_WWDG_Init(&wdHandle);
-    __HAL_WWDG_ENABLE_IT(&wdHandle, WWDG_IT_EWI);
-    __HAL_WWDG_ENABLE(&wdHandle);
-    NVIC_EnableIRQ(WWDG_IRQn);
+	wdHandle.Init.Reload = IWDG_RLR_RL;
+    wdHandle.Init.Prescaler = IWDG_PRESCALER_16;
+    HAL_IWDG_Init(&wdHandle);
 #elif LPC17xx
     Chip_WWDT_SelClockSource(LPC_WWDT, WWDT_CLKSRC_WATCHDOG_PCLK); // Set CLK src to PCLK
 
@@ -689,7 +683,7 @@ void WatchdogReset() noexcept
 #elif SAME70 || SAM4E || SAM4S
 	WDT->WDT_CR = WDT_CR_KEY_PASSWD | WDT_CR_WDRSTT;
 #elif STM32F4
-    HAL_WWDG_Refresh(&wdHandle);
+    HAL_IWDG_Refresh(&wdHandle);
 #elif LPC17xx
     Chip_WWDT_Feed(LPC_WWDT);
 #endif
@@ -698,7 +692,6 @@ void WatchdogReset() noexcept
 #if STM32F4
 void WatchdogDisable() noexcept
 {
-    __HAL_RCC_WWDG_CLK_DISABLE();
 }
 #endif
 
