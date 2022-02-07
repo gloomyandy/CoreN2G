@@ -273,8 +273,10 @@ void HardwareSPI::initDma(NvicPriority priority) noexcept
     NVIC_SetPriority(txIrq, priority);
     NVIC_EnableIRQ(txIrq);      
     __HAL_LINKDMA(&(spi.handle), hdmatx, dmaTx);
+#if STM32H7
     NVIC_SetPriority(spiIrq, priority);
-    NVIC_EnableIRQ(spiIrq);      
+    NVIC_EnableIRQ(spiIrq);
+#endif
 }
 
 void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, bool hardwareCS) noexcept
