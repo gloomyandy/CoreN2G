@@ -83,21 +83,35 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
   pin_speed(PC_12, speed);
   pin_speed(PD_2, speed);
   #endif
-
   /* HAL SD initialization */
+  __HAL_RCC_SDIO_FORCE_RESET();
+  __HAL_RCC_SDIO_RELEASE_RESET();
   hsd.Instance = SDIO;
-  hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
-  hsd.Init.ClockBypass = (highspeed ? SDIO_CLOCK_BYPASS_ENABLE : SDIO_CLOCK_BYPASS_DISABLE);
-  hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
-  hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
   hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
   hsd.Init.ClockDiv = 0;
+  hsd.Init.ClockBypass = (highspeed ? SDIO_CLOCK_BYPASS_ENABLE : SDIO_CLOCK_BYPASS_DISABLE);
+  hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
+  hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
+  hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
+
   sd_state = HAL_SD_Init(&hsd);
+  // HAL_SD_Init does not report an error if there is no card to talk to, HAL_SD_InitCard
+  // does, so call that to check.
+  if (sd_state == MSD_OK)
+  {
+    sd_state = HAL_SD_InitCard(&hsd);
+    if (sd_state != MSD_OK)
+      debugPrintf("HAL_SD_InitCard returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
+  }
+  else
+    debugPrintf("HAL_SD_Init returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
+
   /* Configure SD Bus width (4 bits mode selected) */
   if (sd_state == MSD_OK) {
     /* Enable wide operation */
-    if (HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B) != HAL_OK) {
-      debugPrintf("Failed to select wide bus mode highspeed %d\n", highspeed);
+    sd_state = HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B);
+    if (sd_state != HAL_OK) {
+      debugPrintf("Failed to select wide bus mode highspeed %d ret %x code %x\n", highspeed, sd_state, (unsigned)HAL_SD_GetError(&hsd));
       sd_state = MSD_ERROR;
     }
   }
