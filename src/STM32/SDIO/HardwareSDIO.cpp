@@ -113,7 +113,6 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
   pin_speed(PC_12, speed);
   pin_speed(PD_2, speed);
   #endif
-
   /* HAL SD initialization */
 #if STM32H7
   __HAL_RCC_SDMMC1_FORCE_RESET();
@@ -144,7 +143,6 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
   }
   else
     debugPrintf("HAL_SD_Init returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
-
 
   /* Configure SD Bus width (4 bits mode selected) */
   if (sd_state == MSD_OK) {
