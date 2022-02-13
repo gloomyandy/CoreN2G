@@ -139,9 +139,15 @@ g_pfnVectors:
   .word  MemManage_Handler
   .word  BusFault_Handler
   .word  UsageFault_Handler
+#if HAL_RRF
+  .word  _firmware_crc
+  .word  VersionText
+  .word  g_pfnVectors
+#else
   .word  0
   .word  0
   .word  0
+#endif
   .word  0
   .word  SVC_Handler
   .word  DebugMon_Handler

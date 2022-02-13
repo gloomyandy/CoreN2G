@@ -50,7 +50,7 @@ RRF_INCLUDES += -I$(RRF_SRC_BASE)/targets/
 ifeq ($(NETWORK), WIFI)
 	RRF_INCLUDES += -IDuetWiFiSocketServer/src/include
 endif
-
+RRF_INCLUDES += -IIAP/src
 #end RRF
 
 #Libc and libcpp in RRF

@@ -5,8 +5,6 @@
 /* Entry Point */
 ENTRY(Reset_Handler)
 
-/* Highest address of the user mode stack */
-_estack = 0x2001fffc;    /* end of RAM */
 /* Highest address in CCMRAM */
 _ccmramend = 0x1000fffc;
 
@@ -110,6 +108,7 @@ SECTIONS
     . = ALIGN(4);
     _edata = .;        /* define a global symbol at data end */
   } >RAM AT> FLASH
+  _firmware_end = _sidata + (_edata - _sdata);
 
   _siccmram = LOADADDR(.ccmram);
 
@@ -129,7 +128,6 @@ SECTIONS
     . = ALIGN(4);
     _eccmram = .;       /* create a global symbol at ccmram end */
   } >CCMRAM AT> FLASH
-
 
   /* Uninitialized data section */
   . = ALIGN(4);
@@ -167,4 +165,10 @@ SECTIONS
   }
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
+
+  /* Provide system stack location, some bootloaders do not like a stack right at end of RAM */
+  PROVIDE(_estack = ORIGIN(RAM) + LENGTH(RAM) - 4);
+  PROVIDE(_firmware_crc = _firmware_end);
+  PROVIDE(_ccmramend = ORIGIN(CCMRAM) + LENGTH(CCMRAM));
+
 }
