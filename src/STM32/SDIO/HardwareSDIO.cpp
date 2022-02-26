@@ -114,47 +114,59 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
   pin_speed(PD_2, speed);
   #endif
   /* HAL SD initialization */
+  int retryCnt = 0;
+  do {
+    if (retryCnt > 0) debugPrintf("SDIO Init: retry %d\n", retryCnt);
 #if STM32H7
-  __HAL_RCC_SDMMC1_FORCE_RESET();
-  __HAL_RCC_SDMMC1_RELEASE_RESET();
-  hsd.Instance = SDMMC1;
-  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
-  hsd.Init.ClockDiv = 2;
+    __HAL_RCC_SDMMC1_FORCE_RESET();
+    __HAL_RCC_SDMMC1_RELEASE_RESET();
+    hsd.Instance = SDMMC1;
+    hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
+    hsd.Init.ClockDiv = 2;
 #else
-  __HAL_RCC_SDIO_FORCE_RESET();
-  __HAL_RCC_SDIO_RELEASE_RESET();
-  hsd.Instance = SDIO;
-  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
-  hsd.Init.ClockDiv = 0;
-  hsd.Init.ClockBypass = (highspeed ? SDIO_CLOCK_BYPASS_ENABLE : SDIO_CLOCK_BYPASS_DISABLE);
+    __HAL_RCC_SDIO_FORCE_RESET();
+    __HAL_RCC_SDIO_RELEASE_RESET();
+    hsd.Instance = SDIO;
+    hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
+    hsd.Init.ClockDiv = 0;
+    hsd.Init.ClockBypass = (highspeed ? SDIO_CLOCK_BYPASS_ENABLE : SDIO_CLOCK_BYPASS_DISABLE);
 #endif
-  hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
-  hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
-  hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
+    hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
+    hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
+    hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
 
-  sd_state = HAL_SD_Init(&hsd);
-  // HAL_SD_Init does not report an error if there is no card to talk to, HAL_SD_InitCard
-  // does, so call that to check.
-  if (sd_state == MSD_OK)
-  {
-    sd_state = HAL_SD_InitCard(&hsd);
-    if (sd_state != MSD_OK)
-      debugPrintf("HAL_SD_InitCard returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
-  }
-  else
-    debugPrintf("HAL_SD_Init returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
-
-  /* Configure SD Bus width (4 bits mode selected) */
-  if (sd_state == MSD_OK) {
-    /* Enable wide operation */
-    sd_state = HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B);
-    if (sd_state != HAL_OK) {
-      debugPrintf("Failed to select wide bus mode highspeed %d ret %x code %x\n", highspeed, sd_state, (unsigned)HAL_SD_GetError(&hsd));
-      sd_state = MSD_ERROR;
+    sd_state = HAL_SD_Init(&hsd);
+    // HAL_SD_Init does not report an error if there is no card to talk to, HAL_SD_InitCard
+    // does, so call that to check.
+    if (sd_state == MSD_OK)
+    {
+      sd_state = HAL_SD_InitCard(&hsd);
+      if (sd_state != MSD_OK)
+        debugPrintf("HAL_SD_InitCard returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
     }
-  }
+    else
+      debugPrintf("HAL_SD_Init returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
 
-  return sd_state;
+    /* Configure SD Bus width (4 bits mode selected) */
+    if (sd_state == MSD_OK) {
+      /* Enable wide operation */
+      sd_state = HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B);
+      if (sd_state != HAL_OK) {
+        debugPrintf("Failed to select wide bus mode highspeed %d ret %x code %x\n", highspeed, sd_state, (unsigned)HAL_SD_GetError(&hsd));
+        if (retryCnt < 2)
+        {
+          // Something odd going on deinit and try again
+          sd_state = HAL_SD_DeInit(&hsd);
+          debugPrintf("HAL_SD_DeInit returns %x\n", (unsigned) sd_state);
+          sd_state = MSD_ERROR;
+        }
+        else
+          // give up and try to use single bit mode
+          sd_state = MSD_OK;
+      }
+    }
+  } while (sd_state != MSD_OK && retryCnt++ < 2);
+  return sd_state == MSD_OK ? MSD_OK : MSD_ERROR;
 }
 
 void HardwareSDIO::InitPins(NvicPriority priority) noexcept
