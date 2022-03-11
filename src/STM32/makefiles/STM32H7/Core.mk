@@ -2,8 +2,8 @@ CORE_DIR = $(CORESTM_DIR)
 
 
 #Core
-CORE_SRC_DIRS  = src src/STM32 src/STM32/usb src/STM32/usb/cdc
-CORE_SRC_DIRS += src/STM32/system src/STM32/system/STM32H7xx src/STM32/system/Middlewares/ST/STM32_USB_Device_Library/Core/Inc src/STM32/system/Middlewares/ST/STM32_USB_Device_Library/Core/Src 
+CORE_SRC_DIRS  = src src/STM32 src/STM32/usb2
+CORE_SRC_DIRS += src/STM32/system src/STM32/system/STM32H7xx 
 CORE_SRC_DIRS += src/STM32/system/Drivers/CMSIS/Device/ST/STM32H7xx/Include src/STM32/system/Drivers/CMSIS/Device/ST/STM32H7xx/Source
 CORE_SRC_DIRS += src/STM32/system/Drivers/STM32H7xx_HAL_Driver/Inc src/STM32/system/Drivers/STM32H7xx_HAL_Driver/Src
 CORE_SRC_DIRS += src/STM32/system/CMSIS/CMSIS/Core/Include src/STM32/system/Drivers/CMSIS/Device/ST/STM32H7xx/Source/Templates/gcc

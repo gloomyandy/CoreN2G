@@ -19,9 +19,7 @@
 #if defined (USBCON) && defined(USBD_USE_CDC)
 
 #include "USBSerial.h"
-#include "usbd_cdc.h"
-#include "usbd_cdc_if.h"
-#include "usbd_desc.h"
+#include "usbinterface.h"
 #include "CoreImp.h"
 
 extern __IO  uint32_t lineState;
@@ -31,7 +29,7 @@ void serialEventUSB() __attribute__((weak));
 
 void USBSerial::begin(void) noexcept
 {
-  CDC_init();
+  usb_init();
 }
 
 void USBSerial::begin(uint32_t /* baud_count */) noexcept
@@ -48,13 +46,13 @@ void USBSerial::begin(uint32_t /* baud_count */, uint8_t /* config */) noexcept
 
 void USBSerial::end() noexcept
 {
-  CDC_deInit();
+  //CDC_deInit();
 }
 
 int USBSerial::availableForWrite() noexcept
 {
   // Just transmit queue size, available for write
-  return static_cast<int>(CDC_TransmitQueue_WriteSize(&TransmitQueue));
+  return (int)usb_available_for_write();
 }
 
 size_t USBSerial::write(uint8_t ch) noexcept
@@ -66,9 +64,9 @@ size_t USBSerial::write(uint8_t ch) noexcept
 size_t USBSerial::write(const uint8_t *buffer, size_t size) noexcept
 {
   size_t rest = size;
-  while (rest > 0 && CDC_connected()) {
+  while (rest > 0 && usb_is_connected()) {
     // Determine buffer size available for write
-    auto portion = (size_t)CDC_TransmitQueue_WriteSize(&TransmitQueue);
+    auto portion = (size_t)usb_available_for_write();
     // Truncate it to content size (if rest is greater)
     if (rest < portion) {
       portion = rest;
@@ -78,11 +76,9 @@ size_t USBSerial::write(const uint8_t *buffer, size_t size) noexcept
       // TS: Only main thread calls write and writeSize methods,
       // it's thread-safe since IRQ does not affects
       // TransmitQueue write position
-      CDC_TransmitQueue_Enqueue(&TransmitQueue, buffer, portion);
+      usb_write(buffer, portion);
       rest -= portion;
       buffer += portion;
-      // After storing data, start transmitting process
-      CDC_continue_transmit();
     }
   }
   return size - rest;
@@ -91,27 +87,22 @@ size_t USBSerial::write(const uint8_t *buffer, size_t size) noexcept
 int USBSerial::available(void) noexcept
 {
   // Just ReceiveQueue size, available for reading
-  return static_cast<int>(CDC_ReceiveQueue_ReadSize(&ReceiveQueue));
+  return static_cast<int>(usb_available_for_read());
 }
 
 int USBSerial::read(void) noexcept
 {
   // Dequeue only one char from queue
   // TS: it safe, because only main thread affects ReceiveQueue->read pos
-  auto ch = CDC_ReceiveQueue_Dequeue(&ReceiveQueue);
-  // Resume receive process, if possible
-  CDC_resume_receive();
-  return ch;
+  uint8_t ch;
+  uint32_t ret = usb_read(&ch, 1);
+  if (ret == 0) return -1;
+  return (int)ch;
 }
 
 size_t USBSerial::readBytes(char *buffer, size_t length) noexcept
 {
-  uint16_t read;
-  auto rest = static_cast<uint16_t>(length);
-  read = CDC_ReceiveQueue_Read(&ReceiveQueue, reinterpret_cast<uint8_t *>(buffer), rest);
-  // Resume receive process, if possible
-  CDC_resume_receive();
-  return read;
+  return usb_read((uint8_t *)buffer, length);
 #if 0
   _startMillis = millis();
   do {
@@ -130,14 +121,14 @@ size_t USBSerial::readBytes(char *buffer, size_t length) noexcept
 int USBSerial::peek(void) noexcept
 {
   // Peek one symbol, it can't change receive avaiablity
-  return CDC_ReceiveQueue_Peek(&ReceiveQueue);
+  return -1;
 }
 
 void USBSerial::flush(void) noexcept
 {
   // Wait for TransmitQueue read size becomes zero
   // TS: safe, because it not be stopped while receive 0
-  while (CDC_TransmitQueue_ReadSize(&TransmitQueue) > 0) {}
+  while (!usb_is_write_empty()) {}
 }
 
 uint32_t USBSerial::baud() noexcept
@@ -182,7 +173,7 @@ USBSerial::operator bool() noexcept
 
 bool USBSerial::IsConnected() noexcept
 {
-  return lineState == 1;
+  return usb_is_connected();
 }
 
 #endif // USBCON && USBD_USE_CDC

@@ -21,7 +21,7 @@
 
 #if defined (USBCON) && defined(USBD_USE_CDC)
 #include "Stream.h"
-#include "usbd_core.h"
+//#include "usbd_core.h"
 
 //================================================================================
 // Serial over CDC

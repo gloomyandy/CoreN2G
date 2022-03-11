@@ -19,7 +19,7 @@
 
 
 #include "CoreImp.h"
-#include "usbd_if.h"
+//#include "usbd_if.h"
 #include "dwt.h"
 
 //extern void __libc_init_array(void);
