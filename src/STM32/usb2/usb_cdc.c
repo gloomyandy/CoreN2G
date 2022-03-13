@@ -25,7 +25,19 @@
 // console.py using UART to see those output() messages.
 //#define console_sendf(ce,va) console_sendf_usb(ce,va)
 //#define command_find_and_dispatch(rb, rp, pc) ({*(pc) = rp; 1;})
+#define OTG_IRQn OTG_FS_IRQn
 
+void
+usb_irq_disable(void)
+{
+    NVIC_DisableIRQ(OTG_IRQn);
+}
+
+void
+usb_irq_enable(void)
+{
+    NVIC_EnableIRQ(OTG_IRQn);
+}
 
 /****************************************************************
  * Message block sending
@@ -33,14 +45,6 @@
 
 static uint8_t transmit_buf[192], transmit_pos;
 bool bulk_in_ready = false;
-
-void
-usb_notify_bulk_in(void)
-{
-    // FIXME
-    //sched_wake_task(&usb_bulk_in_wake);
-    bulk_in_ready = true;
-}
 
 // FIXME protect buffers
 void
@@ -51,25 +55,38 @@ usb_bulk_in_task(void)
     //if (!sched_check_wake(&usb_bulk_in_wake))
         //return;
     uint_fast8_t tpos = transmit_pos;
-    if (!tpos)
-        return;
-    uint_fast8_t max_tpos = (tpos > USB_CDC_EP_BULK_IN_SIZE
-                             ? USB_CDC_EP_BULK_IN_SIZE : tpos);
-    int_fast8_t ret = usb_send_bulk_in(transmit_buf, max_tpos);
-    if (ret <= 0)
-        return;
-    uint_fast8_t needcopy = tpos - ret;
+    uint_fast8_t offset = 0;
+    while (tpos - offset > 0)
+    {
+        uint_fast8_t max_tpos = (tpos > USB_CDC_EP_BULK_IN_SIZE
+                                ? USB_CDC_EP_BULK_IN_SIZE : tpos);
+        int_fast8_t ret = usb_send_bulk_in(transmit_buf + offset, max_tpos);
+        if (ret <= 0)
+            break;
+        offset += ret;
+    }
+    uint_fast8_t needcopy = tpos - offset;
     if (needcopy) {
-        memmove(transmit_buf, &transmit_buf[ret], needcopy);
-        usb_notify_bulk_in();
+        memmove(transmit_buf, &transmit_buf[offset], needcopy);
+        //usb_notify_bulk_in();
     }
     transmit_pos = needcopy;
+}
+
+void
+usb_notify_bulk_in(void)
+{
+    // FIXME
+    //sched_wake_task(&usb_bulk_in_wake);
+    bulk_in_ready = true;
+    usb_bulk_in_task();
 }
 
 // Encode and transmit a "response" message
 uint32_t
 usb_write(const uint8_t *buf, uint32_t cnt)
 {
+    usb_irq_disable();
     // Verify space for message
     uint_fast8_t tpos = transmit_pos;
     if (tpos + cnt > sizeof(transmit_buf))
@@ -83,6 +100,7 @@ usb_write(const uint8_t *buf, uint32_t cnt)
     // Start message transmit
     usb_notify_bulk_in();
     usb_spin();
+    usb_irq_enable();
     return cnt;
 }
 
@@ -108,13 +126,6 @@ static uint8_t receive_buf[128], receive_pos;
 bool bulk_out_ready = false;
 
 void
-usb_notify_bulk_out(void)
-{
-    //sched_wake_task(&usb_bulk_out_wake);
-    bulk_out_ready = true;
-}
-
-void
 usb_bulk_out_task(void)
 {
     if (!bulk_out_ready) return;
@@ -123,20 +134,31 @@ usb_bulk_out_task(void)
         //return;
     // Read data
     uint_fast8_t rpos = receive_pos;
-    if (rpos + USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf)) {
+    while (rpos + USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf)) {
         int_fast8_t ret = usb_read_bulk_out(
             &receive_buf[rpos], USB_CDC_EP_BULK_OUT_SIZE);
         if (ret > 0) {
             rpos += ret;
-            usb_notify_bulk_out();
+            //usb_notify_bulk_out();
         }
+        else
+            break;
     }
     receive_pos = rpos;
+}
+
+void
+usb_notify_bulk_out(void)
+{
+    //sched_wake_task(&usb_bulk_out_wake);
+    bulk_out_ready = true;
+    usb_bulk_out_task();
 }
 
 uint32_t
 usb_read(uint8_t *buf, uint32_t cnt)
 {
+    usb_irq_disable();
     usb_spin();
     uint8_t rpos = receive_pos;
     if (rpos > 0 && cnt > 0)
@@ -151,16 +173,18 @@ usb_read(uint8_t *buf, uint32_t cnt)
         }
         else
             receive_pos = 0;
-        usb_notify_bulk_out();
-        return cnt;
     }
-    return 0;
+    else
+        cnt = 0;
+    usb_notify_bulk_out();
+    usb_irq_enable();
+    return cnt;
 }
 
 uint32_t
 usb_available_for_read()
 {
-    usb_spin();
+    //usb_spin();
     return receive_pos;
 }
 
@@ -555,13 +579,6 @@ usb_state_ready(void)
 bool ep0_ready = false;
  
 void
-usb_notify_ep0(void)
-{
-    ep0_ready = true;
-    //sched_wake_task(&usb_ep0_wake);
-}
-
-void
 usb_ep0_task(void)
 {
     if (!ep0_ready) return;
@@ -570,6 +587,14 @@ usb_ep0_task(void)
         usb_do_xfer(usb_xfer_data, usb_xfer_size, usb_xfer_flags);
     else
         usb_state_ready();
+}
+
+void
+usb_notify_ep0(void)
+{
+    ep0_ready = true;
+    usb_ep0_task();
+    //sched_wake_task(&usb_ep0_wake);
 }
 
 void
@@ -583,8 +608,8 @@ usb_shutdown(void)
 void
 usb_spin()
 {
-    usb_bulk_out_task();
-    usb_bulk_in_task();
-    usb_ep0_task();
+    //usb_bulk_out_task();
+    //usb_bulk_in_task();
+    //usb_ep0_task();
 }    
 
