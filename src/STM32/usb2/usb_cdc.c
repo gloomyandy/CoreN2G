@@ -16,15 +16,7 @@
 #define PROGMEM
 #define NEED_PROGMEM 0
 #define READP(VAR) VAR
-#define CONFIG_USB_SERIAL_NUMBER_CHIPID 0
-// To debug a USB connection over UART, uncomment the two macros
-// below, alter the board KConfig to "select USBSERIAL" on a serial
-// UART build (so both USB and UART are enabled in a single build),
-// compile the code using serial UART, add output() calls to the USB
-// code as needed, deploy the new binary, and then connect via
-// console.py using UART to see those output() messages.
-//#define console_sendf(ce,va) console_sendf_usb(ce,va)
-//#define command_find_and_dispatch(rb, rp, pc) ({*(pc) = rp; 1;})
+
 #define OTG_IRQn OTG_FS_IRQn
 
 void
@@ -192,14 +184,13 @@ usb_available_for_read()
 /****************************************************************
  * USB descriptors
  ****************************************************************/
-// For now use ST ids
-#define CONFIG_USB_VENDOR_ID USBD_VID
-#define CONFIG_USB_DEVICE_ID 0x5740
+// Use v-usb CDC ACM Ids
+#define USB_VENDOR_ID 0x16c0
+#define USB_DEVICE_ID 0x27dd
 #define CONCAT1(a, b) a ## b
 #define CONCAT(a, b) CONCAT1(a, b)
-#define USB_STR_MANUFACTURER u"STMicroelectronics"
+#define USB_STR_MANUFACTURER u"RepRapFirmware"
 #define USB_STR_PRODUCT CONCAT(u,USB_PRODUCT)
-#define USB_STR_SERIAL CONCAT(u,"0001")
 
 // String descriptors
 enum {
@@ -232,15 +223,6 @@ static const struct usb_string_descriptor cdc_string_product PROGMEM = {
     .data = USB_STR_PRODUCT,
 };
 
-#define SIZE_cdc_string_serial \
-    (sizeof(cdc_string_serial) + sizeof(USB_STR_SERIAL) - 2)
-
-static const struct usb_string_descriptor cdc_string_serial PROGMEM = {
-    .bLength = SIZE_cdc_string_serial,
-    .bDescriptorType = USB_DT_STRING,
-    .data = USB_STR_SERIAL,
-};
-
 // Device descriptor
 static const struct usb_device_descriptor cdc_device_descriptor PROGMEM = {
     .bLength = sizeof(cdc_device_descriptor),
@@ -248,8 +230,8 @@ static const struct usb_device_descriptor cdc_device_descriptor PROGMEM = {
     .bcdUSB = cpu_to_le16(0x0200),
     .bDeviceClass = USB_CLASS_COMM,
     .bMaxPacketSize0 = USB_CDC_EP0_SIZE,
-    .idVendor = cpu_to_le16(USBD_VID),
-    .idProduct = cpu_to_le16(CONFIG_USB_DEVICE_ID),
+    .idVendor = cpu_to_le16(USB_VENDOR_ID),
+    .idProduct = cpu_to_le16(USB_DEVICE_ID),
     .bcdDevice = cpu_to_le16(0x0100),
     .iManufacturer = USB_STR_ID_MANUFACTURER,
     .iProduct = USB_STR_ID_PRODUCT,
@@ -353,11 +335,7 @@ static const struct descriptor_s {
     { (USB_DT_STRING<<8) | USB_STR_ID_MANUFACTURER, USB_LANGID_ENGLISH_US,
       &cdc_string_manufacturer, SIZE_cdc_string_manufacturer },
     { (USB_DT_STRING<<8) | USB_STR_ID_PRODUCT, USB_LANGID_ENGLISH_US,
-      &cdc_string_product, SIZE_cdc_string_product },
-#if !CONFIG_USB_SERIAL_NUMBER_CHIPID
-    { (USB_DT_STRING<<8) | USB_STR_ID_SERIAL, USB_LANGID_ENGLISH_US,
-      &cdc_string_serial, SIZE_cdc_string_serial },
-#endif
+      &cdc_string_product, SIZE_cdc_string_product }
 };
 
 // Fill in a USB serial string descriptor from a chip id
@@ -375,6 +353,19 @@ usb_fill_serial(struct usb_string_descriptor *desc, int strlen, void *id)
     }
 }
 
+#define CHIP_UID_LEN 12
+
+static struct {
+    struct usb_string_descriptor desc;
+    uint16_t data[CHIP_UID_LEN * 2];
+} cdc_chipid;
+
+struct usb_string_descriptor *
+usbserial_get_serialid(void)
+{
+    usb_fill_serial(&cdc_chipid.desc, ARRAY_SIZE(cdc_chipid.data), (void *)UID_BASE);
+    return &cdc_chipid.desc;
+}
 
 /****************************************************************
  * USB endpoint 0 control message handling
@@ -460,8 +451,7 @@ usb_req_get_descriptor(struct usb_ctrlrequest *req)
             desc = (void*)READP(d->desc);
         }
     }
-    if (CONFIG_USB_SERIAL_NUMBER_CHIPID
-        && req->wValue == ((USB_DT_STRING<<8) | USB_STR_ID_SERIAL)
+    if (req->wValue == ((USB_DT_STRING<<8) | USB_STR_ID_SERIAL)
         && req->wIndex == USB_LANGID_ENGLISH_US) {
             struct usb_string_descriptor *usbserial_serialid;
             usbserial_serialid = usbserial_get_serialid();

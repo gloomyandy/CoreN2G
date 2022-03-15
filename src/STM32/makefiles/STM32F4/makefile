@@ -73,8 +73,7 @@ FLAGS  += -DUSE_UART0=1 -DUSE_UART1=1 -DUSE_UART2=1
 FLAGS  += -DUSE_SSP1=1 -DUSE_SSP2=1 -DUSE_SSP3=1 -DUSE_SWSPI=1
 # SDIO configuration
 FLAGS  += -DUSE_SDIO=1
-#RTOS + enable mods to RTOS+TCP for RRF
-FLAGS += -DRTOS -DFREERTOS_USED -DUSBCON -DUSBD_USE_CDC -DUSBD_VID=0x0483 -DTIM_IRQ_PRIO=13 -DUSB_PRODUCT=\"STM32F407ZG\" -DVECT_TAB_OFFSET=0x8000
+FLAGS += -DRTOS -DFREERTOS_USED -DUSBCON -DUSBD_USE_CDC -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x8000
 FLAGS += -DHAL_RRF=1
 FLAGS +=  -Wall -c -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m4 -mthumb -ffunction-sections -fdata-sections
 FLAGS += -nostdlib -Wdouble-promotion -fsingle-precision-constant -fstack-usage
