@@ -55,10 +55,11 @@ void UniqueIdBase::SetFromCurrentBoard() noexcept
 		SetChecksumWord();
 	}
 #elif STM32F4
-	for (size_t i = 0; i < 4; ++i)
+	for (size_t i = 0; i < 3; ++i)
 	{
-		data[i] = i;
+		data[i] = ((uint32_t *)UID_BASE)[i];
 	}
+	data[3] = data[0] ^ data[2] ^ ~data[1];
 	SetChecksumWord();
 
 #else
