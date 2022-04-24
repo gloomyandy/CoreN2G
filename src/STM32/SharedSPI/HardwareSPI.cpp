@@ -34,7 +34,7 @@ Andy - 6/8/2020
 // On the H7 we need to make sure that and dma address is within a none cached memory area
 extern uint32_t _nocache_ram_start;
 extern uint32_t _nocache_ram_end;
-static constexpr uint32_t MinDMALength = 16;
+static constexpr uint32_t MinDMALength = 4;
 #define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_nocache_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache_ram_end)))
 
 // Create SPI devices the actual configuration is set later
