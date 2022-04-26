@@ -1152,8 +1152,8 @@ static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t
 {
 #if HAL_RRF
   /* Clear DBM bit, and set inc and direction */
-  hdma->Instance->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR|DMA_SxCR_MINC|DMA_SxCR_PINC));
-  hdma->Instance->CR |= (hdma->Init.Direction | hdma->Init.PeriphInc | hdma->Init.MemInc);
+  hdma->Instance->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR|DMA_SxCR_MINC|DMA_SxCR_PINC|DMA_SxCR_CIRC));
+  hdma->Instance->CR |= (hdma->Init.Direction | hdma->Init.PeriphInc | hdma->Init.MemInc | hdma->Init.Mode);
 #else
   /* Clear DBM bit */
   hdma->Instance->CR &= (uint32_t)(~DMA_SxCR_DBM);
