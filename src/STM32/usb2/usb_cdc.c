@@ -35,15 +35,17 @@ usb_irq_enable(void)
  * Message block sending
  ****************************************************************/
 
-static uint8_t transmit_buf[192], transmit_pos;
+static uint8_t transmit_buf[192], transmit_pos = 0, last_transmit_length = 0;
 bool bulk_in_ready = false;
 
+uint32_t usbWrite = 0, usbBulk = 0, usbZP = 0, usbWT = 0, usbZPF;
 // FIXME protect buffers
 void
 usb_bulk_in_task(void)
 {
     if (!bulk_in_ready) return;
     bulk_in_ready = false;
+    usbBulk++;
     //if (!sched_check_wake(&usb_bulk_in_wake))
         //return;
     uint_fast8_t tpos = transmit_pos;
@@ -55,6 +57,7 @@ usb_bulk_in_task(void)
         int_fast8_t ret = usb_send_bulk_in(transmit_buf + offset, max_tpos);
         if (ret <= 0)
             break;
+        last_transmit_length = ret;
         offset += ret;
     }
     uint_fast8_t needcopy = tpos - offset;
@@ -63,6 +66,21 @@ usb_bulk_in_task(void)
         //usb_notify_bulk_in();
     }
     transmit_pos = needcopy;
+    if (needcopy == 0)
+    {
+        // no data to send, check for previous packet length if it is a full packet we need to send a
+        // zero length packet to ensure that the host side comms driver sees this as an end of packet
+        if (last_transmit_length == USB_CDC_EP_BULK_IN_SIZE)
+        {
+            usbZP++;
+            if (usb_send_bulk_in(NULL, 0) == 0)
+                last_transmit_length = 0;
+            else
+                usbZPF++;
+        }
+        return;
+    }
+
 }
 
 void
@@ -78,6 +96,8 @@ usb_notify_bulk_in(void)
 uint32_t
 usb_write(const uint8_t *buf, uint32_t cnt)
 {
+    uint32_t start = millis();
+    usbWrite++;
     usb_irq_disable();
     // Verify space for message
     uint_fast8_t tpos = transmit_pos;
@@ -93,6 +113,8 @@ usb_write(const uint8_t *buf, uint32_t cnt)
     usb_notify_bulk_in();
     usb_spin();
     usb_irq_enable();
+    start = millis() - start;
+    if (start > usbWT) usbWT = start;
     return cnt;
 }
 
