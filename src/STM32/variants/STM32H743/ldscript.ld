@@ -39,6 +39,7 @@ SECTIONS
   /* The program code and other data into "FLASH" Rom type memory */
   .text :
   {
+    __etext_start = .;
     . = ALIGN(4);
     *(.text)           /* .text sections (code) */
     *(.text*)          /* .text* sections (code) */
@@ -128,6 +129,7 @@ SECTIONS
     __reset_data_start = .;
     KEEP(*(.reset_data))
     . = ALIGN(4);
+    __reset_data_end = .;
   } >RESETDATA
 
   /* Uninitialized data section into "RAM_D1" Ram type memory */
