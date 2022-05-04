@@ -21,6 +21,10 @@ namespace AnalogOut
 #if STM32F4 || LPC17xx
 	extern void ReleasePWMPin(Pin pin) noexcept;
 #endif
+#if SAME5x || SAMC21
+	// Set the beeper to produce a tone using 2 pins as differential outputs. Set frequency to zero to stop the beeper.
+	extern void Beep(Pin pin1, Pin pin2, PwmFrequency freq) noexcept;
+#endif
 }
 
 #endif /* SRC_HARDWARE_ANALOGOUT_H_ */
