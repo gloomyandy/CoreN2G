@@ -18,7 +18,14 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "stm32h7xx_ll_utils.h"
+#if HAL_RRF && !defined(USE_FULL_LL_DRIVER)
+// prevent compiler warning
+#define USE_FULL_LL_DRIVER
 #include "stm32h7xx_ll_rcc.h"
+#undef USE_FULL_LL_DRIVER
+#else
+#include "stm32h7xx_ll_rcc.h"
+#endif
 #include "stm32h7xx_ll_pwr.h"
 
 #ifdef  USE_FULL_ASSERT

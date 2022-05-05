@@ -392,7 +392,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 
 		if (status != HAL_OK)
 		{
-			debugPrintf("Failed to send CAN message %x %x\n", status, hw.ErrorCode);
+			debugPrintf("Failed to send CAN message %x %x\n", status, (unsigned)hw.ErrorCode);
 		}
 		else
 			++messagesQueuedForSending;
@@ -514,7 +514,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			{
 				if (timeout == 0)
 				{
-					debugPrintf("Buffer %d timeout\n", bufferNumber);
+					debugPrintf("Buffer %d timeout\n", (int)bufferNumber);
 					return false;
 				}
 				TaskBase::ClearNotifyCount();
