@@ -194,6 +194,15 @@ usb_read_bulk_out(void *data, uint_fast8_t max_len)
     return ret;
 }
 
+void
+usb_enable_bulk_out()
+{
+    IrqDisable();
+    //usb_notify_bulk_in();
+    OTG->GINTMSK |= USB_OTG_GINTMSK_RXFLVLM;
+    IrqEnable();
+}
+
 int_fast8_t
 usb_send_bulk_in(void *data, uint_fast8_t len)
 {
@@ -213,6 +222,17 @@ usb_send_bulk_in(void *data, uint_fast8_t len)
     int_fast8_t ret = fifo_write_packet(USB_CDC_EP_BULK_IN, data, len);
     //usb_irq_enable();
     return ret;
+}
+
+void
+usb_enable_bulk_in()
+{
+    uint32_t ctl = EPIN(USB_CDC_EP_BULK_IN)->DIEPCTL;
+    if (!(ctl & USB_OTG_DIEPCTL_EPENA)) {
+        IrqDisable();
+        usb_notify_bulk_in();
+        IrqEnable();
+    }
 }
 
 int_fast8_t
@@ -322,6 +342,7 @@ usb_set_address(uint_fast8_t addr)
     usb_notify_ep0();
 }
 
+uint32_t initialDAINT = 0, initialDIEPINT = 0;
 void
 usb_set_configure(void)
 {
@@ -359,6 +380,8 @@ usb_set_configure(void)
                     | USB_OTG_GRSTCTL_TXFFLSH);
     while (OTG->GRSTCTL & USB_OTG_GRSTCTL_TXFFLSH)
         ;
+    initialDAINT = OTGD->DAINT;
+    initialDIEPINT = epi->DIEPINT;
     //usb_irq_enable();
 }
 
@@ -383,9 +406,9 @@ OTG_FS_IRQHandler(void)
     }
     if (sts & USB_OTG_GINTSTS_IEPINT) {
         // Can transmit data - disable irq and notify endpoint
-        uint32_t daint = OTGD->DAINT;
+        uint32_t daint = OTGD->DAINT & OTGD->DAINTMSK;
         OTGD->DAINTMSK &= ~daint;
-        if (daint & (1 << 0))
+       if (daint & (1 << 0))
             usb_notify_ep0();
         if (daint & (1 << USB_CDC_EP_BULK_IN))
             usb_notify_bulk_in();

@@ -3,6 +3,7 @@
 // Copyright (C) 2018  Kevin O'Connor <kevin@koconnor.net>
 //
 // This file may be distributed under the terms of the GNU GPLv3 license.
+// Modified for RRF by GA 3/3/2022
 
 #include <CoreImp.h>
 #include "usb_cdc_ep.h" // USB_CDC_EP_BULK_IN
@@ -35,162 +36,132 @@ usb_irq_enable(void)
  * Message block sending
  ****************************************************************/
 
-static uint8_t transmit_buf[192], transmit_pos = 0, last_transmit_length = 0;
-bool bulk_in_ready = false;
+static uint8_t transmit_buf[256], last_transmit_length = 0;
+static volatile uint32_t transmit_wpos = 0, transmit_rpos = 0;
 
-// FIXME protect buffers
 void
-usb_bulk_in_task(void)
+usb_notify_bulk_in(void)
 {
-    if (!bulk_in_ready) return;
-    bulk_in_ready = false;
-    //if (!sched_check_wake(&usb_bulk_in_wake))
-        //return;
-    uint_fast8_t tpos = transmit_pos;
-    uint_fast8_t offset = 0;
-    while (tpos - offset > 0)
+    uint32_t offset = transmit_rpos;
+    int32_t cnt = (transmit_wpos - offset) % sizeof(transmit_buf);
+    while (cnt > 0)
     {
-        uint_fast8_t max_tpos = (tpos > USB_CDC_EP_BULK_IN_SIZE
-                                ? USB_CDC_EP_BULK_IN_SIZE : tpos);
-        int_fast8_t ret = usb_send_bulk_in(transmit_buf + offset, max_tpos);
+        uint_fast8_t write_len = (cnt > USB_CDC_EP_BULK_IN_SIZE
+                                ? USB_CDC_EP_BULK_IN_SIZE : cnt);
+        if (write_len > sizeof(transmit_buf) - offset)
+            write_len = sizeof(transmit_buf) - offset;
+        int_fast8_t ret = usb_send_bulk_in(transmit_buf + offset, write_len);
         if (ret <= 0)
             break;
         last_transmit_length = ret;
-        offset += ret;
+        offset = (offset + ret) % sizeof(transmit_buf);
+        cnt -= ret;
     }
-    uint_fast8_t needcopy = tpos - offset;
-    if (needcopy) {
-        memmove(transmit_buf, &transmit_buf[offset], needcopy);
-        //usb_notify_bulk_in();
-    }
-    transmit_pos = needcopy;
-    if (needcopy == 0)
+    if (cnt == 0)
     {
-        // no data to send, check for previous packet length if it is a full packet we need to send a
+        // no data left to send, check for previous packet length if it is a full packet we need to send a
         // zero length packet to ensure that the host side comms driver sees this as an end of packet
         if (last_transmit_length == USB_CDC_EP_BULK_IN_SIZE)
         {
             if (usb_send_bulk_in(NULL, 0) == 0)
                 last_transmit_length = 0;
-       }
-        return;
+        }
     }
-
+    transmit_rpos = offset;
 }
 
-void
-usb_notify_bulk_in(void)
-{
-    // FIXME
-    //sched_wake_task(&usb_bulk_in_wake);
-    bulk_in_ready = true;
-    usb_bulk_in_task();
-}
-
-// Encode and transmit a "response" message
 uint32_t
 usb_write(const uint8_t *buf, uint32_t cnt)
 {
-    usb_irq_disable();
+    //usb_irq_disable();
     // Verify space for message
-    uint_fast8_t tpos = transmit_pos;
-    if (tpos + cnt > sizeof(transmit_buf))
-        // Not enough space for message
-        cnt = sizeof(transmit_buf) - tpos;
-    if (cnt > 0)
+    uint32_t wpos = transmit_wpos;
+    uint32_t rpos = transmit_rpos;
+    uint32_t offset = 0;
+    uint32_t space = ((rpos - wpos - 1) % sizeof(transmit_buf));
+    if (cnt > space) cnt = space;
+    while (cnt > 0)
     {
-        memmove(&transmit_buf[tpos], buf, cnt);
-        transmit_pos = tpos + cnt;
+        uint32_t write_len = cnt;
+        if (write_len > sizeof(transmit_buf) - wpos)
+            write_len = sizeof(transmit_buf) - wpos;
+        memmove(transmit_buf + wpos, buf + offset, write_len);
+        cnt -= write_len;
+        offset += write_len;
+        wpos = (wpos + write_len) % sizeof(transmit_buf);
     }
-    // Start message transmit
-    usb_notify_bulk_in();
-    usb_spin();
-    usb_irq_enable();
-    return cnt;
+    transmit_wpos = wpos;
+    usb_enable_bulk_in();
+    return offset;
 }
 
 uint32_t
 usb_available_for_write()
 {
-    usb_spin();
-    return sizeof(transmit_buf) - transmit_pos;
+    return ((transmit_rpos - transmit_wpos - 1) % sizeof(transmit_buf));
 }
 
 bool
 usb_is_write_empty()
 {
-    usb_spin();
-    return transmit_pos;
+    return transmit_wpos == transmit_rpos;
 }
 
 /****************************************************************
  * Message block reading
  ****************************************************************/
 
-static uint8_t receive_buf[128], receive_pos;
-bool bulk_out_ready = false;
-
-void
-usb_bulk_out_task(void)
-{
-    if (!bulk_out_ready) return;
-    bulk_out_ready = false;
-    //if (!sched_check_wake(&usb_bulk_out_wake))
-        //return;
-    // Read data
-    uint_fast8_t rpos = receive_pos;
-    while (rpos + USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf)) {
-        int_fast8_t ret = usb_read_bulk_out(
-            &receive_buf[rpos], USB_CDC_EP_BULK_OUT_SIZE);
-        if (ret > 0) {
-            rpos += ret;
-            //usb_notify_bulk_out();
-        }
-        else
-            break;
-    }
-    receive_pos = rpos;
-}
+static uint8_t receive_buf[256];
+static volatile uint32_t receive_wpos = 0, receive_rpos = 0;
 
 void
 usb_notify_bulk_out(void)
 {
-    //sched_wake_task(&usb_bulk_out_wake);
-    bulk_out_ready = true;
-    usb_bulk_out_task();
+    // Read data
+    uint32_t wpos = receive_wpos;
+    while (wpos + USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf)) {
+        int_fast8_t ret = usb_read_bulk_out(
+            &receive_buf[wpos], USB_CDC_EP_BULK_OUT_SIZE);
+        if (ret > 0) {
+            wpos += ret;
+        }
+        else
+            break;
+    }
+    receive_wpos = wpos;
 }
+
 
 uint32_t
 usb_read(uint8_t *buf, uint32_t cnt)
 {
-    usb_irq_disable();
-    usb_spin();
-    uint8_t rpos = receive_pos;
-    if (rpos > 0 && cnt > 0)
+    uint32_t rpos = receive_rpos;
+    uint32_t wpos = receive_wpos;
+    uint32_t avail = wpos - rpos;
+    if (avail > 0 && cnt > 0)
     {
-        if (rpos < cnt) cnt = rpos;
-        memmove(buf, &receive_buf[0], cnt);
-        if (rpos > cnt)
-        {
-            rpos = rpos - cnt;
-            memmove(&receive_buf[0], &receive_buf[cnt], rpos);
-            receive_pos = rpos;
-        }
+        if (avail < cnt) cnt = avail;
+        memmove(buf, &receive_buf[rpos], cnt);
+        rpos += cnt;
+        IrqDisable();
+        wpos = receive_wpos;
+        // have we read everyting ?
+        if (rpos >= wpos)
+            receive_wpos = receive_rpos = 0;
         else
-            receive_pos = 0;
+            receive_rpos = rpos;
+        IrqEnable();
+        usb_enable_bulk_out();
     }
     else
         cnt = 0;
-    usb_notify_bulk_out();
-    usb_irq_enable();
     return cnt;
 }
 
 uint32_t
 usb_available_for_read()
 {
-    //usb_spin();
-    return receive_pos;
+    return receive_wpos - receive_rpos;
 }
 
 
@@ -513,17 +484,9 @@ static uint8_t line_control_state;
 bool
 usb_is_connected()
 {
-    usb_spin();
     return line_control_state & 1;
 }
 
-static void
-check_reboot(void)
-{
-//    if (line_coding.dwDTERate == 1200 && !(line_control_state & 0x01))
-        // A baud of 1200 is an Arduino style request to enter the bootloader
-//        usb_request_bootloader();
-}
 
 static void
 usb_req_set_line_coding(struct usb_ctrlrequest *req)
@@ -534,7 +497,6 @@ usb_req_set_line_coding(struct usb_ctrlrequest *req)
         return;
     }
     usb_do_xfer(&line_coding, sizeof(line_coding), UX_READ);
-    check_reboot();
 }
 
 static void
@@ -557,7 +519,6 @@ usb_req_set_line(struct usb_ctrlrequest *req)
     }
     line_control_state = req->wValue;
     usb_do_xfer(NULL, 0, UX_SEND);
-    check_reboot();
 }
 
 static void
@@ -577,27 +538,14 @@ usb_state_ready(void)
     default: usb_do_stall(); break;
     }
 }
-
-// State tracking dispatch
-bool ep0_ready = false;
  
 void
-usb_ep0_task(void)
+usb_notify_ep0(void)
 {
-    if (!ep0_ready) return;
-    ep0_ready = false;
     if (usb_xfer_flags)
         usb_do_xfer(usb_xfer_data, usb_xfer_size, usb_xfer_flags);
     else
         usb_state_ready();
-}
-
-void
-usb_notify_ep0(void)
-{
-    ep0_ready = true;
-    usb_ep0_task();
-    //sched_wake_task(&usb_ep0_wake);
 }
 
 void
@@ -607,12 +555,3 @@ usb_shutdown(void)
     usb_notify_bulk_out();
     usb_notify_ep0();
 }
-
-void
-usb_spin()
-{
-    //usb_bulk_out_task();
-    //usb_bulk_in_task();
-    //usb_ep0_task();
-}    
-
