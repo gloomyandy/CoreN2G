@@ -27,20 +27,6 @@ DECL_CONSTANT_STR("RESERVE_PINS_USB1", "PB14,PB15");
 #define GPIO_D_POS PA_12
 #endif
 
-#if 0
-void
-usb_irq_disable(void)
-{
-    NVIC_DisableIRQ(OTG_IRQn);
-}
-
-void
-usb_irq_enable(void)
-{
-    NVIC_EnableIRQ(OTG_IRQn);
-}
-#endif
-
 /****************************************************************
  * USB transfer memory
  ****************************************************************/
@@ -198,29 +184,24 @@ usb_enable_bulk_out()
 int_fast8_t
 usb_send_bulk_in(void *data, uint_fast8_t len)
 {
-    //usb_irq_disable();
     uint32_t ctl = EPIN(USB_CDC_EP_BULK_IN)->DIEPCTL;
     if (!(ctl & USB_OTG_DIEPCTL_USBAEP)) {
         // Controller not enabled - discard data
-        //usb_irq_enable();
         return len;
     }
     if (ctl & USB_OTG_DIEPCTL_EPENA) {
         // Wait for space to transmit
         OTGD->DAINTMSK |= 1 << USB_CDC_EP_BULK_IN;
-        //usb_irq_enable();
         return -1;
     }
     int_fast8_t ret = fifo_write_packet(USB_CDC_EP_BULK_IN, data, len);
-    //usb_irq_enable();
     return ret;
 }
 
 void
 usb_enable_bulk_in()
 {
-    uint32_t ctl = EPIN(USB_CDC_EP_BULK_IN)->DIEPCTL;
-    if (!(ctl & USB_OTG_DIEPCTL_EPENA)) {
+    if (!(OTGD->DAINTMSK & (1 << USB_CDC_EP_BULK_IN))) {
         IrqDisable();
         usb_notify_bulk_in();
         IrqEnable();
@@ -239,7 +220,6 @@ usb_read_ep0(void *data, uint_fast8_t max_len)
                        >> USB_OTG_GRXSTSP_PKTSTS_Pos);
     if (pktsts != 2) {
         // Transfer interrupted
-        //usb_irq_enable();
         return -2;
     }
     int_fast8_t ret = fifo_read_packet(data, max_len);
@@ -292,7 +272,6 @@ usb_send_ep0(const void *data, uint_fast8_t len)
     uint32_t grx = peek_rx_queue(0);
     if (grx) {
         // Transfer interrupted
-        //usb_irq_enable();
         return -2;
     }
     if (EPIN(0)->DIEPCTL & USB_OTG_DIEPCTL_EPENA) {
@@ -372,7 +351,7 @@ OTG_FS_IRQHandler(void)
 {
     uint32_t sts = OTG->GINTSTS;
     if (sts & USB_OTG_GINTSTS_RXFLVL) {
-        // Received data - disable irq and notify endpoint
+        // Received data - notify endpoint
         uint32_t grx = OTG->GRXSTSR, ep = grx & USB_OTG_GRXSTSP_EPNUM_Msk;
         if (ep == 0)
             usb_notify_ep0();
@@ -417,8 +396,6 @@ usb_init(void)
 #endif
 
     // Route pins
-    //gpio_peripheral(GPIO_D_NEG, GPIO_FUNC, 0);
-    //gpio_peripheral(GPIO_D_POS, GPIO_FUNC, 0);
     pinmap_pinout(GPIO_D_NEG, PinMap_USB_OTG_FS);
     pinmap_pinout(GPIO_D_POS, PinMap_USB_OTG_FS);
 
@@ -438,7 +415,6 @@ usb_init(void)
     OTGD->DIEPMSK = USB_OTG_DIEPMSK_XFRCM;
     OTG->GINTMSK = USB_OTG_GINTMSK_RXFLVLM | USB_OTG_GINTMSK_IEPINT;
     OTG->GAHBCFG = USB_OTG_GAHBCFG_GINT;
-    //armcm_enable_irq(OTG_FS_IRQHandler, OTG_IRQn, 1);
     HAL_NVIC_EnableIRQ(OTG_IRQn);
 
 
