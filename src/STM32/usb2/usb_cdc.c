@@ -113,22 +113,30 @@ usb_is_write_empty()
 
 static uint8_t receive_buf[256];
 static volatile uint32_t receive_wpos = 0, receive_rpos = 0;
+uint32_t USBReadOverrun = 0;
 
 void
 usb_notify_bulk_out(void)
 {
-    // Read data
+    // Read data, notr that if we have no space in buffer we should not have any actual data to
+    // read as we should not have a started a read that could create this situation. However
+    // we may still need to process the FIFO to discard control messages.
     uint32_t wpos = receive_wpos;
-    while (wpos + USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf)) {
-        int_fast8_t ret = usb_read_bulk_out(
-            &receive_buf[wpos], USB_CDC_EP_BULK_OUT_SIZE);
-        if (ret > 0) {
-            wpos += ret;
+    while (true) {
+        uint32_t space = sizeof(receive_buf) - wpos;
+        int_fast8_t ret = usb_read_bulk_out(&receive_buf[wpos], USB_CDC_EP_BULK_OUT_SIZE);
+        if (ret < 0)
+            break;
+        if (space == 0)
+        {
+            USBReadOverrun++;
         }
         else
-            break;
+            wpos += ret;
     }
     receive_wpos = wpos;
+    if (wpos + USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf))
+        usb_enable_bulk_out();
 }
 
 
@@ -147,11 +155,12 @@ usb_read(uint8_t *buf, uint32_t cnt)
         wpos = receive_wpos;
         // have we read everyting ?
         if (rpos >= wpos)
-            receive_wpos = receive_rpos = 0;
+            wpos = receive_wpos = receive_rpos = 0;
         else
             receive_rpos = rpos;
+        if (wpos + 2*USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf))
+            usb_enable_bulk_out();
         IrqEnable();
-        usb_enable_bulk_out();
     }
     else
         cnt = 0;

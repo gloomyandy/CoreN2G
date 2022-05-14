@@ -137,7 +137,7 @@ enable_rx_endpoint(uint32_t ep)
     USB_OTG_OUTEndpointTypeDef *epo = EPOUT(ep);
     uint32_t ctl = epo->DOEPCTL;
     if (!(ctl & USB_OTG_DOEPCTL_EPENA) || ctl & USB_OTG_DOEPCTL_NAKSTS) {
-        epo->DOEPTSIZ = 64 | (1 << USB_OTG_DOEPTSIZ_PKTCNT_Pos);
+        epo->DOEPTSIZ = USB_CDC_EP_BULK_OUT_SIZE | (1 << USB_OTG_DOEPTSIZ_PKTCNT_Pos);
         epo->DOEPCTL = ctl | USB_OTG_DOEPCTL_EPENA | USB_OTG_DOEPCTL_CNAK;
     }
 }
@@ -180,27 +180,19 @@ peek_rx_queue(uint32_t ep)
 int_fast8_t
 usb_read_bulk_out(void *data, uint_fast8_t max_len)
 {
-    //usb_irq_disable();
     uint32_t grx = peek_rx_queue(USB_CDC_EP_BULK_OUT);
     if (!grx) {
         // Wait for packet
-        OTG->GINTMSK |= USB_OTG_GINTMSK_RXFLVLM;
-        //usb_irq_enable();
         return -1;
     }
     int_fast8_t ret = fifo_read_packet(data, max_len);
-    enable_rx_endpoint(USB_CDC_EP_BULK_OUT);
-    //usb_irq_enable();
     return ret;
 }
 
 void
 usb_enable_bulk_out()
 {
-    IrqDisable();
-    //usb_notify_bulk_in();
-    OTG->GINTMSK |= USB_OTG_GINTMSK_RXFLVLM;
-    IrqEnable();
+    enable_rx_endpoint(USB_CDC_EP_BULK_OUT);
 }
 
 int_fast8_t
@@ -238,12 +230,9 @@ usb_enable_bulk_in()
 int_fast8_t
 usb_read_ep0(void *data, uint_fast8_t max_len)
 {
-    //usb_irq_disable();
     uint32_t grx = peek_rx_queue(0);
     if (!grx) {
         // Wait for packet
-        OTG->GINTMSK |= USB_OTG_GINTMSK_RXFLVLM;
-        //usb_irq_enable();
         return -1;
     }
     uint32_t pktsts = ((grx & USB_OTG_GRXSTSP_PKTSTS_Msk)
@@ -255,7 +244,6 @@ usb_read_ep0(void *data, uint_fast8_t max_len)
     }
     int_fast8_t ret = fifo_read_packet(data, max_len);
     enable_rx_endpoint(0);
-    //usb_irq_enable();
     return ret;
 }
 
@@ -263,13 +251,10 @@ int_fast8_t
 usb_read_ep0_setup(void *data, uint_fast8_t max_len)
 {
     static uint8_t setup_buf[8];
-    //usb_irq_disable();
     for (;;) {
         uint32_t grx = peek_rx_queue(0);
         if (!grx) {
             // Wait for packet
-            OTG->GINTMSK |= USB_OTG_GINTMSK_RXFLVLM;
-            //usb_irq_enable();
             return -1;
         }
         uint32_t pktsts = ((grx & USB_OTG_GRXSTSP_PKTSTS_Msk)
@@ -296,7 +281,6 @@ usb_read_ep0_setup(void *data, uint_fast8_t max_len)
     }
     enable_rx_endpoint(0);
     EPOUT(0)->DOEPINT = USB_OTG_DOEPINT_STUP;
-    //usb_irq_enable();
     // Return previously read setup packet
     memcpy(data, setup_buf, max_len);
     return max_len;
@@ -305,7 +289,6 @@ usb_read_ep0_setup(void *data, uint_fast8_t max_len)
 int_fast8_t
 usb_send_ep0(const void *data, uint_fast8_t len)
 {
-    //usb_irq_disable();
     uint32_t grx = peek_rx_queue(0);
     if (grx) {
         // Transfer interrupted
@@ -314,23 +297,18 @@ usb_send_ep0(const void *data, uint_fast8_t len)
     }
     if (EPIN(0)->DIEPCTL & USB_OTG_DIEPCTL_EPENA) {
         // Wait for space to transmit
-        OTG->GINTMSK |= USB_OTG_GINTMSK_RXFLVLM;
         OTGD->DAINTMSK |= 1 << 0;
-        //usb_irq_enable();
         return -1;
     }
     int_fast8_t ret = fifo_write_packet(0, data, len);
-    //usb_irq_enable();
     return ret;
 }
 
 void
 usb_stall_ep0(void)
 {
-    //usb_irq_disable();
     EPIN(0)->DIEPCTL |= USB_OTG_DIEPCTL_STALL;
-    usb_notify_ep0(); // XXX - wake from main usb_cdc.c code?
-    //usb_irq_enable();
+    //usb_notify_ep0(); // XXX - wake from main usb_cdc.c code?
 }
 
 void
@@ -339,14 +317,13 @@ usb_set_address(uint_fast8_t addr)
     OTGD->DCFG = ((OTGD->DCFG & ~USB_OTG_DCFG_DAD_Msk)
                   | (addr << USB_OTG_DCFG_DAD_Pos));
     usb_send_ep0(NULL, 0);
-    usb_notify_ep0();
+    //usb_notify_ep0();
 }
 
 uint32_t initialDAINT = 0, initialDIEPINT = 0;
 void
 usb_set_configure(void)
 {
-    //usb_irq_disable();
     // Configure and enable USB_CDC_EP_ACM
     USB_OTG_INEndpointTypeDef *epi = EPIN(USB_CDC_EP_ACM);
     epi->DIEPTSIZ = (USB_CDC_EP_ACM_SIZE
@@ -359,7 +336,7 @@ usb_set_configure(void)
 
     // Configure and enable USB_CDC_EP_BULK_OUT
     USB_OTG_OUTEndpointTypeDef *epo = EPOUT(USB_CDC_EP_BULK_OUT);
-    epo->DOEPTSIZ = 64 | (1 << USB_OTG_DOEPTSIZ_PKTCNT_Pos);
+    epo->DOEPTSIZ = USB_CDC_EP_BULK_OUT_SIZE | (1 << USB_OTG_DOEPTSIZ_PKTCNT_Pos);
     epo->DOEPCTL = (
         USB_OTG_DOEPCTL_CNAK | USB_OTG_DOEPCTL_USBAEP | USB_OTG_DOEPCTL_EPENA
         | (0x02 << USB_OTG_DOEPCTL_EPTYP_Pos) | USB_OTG_DOEPCTL_SD0PID_SEVNFRM
@@ -382,7 +359,6 @@ usb_set_configure(void)
         ;
     initialDAINT = OTGD->DAINT;
     initialDIEPINT = epi->DIEPINT;
-    //usb_irq_enable();
 }
 
 
@@ -397,7 +373,6 @@ OTG_FS_IRQHandler(void)
     uint32_t sts = OTG->GINTSTS;
     if (sts & USB_OTG_GINTSTS_RXFLVL) {
         // Received data - disable irq and notify endpoint
-        OTG->GINTMSK &= ~USB_OTG_GINTMSK_RXFLVLM;
         uint32_t grx = OTG->GRXSTSR, ep = grx & USB_OTG_GRXSTSP_EPNUM_Msk;
         if (ep == 0)
             usb_notify_ep0();
@@ -455,7 +430,7 @@ usb_init(void)
     USB_OTG_INEndpointTypeDef *epi = EPIN(0);
     USB_OTG_OUTEndpointTypeDef *epo = EPOUT(0);
     epi->DIEPCTL = mpsize_ep0 | USB_OTG_DIEPCTL_SNAK;
-    epo->DOEPTSIZ = (64 | (1 << USB_OTG_DOEPTSIZ_STUPCNT_Pos)
+    epo->DOEPTSIZ = (USB_CDC_EP_BULK_OUT_SIZE | (1 << USB_OTG_DOEPTSIZ_STUPCNT_Pos)
                      | (1 << USB_OTG_DOEPTSIZ_PKTCNT_Pos));
     epo->DOEPCTL = mpsize_ep0 | USB_OTG_DOEPCTL_EPENA | USB_OTG_DOEPCTL_SNAK;
 
