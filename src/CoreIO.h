@@ -336,11 +336,6 @@ void WatchdogInit() noexcept;
  */
 void WatchdogReset() noexcept;
 
-#if STM32
-void WatchdogDisable() noexcept;
-#endif
-
-
 #if SAM4E || SAME70
 
 /**

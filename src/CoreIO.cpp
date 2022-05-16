@@ -723,12 +723,6 @@ void WatchdogReset() noexcept
 #endif
 }
 
-#if STM32
-void WatchdogDisable() noexcept
-{
-}
-#endif
-
 #if SAM4E || SAME70
 
 void WatchdogResetSecondary() noexcept
