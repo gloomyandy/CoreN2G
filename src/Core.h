@@ -67,6 +67,7 @@
 #elif defined(__STM32F4__)
 # include <stm32f4.h>
 # include <dwt.h>
+# define STM32				1
 # define STM32F4			1
 # define LPC17xx			0
 # define SAMC21				0
@@ -78,7 +79,7 @@
 #elif defined(__STM32H7__)
 # include <stm32h7.h>
 # include <dwt.h>
-# define STM32F4			1
+# define STM32  			1
 # define STM32H7			1
 # define LPC17xx			0
 # define SAMC21				0
@@ -136,7 +137,7 @@ static const uint32_t SystemCoreClockFreq = 120000000;	///< The processor clock 
 
 static const uint32_t SystemCoreClockFreq = 300000000;	///< The processor clock frequency after initialisation
 
-#elif STM32F4 || LPC17xx
+#elif STM32 || LPC17xx
 
 #define SystemCoreClockFreq SystemCoreClock
 #endif
@@ -229,7 +230,7 @@ void digitalWrite(Pin pin, bool high) noexcept;
  */
 uint32_t random32(void) noexcept;		// needed by lwip
 
-#if STM32F4
+#if STM32
 // Delay in cycles
 static inline uint32_t DelayCycles(const uint32_t start, const uint32_t cycles) noexcept __attribute__((always_inline, unused));
 #ifdef __cplusplus

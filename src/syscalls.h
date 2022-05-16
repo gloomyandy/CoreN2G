@@ -14,7 +14,7 @@
 
 #if LPC17xx
 #include <portable.h>
-#elif STM32F4
+#elif STM32
 #include "ccmram.h"
 #endif
 
@@ -68,7 +68,7 @@ void *CoreAllocPermanent(size_t sz, std::align_val_t align) noexcept
 		OutOfMemoryHandler();
 	}
 	return ret;
-#elif STM32F4 && !STM32H7
+#elif STM32F4
 	return CoreAllocCCMRAMPermanent(sz, align);
 #else
 	char * const newHeapLimit = reinterpret_cast<char *>(reinterpret_cast<uint32_t>(heapLimit - sz) & ~((uint32_t)align - 1));

@@ -21,7 +21,7 @@
 
 typedef uint8_t DmaChannel;			///< A type that represents a DMA channel number
 typedef uint8_t DmaPriority;		///< A type that represents a DMA priority
-#if STM32F4
+#if STM32
 typedef PinName Pin;                ///< A type that represents an I/O pin on the microcontroller
 #elif LPC17xx
 typedef gpioPins_et Pin;            ///< A type that represents an I/O pin on the microcontroller
@@ -35,7 +35,7 @@ typedef uint8_t ExintNumber;		///< A type that represents an EXINT number (used 
 typedef uint8_t EventNumber;		///< A type that represents an event number (used on SAME5x/SAMC21 only)
 typedef __fp16 float16_t;			///< A 16-bit floating point type
 
-#if STM32F4
+#if STM32
 static const Pin NoPin = NC;		///< A number that represents no I/O pin
 #elif LPC17xx
 static const Pin NoPin = P_NC; 		//which =0xff

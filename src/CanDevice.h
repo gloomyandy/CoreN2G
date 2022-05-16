@@ -5,7 +5,7 @@
  *      Author: David
  */
 
-#if STM32F4
+#if STM32
 #include <stm32CanDevice.h>
 #else
 #ifndef SRC_CANDEVICE_H_

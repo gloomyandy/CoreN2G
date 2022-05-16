@@ -28,7 +28,7 @@
 # include <pmc/pmc.h>
 # include <pio/pio.h>
 # include <rstc/rstc.h>
-#elif STM32F4
+#elif STM32
 #include <CoreImp.h>
 #ifdef RTOS
 #include <HybridPWM.h>
@@ -38,7 +38,7 @@ static IWDG_HandleTypeDef wdHandle;
 #include <CoreImp.h>
 #endif
 
-#if STM32F4
+#if STM32
 void SetPinMode(Pin pin, enum PinMode ulMode, uint32_t debounceCutoff = 0) noexcept
 {
     if(pin == NoPin) return;
@@ -528,7 +528,7 @@ void delay(uint32_t ms) noexcept
 
 void CoreSysTick() noexcept
 {
-#if STM32F4
+#if STM32
 	HAL_IncTick();
 #endif
 	g_ms_ticks++;
@@ -684,7 +684,7 @@ void WatchdogInit() noexcept
 	// This assumes the slow clock is running at 32.768 kHz, watchdog frequency is therefore 32768 / 128 = 256 Hz
 	constexpr uint16_t watchdogTicks = 256;						// about 1 second
 	WDT->WDT_MR = WDT_MR_WDRSTEN | WDT_MR_WDV(watchdogTicks) | WDT_MR_WDD(watchdogTicks);
-#elif STM32F4
+#elif STM32
 #if STM32H7
     wdHandle.Instance = IWDG1;
 	wdHandle.Init.Window = IWDG_WINDOW_DISABLE;
@@ -716,14 +716,14 @@ void WatchdogReset() noexcept
 	}
 #elif SAME70 || SAM4E || SAM4S
 	WDT->WDT_CR = WDT_CR_KEY_PASSWD | WDT_CR_WDRSTT;
-#elif STM32F4
+#elif STM32
     HAL_IWDG_Refresh(&wdHandle);
 #elif LPC17xx
     Chip_WWDT_Feed(LPC_WWDT);
 #endif
 }
 
-#if STM32F4
+#if STM32
 void WatchdogDisable() noexcept
 {
 }
@@ -743,7 +743,7 @@ void ResetProcessor() noexcept
 {
 #if SAME70 || SAM4E || SAM4S
 	rstc_start_software_reset(RSTC);
-#elif STM32F4 || LPC17xx
+#elif STM32 || LPC17xx
 	NVIC_SystemReset();
 #else
 	SCB->AIRCR = (0x5FA << 16) | (1u << 2);						// reset the processor
@@ -751,7 +751,7 @@ void ResetProcessor() noexcept
 	for (;;) { }
 }
 
-#if !STM32F4 && !LPC17xx
+#if !STM32 && !LPC17xx
 #if SAME5x || SAMC21
 
 // Enable a GCLK. This function doesn't allow access to some GCLK features, e.g. the DIVSEL or OOV or RUNSTDBY bits.
@@ -866,7 +866,7 @@ void EnableTccClock(unsigned int tccNumber, unsigned int gclkNum) noexcept
 #endif
 #endif
 
-#if STM32F4 || LPC17xx
+#if STM32 || LPC17xx
 // Get the analog input channel that a pin uses
 AnalogChannelNumber PinToAdcChannel(Pin p) noexcept
 {

@@ -32,7 +32,7 @@ extern "C" void CacheFlushBeforeDMAReceive(const volatile void *start, size_t le
 extern "C" void CacheInvalidateAfterDMAReceive(const volatile void *start, size_t length) noexcept;
 extern "C" void CacheFlushBeforeDMASend(const volatile void *start, size_t length) noexcept;
 
-#if SAM4S || SAMC21 || (STM32F4 && !STM32H7) || LPC17xx
+#if SAM4S || SAMC21 || (STM32 && !STM32H7) || LPC17xx
 
 // These processors have no cache
 inline void Cache::Init() noexcept { __DSB(); }

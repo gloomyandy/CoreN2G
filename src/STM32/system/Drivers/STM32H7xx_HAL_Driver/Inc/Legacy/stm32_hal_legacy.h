@@ -25,11 +25,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-// FIXME: Need to find a better way to handle this
-#if defined(STM32F4) && defined(STM32H7)
-#undef STM32F4
-#define REVERT_STM32F4_UNDEF
-#endif
 
 /* Includes ------------------------------------------------------------------*/
 /* Exported types ------------------------------------------------------------*/
@@ -3754,11 +3749,6 @@ extern "C" {
 
 #ifdef __cplusplus
 }
-#endif
-// FIXME: This is so ugly!
-#if defined(REVERT_STM32F4_UNDEF)
-#define STM32F4 1
-#undef REVERT_STM32F4_UNDEF
 #endif
 
 #endif /* STM32_HAL_LEGACY */
