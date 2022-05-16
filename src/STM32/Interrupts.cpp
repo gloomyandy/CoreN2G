@@ -19,6 +19,14 @@
 #include "PinAF_STM32F1.h"
 #include "interrupt.h"
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
+constexpr uint32_t MaxInterruptPins = 16;
+Pin attachedPins[MaxInterruptPins];
+
+void initInterruptPins() noexcept
+{
+  for(uint32_t i = 0; i < MaxInterruptPins; i++)
+    attachedPins[i] = NoPin;
+}
 
 bool attachInterrupt(Pin pin, StandardCallbackFunction callback, enum InterruptMode mode, CallbackParameter param) noexcept
 {
@@ -55,6 +63,7 @@ bool attachInterrupt(Pin pin, StandardCallbackFunction callback, enum InterruptM
     debugPrintf("Failed to attach interrupt to pin %c.%d\n", (int)('A'+STM_PORT(p)), (int)STM_PIN(p));
     return false;
   }
+  attachedPins[STM_PIN(p)] = pin;
 #else
   UNUSED(pin);
   UNUSED(callback);
@@ -73,7 +82,16 @@ void detachInterrupt(Pin pin) noexcept
     return;
   }
   stm32_interrupt_disable(port, STM_GPIO_PIN(p));
+  attachedPins[STM_GPIO_PIN(p)] = pin;
 #else
   UNUSED(pin);
 #endif
+}
+
+Pin getAttachedPin(uint32_t id) noexcept
+{
+  if (id < MaxInterruptPins)
+    return attachedPins[id];
+  else
+    return NoPin;
 }
