@@ -4,7 +4,7 @@ RRF_SRC_BASE  = $(REPRAPFIRMWARE_DIR)/src
 RRF_SRC_DIRS = FilamentMonitors GCodes GCodes/GCodeBuffer Heating 
 RRF_SRC_DIRS += Movement Movement/BedProbing Movement/Kinematics Movement/HeightControl
 RRF_SRC_DIRS += Storage Libraries/sha1 Comms Platform PrintMonitor Accelerometers
-RRF_SRC_DIRS += Heating/Sensors Fans ObjectModel Endstops Hardware Hardware/SharedSpi Tools
+RRF_SRC_DIRS += Heating/Sensors Fans ObjectModel Endstops Hardware Hardware/Spi Tools
 RRF_SRC_DIRS += Display Display/Lcd Display/Lcd/Fonts Display/Lcd/ST7567 Display/Lcd/ST7920 GPIO bossa
 RRF_SRC_DIRS += CAN ClosedLoop InputMonitors
 #STM RRF Addons
