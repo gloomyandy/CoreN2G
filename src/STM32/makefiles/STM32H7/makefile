@@ -22,7 +22,7 @@ V=@
 
 $(info Building RepRapFirmware for STM32H7 based boards:)
 
-OUTPUT_NAME=firmware
+OUTPUT_NAME=firmware-stm32h7
 
 ## Cross-compilation commands 
 CC      = arm-none-eabi-gcc
@@ -215,7 +215,6 @@ distclean:
 	-rm -rf $(BUILD_DIR)/ 
 
 upload:
-	ST-LINK_CLI.exe -c SWD -P "$(BUILD_DIR)/firmware.bin" 0x8020000 -ClrBP -NoPrompt -Rst -Run
-#	ST-LINK_CLI.exe -c SWD -P "$(BUILD_DIR)/firmware.bin" 0x8000000 -ClrBP -NoPrompt -Rst -Run
+	ST-LINK_CLI.exe -c SWD -P "$(BUILD_DIR)/firmware-stm32h7.bin" 0x8020000 -ClrBP -NoPrompt -Rst -Run
 
 .PHONY: all firmware clean distclean $(BUILD_DIR)/$(OUTPUT_NAME).elf
