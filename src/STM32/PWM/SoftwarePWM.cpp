@@ -34,7 +34,6 @@ static bool timerReady = false;
 static TIM_HandleTypeDef *timerHandle;
 
 static SoftwarePWM PWMChans[MaxPWMChannels];
-#define LPC_DEBUG
 #ifdef LPC_DEBUG
 uint32_t pwmInts = 0;
 uint32_t pwmCalls = 0;
@@ -247,13 +246,13 @@ static void initTimer() noexcept
     uint32_t preScale = SPWMTimer.getTimerClkFreq()/1000000;
     //debugPrintf("ST base freq %d setting presacle %d\n", static_cast<int>(SPWMTimer.getTimerClkFreq()), static_cast<int>(preScale));
     SPWMTimer.setPrescaleFactor(preScale);
-    SPWMTimer.setOverflow(0, TICK_FORMAT);
+    SPWMTimer.setOverflow(0xffff, TICK_FORMAT);
     SPWMTimer.attachInterrupt(SPWM_Handler);
     // init hardware and interrupts
-    SPWMTimer.setCount(0xffff);
+    timerHandle = &(HardwareTimer_Handle[get_timer_index(SPWM_TIMER)]->handle);
+    SPWMTimer.setCount(1);
     SPWMTimer.resume();
     SPWMTimer.pause();
-    timerHandle = &(HardwareTimer_Handle[get_timer_index(SPWM_TIMER)]->handle);
     timerReady = true;
 }
 
