@@ -908,10 +908,89 @@ timer_index_t get_timer_index(TIM_TypeDef *instance)
 #endif
 #if defined(TIM22_BASE)
   if (instance == TIM22) {
-    index = TIMER2_INDEX;
+    index = TIMER22_INDEX;
   }
 #endif
   return index;
+}
+
+
+/**
+  * @brief  return timer id from a timer index
+  * @param  htim : one of the defined timer
+  * @retval None
+  */
+uint32_t get_timer_id(timer_index_t index)
+{
+  static uint32_t ids[] = {
+#if defined(TIM1_BASE)
+1,
+#endif
+#if defined(TIM2_BASE)
+2,
+#endif
+#if defined(TIM3_BASE)
+3,
+#endif
+#if defined(TIM4_BASE)
+4,
+#endif
+#if defined(TIM5_BASE)
+5,
+#endif
+#if defined(TIM6_BASE)
+6,
+#endif
+#if defined(TIM7_BASE)
+7,
+#endif
+#if defined(TIM8_BASE)
+8,
+#endif
+#if defined(TIM9_BASE)
+9,
+#endif
+#if defined(TIM10_BASE)
+10,
+#endif
+#if defined(TIM11_BASE)
+11,
+#endif
+#if defined(TIM12_BASE)
+12,
+#endif
+#if defined(TIM13_BASE)
+13,
+#endif
+#if defined(TIM14_BASE)
+14,
+#endif
+#if defined(TIM15_BASE)
+15,
+#endif
+#if defined(TIM16_BASE)
+16,
+#endif
+#if defined(TIM17_BASE)
+17,
+#endif
+#if defined(TIM18_BASE)
+18,
+#endif
+#if defined(TIM19_BASE)
+19,
+#endif
+#if defined(TIM20_BASE)
+20,
+#endif
+#if defined(TIM21_BASE)
+21,
+#endif
+#if defined(TIM22_BASE)
+22
+#endif
+  };
+  return ids[index];
 }
 
 /**
