@@ -105,6 +105,7 @@ ifeq ($(TMC51XX), true)
         $(info  - Smart Drivers: TMC51XX)
         FLAGS += -DSUPPORT_TMC51xx
 endif
+$(info - Output name: $(OUTPUT_NAME))
 
 CFLAGS   = $(FLAGS) -std=gnu11 -fgnu89-inline -Dnoexcept=
 CXXFLAGS = $(FLAGS) -std=gnu++17 -fno-threadsafe-statics -fexceptions -fno-rtti -Wno-register
