@@ -57,11 +57,11 @@ bool attachInterrupt(Pin pin, StandardCallbackFunction callback, enum InterruptM
 #ifdef STM32F1xx
   pinF1_DisconnectDebug(p);
 #endif /* STM32F1xx */
-  if (attachedPins[STM_PIN(p)] != NoPin)
-    debugPrintf("Warning EXTI in use. Old pin %c.%d new %c.%d\n", (int)('A'+STM_PORT(attachedPins[STM_PIN(p)])), (int)STM_PIN(attachedPins[STM_PIN(p)]), (int)('A'+STM_PORT(p)), (int)STM_PIN(p));
   if (!stm32_interrupt_enable(port, STM_GPIO_PIN(p), callback, it_mode, param))
   {
     debugPrintf("Failed to attach interrupt to pin %c.%d\n", (int)('A'+STM_PORT(p)), (int)STM_PIN(p));
+    if (attachedPins[STM_PIN(p)] != NoPin)
+      debugPrintf("Old pin %c.%d new %c.%d\n", (int)('A'+STM_PORT(attachedPins[STM_PIN(p)])), (int)STM_PIN(attachedPins[STM_PIN(p)]), (int)('A'+STM_PORT(p)), (int)STM_PIN(p));
     return false;
   }
   attachedPins[STM_PIN(p)] = pin;
