@@ -21,7 +21,7 @@
 #if LPC17xx
 #include "Wire/Wire.h"
 #else
-#if SAME70
+#if SAME70 || RP2040
 // TWI disabled for now
 #else
 

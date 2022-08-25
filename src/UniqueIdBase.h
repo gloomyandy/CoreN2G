@@ -33,11 +33,16 @@ public:
 	void AppendCharsToString(const StringRef& str) const noexcept;
 
 	const uint8_t *_ecv_array GetRaw() const { return (const uint8_t *_ecv_array)data; }
+	const uint32_t *_ecv_array GetDwords() const { return data; }
 
 protected:
 	void SetChecksumWord() noexcept;
 
-	uint32_t data[5];
+#if RP2040
+	uint32_t data[3];			// 64-bit unique ID plus checksum
+#else
+	uint32_t data[5];			// 128-bit unique ID plus checksum
+#endif
 };
 
 #endif /* SRC_UNIQUEIDBASE_H_ */

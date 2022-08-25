@@ -36,6 +36,8 @@ namespace AnalogIn
 	constexpr unsigned int AdcBits = 16;
 #elif STM32
 	constexpr unsigned int AdcBits = 14;
+#elif RP2040
+	constexpr unsigned int AdcBits = 12;
 #endif
 
 #ifdef RTOS
@@ -44,7 +46,7 @@ namespace AnalogIn
 	void Init(
 #if SAME5x
 				NvicPriority interruptPriority
-#else
+#elif SAMC21 || RP2040
 				DmaChannel dmaChan,
 				DmaPriority rxPriority
 #endif
@@ -80,7 +82,7 @@ namespace AnalogIn
 	bool EnableTemperatureSensor(unsigned int sensorNumber, AnalogInCallbackFunction fn, CallbackParameter param, uint32_t ticksPerCall, unsigned int adcnum) noexcept;
 #endif
 
-#if SAMC21
+#if SAMC21 || RP2040
 	void EnableTemperatureSensor(AnalogInCallbackFunction fn, CallbackParameter param, uint32_t ticksPerCall) noexcept;
 #endif
 

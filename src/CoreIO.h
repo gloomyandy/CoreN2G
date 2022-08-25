@@ -37,6 +37,8 @@ constexpr unsigned int NumTotalPins = 3 * 32;			// SAM4S8C goes up to PC31
 constexpr unsigned int NumTotalPins = (4 * 32) + 6;		// SAME70 goes up to PE5
 #elif STM32 || LPC17xx
 constexpr int NumTotalPins = P_END;
+#elif RP2040
+constexpr unsigned int NumTotalPins = 30;				// RP2040 goes up to GPIO29
 #else
 # error Unsupported processor
 #endif
@@ -50,6 +52,12 @@ inline uint32_t GpioPortNumber(Pin p) { return p >> 5;}
 inline constexpr uint32_t GpioPinNumber(Pin p) { return p & 0x1f; }
 inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)1 << GpioPinNumber(p); }
 #else
+#if RP2040
+
+inline constexpr Pin GpioPin(unsigned int n) noexcept { return n; }
+
+#else
+
 inline uint32_t GpioPortNumber(Pin p) { return p >> 5; }
 inline constexpr uint32_t GpioPinNumber(Pin p) { return p & 0x1F; }
 inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)1 << GpioPinNumber(p); }
@@ -112,15 +120,23 @@ inline constexpr Pin PortEPin(unsigned int n) noexcept { return 128+n; }
 
 #endif
 
+#endif	// !RP2040
+
 /**
  * @brief Pin function numbers for calls to SetPinFunction
  *
  */
 enum class GpioPinFunction : uint8_t
 {
+#if RP2040
+    Xip = 0, Spi = 1, Uart = 2, I2c = 3, Pwm = 4,
+    Sio = 5, Pio0 = 6, Pio1 = 7, Gpck = 8, Usb = 9,
+    None = 0x1f
+#else
 	A = 0, B, C, D,
-#if SAME5x || SAMC21
+# if SAME5x || SAMC21
 	E, F, G, H, I, J, K, L, M, N
+# endif
 #endif
 };
 
@@ -131,6 +147,10 @@ enum class GpioPinFunction : uint8_t
  * @param f The required pin function
  */
 void SetPinFunction(Pin p, GpioPinFunction f) noexcept;
+
+#if SAME5x || SAMC21
+void SetHighDriveStrength(Pin p) noexcept;
+#endif
 
 /**
  * @brief Set a pin back to ordinary digital I/O
@@ -445,6 +465,8 @@ inline void fastDigitalWriteHigh(uint32_t pin) noexcept
 	PORT->Group[GpioPortNumber(pin)].OUTSET.reg = GpioMask(pin);
 #elif SAME70 || SAM4E || SAM4S
 	GpioPort(pin)->PIO_SODR = GpioMask(pin);
+#elif RP2040
+	gpio_put(pin, true);			//TODO can we optimise this?
 #else
 # error Unsupported processor
 #endif
@@ -461,6 +483,8 @@ inline void fastDigitalWriteLow(uint32_t pin) noexcept
 	PORT->Group[GpioPortNumber(pin)].OUTCLR.reg = GpioMask(pin);
 #elif SAME70 || SAM4E || SAM4S
 	GpioPort(pin)->PIO_CODR = GpioMask(pin);
+#elif RP2040
+	gpio_put(pin, false);			//TODO can we optimise this?
 #else
 # error Unsupported processor
 #endif
@@ -477,6 +501,8 @@ inline bool fastDigitalRead(uint32_t pin) noexcept
 	return PORT->Group[GpioPortNumber(pin)].IN.reg & GpioMask(pin);
 #elif SAME70 || SAM4E || SAM4S
 	return GpioPort(pin)->PIO_PDSR & GpioMask(pin);
+#elif RP2040
+	return gpio_get(pin);			//TODO can we optimise this?
 #else
 # error Unsupported processor
 #endif
@@ -489,7 +515,8 @@ inline bool fastDigitalRead(uint32_t pin) noexcept
  */
 [[noreturn]] void ResetProcessor() noexcept;
 
-#if !STM32 && !LPC17xx
+#if !STM32 && !LPC17xx && !RP2040
+
 /**
  * @brief TC output identifiers used in pin tables
  * These encode the TC number, the output number from that TC, and the peripheral number
@@ -519,6 +546,8 @@ enum class TcOutput : uint8_t
 	tioa9, tiob9, tioa10, tiob10,
 	tioa11 = 0x40 + (11u << 1), tiob11,															// TIO11 is on peripheral C
 # endif
+#else
+# error Unsupported processor
 #endif
 
 	none = 0xFF,
@@ -574,6 +603,8 @@ static inline constexpr GpioPinFunction GetPeriNumber(TcOutput tc) noexcept
  * @param gclkNum The GCLK number to use
  */
 void EnableTcClock(unsigned int tcNumber, unsigned int gclkNum) noexcept;
+
+#endif
 
 #if SAME5x || SAMC21
 
@@ -651,19 +682,24 @@ static inline constexpr GpioPinFunction GetPeriNumber(TccOutput tcc) noexcept
  */
 void EnableTccClock(unsigned int tccNumber, unsigned int gclkNum) noexcept;
 
-#elif SAME70 || SAM4E || SAM4S
+#elif SAME70 || SAM4E || SAM4S || RP2040
 
 enum class PwmOutput : uint8_t
 {
+#if RP2040
+	pwm0a = 0x00, pwm0b, pwm1a, pwm1b, pwm2a, pwm2b, pwm3a, pwm3b,
+		   pwm4a, pwm4b, pwm5a, pwm5b, pwm6a, pwm6b, pwm7a, pwm7b,
+#else
 	pwm0l0_a = 0x00, pwm0h0_a, pwm0l1_a, pwm0h1_a, pwm0l2_a, pwm0h2_a, pwm0l3_a, pwm0h3_a,
 	pwm0l0_b = 0x20, pwm0h0_b, pwm0l1_b, pwm0h1_b, pwm0l2_b, pwm0h2_b, pwm0l3_b, pwm0h3_b,
 	pwm0l0_c = 0x40, pwm0h0_c, pwm0l1_c, pwm0h1_c, pwm0l2_c, pwm0h2_c, pwm0l3_c, pwm0h3_c,
 	pwm0l0_d = 0x60, pwm0h0_d, pwm0l1_d, pwm0h1_d, pwm0l2_d, pwm0h2_d, pwm0l3_d, pwm0h3_d,
-#if SAME70
+# if SAME70
 	pwm1l0_a = 0x08, pwm1h0_a, pwm1l1_a, pwm1h1_a, pwm1l2_a, pwm1h2_a, pwm1l3_a, pwm1h3_a,
 	pwm1l0_b = 0x28, pwm1h0_b, pwm1l1_b, pwm1h1_b, pwm1l2_b, pwm1h2_b, pwm1l3_b, pwm1h3_b,
 	pwm1l0_c = 0x48, pwm1h0_c, pwm1l1_c, pwm1h1_c, pwm1l2_c, pwm1h2_c, pwm1l3_c, pwm1h3_c,
 	pwm1l0_d = 0x68, pwm1h0_d, pwm1l1_d, pwm1h1_d, pwm1l2_d, pwm1h2_d, pwm1l3_d, pwm1h3_d,
+# endif
 #endif
 
 	none = 0xFF,
@@ -699,7 +735,11 @@ static inline constexpr unsigned int GetOutputNumber(PwmOutput pwm) noexcept
  */
 static inline constexpr GpioPinFunction GetPeriNumber(PwmOutput pwm) noexcept
 {
+#if RP2040
+	return GpioPinFunction::Pwm;
+#else
 	return (GpioPinFunction)((uint8_t)pwm >> 5);
+#endif
 }
 
 #endif
@@ -731,7 +771,10 @@ typedef AnalogChannelNumber AdcInput;
  */
 enum class AdcInput : uint8_t
 {
-	adc0_0 = 0x00, adc0_1, adc0_2, adc0_3, adc0_4, adc0_5, adc0_6, adc0_7, adc0_8, adc0_9,
+	adc0_0 = 0x00, adc0_1, adc0_2, adc0_3, adc0_tempSense,
+#if !RP2040
+	adc0_4, adc0_5, adc0_6, adc0_7, adc0_8, adc0_9,
+#endif
 #if SAMC21
 	adc0_10, adc0_11,
 	sdadc_0 = 0x10, sdadc_1,
@@ -760,7 +803,8 @@ typedef AdcInput AnalogChannelNumber;						///< for backwards compatibility
 constexpr AnalogChannelNumber NO_ADC = AdcInput::none;		///< for backwards compatibility
 #endif
 
-#if !STM32 && !LPC17xx
+#if !STM32 && !LPC17xx && !RP2040
+
 /**
  * @brief Get the ADC number that an ADC input is on
  *
@@ -769,14 +813,23 @@ constexpr AnalogChannelNumber NO_ADC = AdcInput::none;		///< for backwards compa
  */
 static inline constexpr unsigned int GetDeviceNumber(AdcInput ain) noexcept { return (uint8_t)ain >> 4; }
 
+#endif
+
 /**
  * @brief Get the ADC input number that an ADC input is on
  *
  * @param ain The AdcInput
  * @return The input number within the ADC
  */
-static inline constexpr unsigned int GetInputNumber(AdcInput ain) noexcept { return (uint8_t)ain & 0x0F; }
+static inline constexpr unsigned int GetInputNumber(AdcInput ain) noexcept
+{
+#if RP2040
+	return (uint8_t)ain;
+#else
+	return (uint8_t)ain & 0x0F;
 #endif
+}
+
 /**
  * @brief Return the AdcInput that is attached to a pin
  *
@@ -797,7 +850,8 @@ AnalogChannelNumber PinToSdAdcChannel(Pin p) noexcept;
 
 #endif
 
-#if !STM32 && !LPC17xx
+#if !STM32 && !LPC17xx && !RP2040
+
 /**
  * @brief SERCOM identifier. This encodes a SERCOM number and the peripheral that it is on.
  *
@@ -837,6 +891,8 @@ static inline constexpr unsigned int GetDeviceNumber(SercomIo sercom) noexcept {
  */
 static inline constexpr GpioPinFunction GetPeriNumber(SercomIo sercom) noexcept { return ((uint8_t)sercom >= 0x80) ? GpioPinFunction::D : GpioPinFunction::C; }
 
+#endif
+
 // Addresses of unique ID dwords
 #if SAME5x
 constexpr uint32_t SerialNumberAddresses[4] = { 0x008061FC, 0x00806010, 0x00806014, 0x00806018 };
@@ -871,6 +927,13 @@ struct PinDescriptionBase
 	PwmOutput pwm;					///< The PWM output that is connected to this pin and available for PWM generation, or PwmOutput::none
 	AdcInput adc;					///< The ADC input that is connected to this pin and available, or AdcInput::none
 
+#elif RP2040
+
+	PwmOutput pwm;					///< The PWM output that is connected to this pin and available for PWM generation, or PwmOutput::none
+	AdcInput adc;					///< The ADC input that is connected to this pin and available, or AdcInput::none
+
+#else
+# error Unsupported processor
 #endif
 };
 #endif

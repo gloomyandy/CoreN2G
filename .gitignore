@@ -23,8 +23,7 @@
 # Compiled Static libraries
 *.lai
 *.la
-#*.a
-#*.lib
+*.lib
 
 # Misc
 /.settings/
@@ -55,3 +54,5 @@
 /SAME70_SDHC/
 /SAM4E_SDHC_USB_RTOS/
 /SAM4S_SDHC_USB_RTOS/
+/SAME70_CAN/
+/RP2040_CAN_RTOS/

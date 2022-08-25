@@ -25,6 +25,7 @@
 # define SAM4S				0
 # define SAME5x				1
 # define SAME70				0
+# define RP2040				0
 #elif defined(__SAME51N19A__) || defined(__SAME51G19A__)
 # include <same51.h>
 # define SAMC21				0
@@ -33,6 +34,7 @@
 # define SAM4S				0
 # define SAME5x				1
 # define SAME70				0
+# define RP2040				0
 #elif defined(__SAMD51N19A__)
 # include <samd51.h>
 # define SAMC21				0
@@ -41,6 +43,7 @@
 # define SAM4S				0
 # define SAME5x				1
 # define SAME70				0
+# define RP2040				0
 #elif defined(__SAMC21G18A__)
 # include <samc21.h>
 # define SAMC21				1
@@ -50,15 +53,18 @@
 # define SAME5x				0
 # define SAME70				0
 # define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
+# define RP2040				0
 #elif defined(__SAM4E8E__)
 # include <parts.h>
 # include <sam4e8e.h>
 # define SAME5x				0
+# define RP2040				0
 # define SUPPORT_CAN		0			// SAM4E doesn't support CAN-FD
 #elif defined(__SAM4S8C__)
 # include <parts.h>
 # include <sam4s8c.h>
 # define SAME5x				0
+# define RP2040				0
 # define SUPPORT_CAN		0			// SAM4E doesn't support CAN-FD
 #elif defined(__SAME70Q20B__)
 # include <parts.h>
@@ -92,17 +98,30 @@
 # include <lpc17xx.h>
 # define LPC17xx			1
 # define STM32F4			0
+# define RP2040				0
+#elif defined __RP2040__
+extern "C" {
+# include <hardware/gpio.h>
+# include <cmsis_compiler.h>
+# include <RP2040.h>
+# include <core_cm0plus.h>
+}
+# define RP2040				1
 # define SAMC21				0
 # define SAM3XA				0
 # define SAM4E				0
 # define SAM4S				0
 # define SAME5x				0
 # define SAME70				0
+<<<<<<< HEAD
+=======
+# define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
+>>>>>>> upstream/3.5-dev
 #else
 # error unsupported processor
 #endif
 
-#include <inttypes.h>				// for PRIu32 etc.
+#include <inttypes.h>					// for PRIu32 etc.
 #include <ctype.h>
 #include "CoreTypes.h"
 
@@ -140,6 +159,12 @@ static const uint32_t SystemCoreClockFreq = 300000000;	///< The processor clock 
 #elif STM32 || LPC17xx
 
 #define SystemCoreClockFreq SystemCoreClock
+#elif RP2040
+
+static const uint32_t SystemCoreClockFreq = 125000000;	///< The processor clock frequency after initialisation
+
+#else
+# error unsupported processor
 #endif
 
 /// Pin mode enumeration
@@ -344,7 +369,9 @@ static inline uint32_t GetCurrentCycles() noexcept
  */
 static inline uint32_t GetElapsedCyclesBetween(uint32_t startCycles, uint32_t endCycles) noexcept
 {
-	return ((endCycles < startCycles) ? startCycles : startCycles + (SysTick->LOAD & 0x00FFFFFF) + 1) - endCycles;
+	return ((endCycles < startCycles)
+				? startCycles
+					: startCycles + (SysTick->LOAD & 0x00FFFFFF) + 1) - endCycles;
 }
 #endif
 
@@ -368,6 +395,17 @@ static inline void delayMicroseconds(uint32_t usec) noexcept __attribute__((alwa
 static inline void delayMicroseconds(uint32_t usec) noexcept
 {
 	(void)DelayCycles(GetCurrentCycles(), usec * (SystemCoreClockFreq/1000000));
+}
+
+/**
+ * @brief Delay for at least the specified number of nanoseconds
+ *
+ * @param How many nanoseconds to delay for
+ */
+static inline void delayNanoseconds(uint32_t nsec) noexcept __attribute__((always_inline, unused));
+static inline void delayNanoseconds(uint32_t nsec) noexcept
+{
+	(void)DelayCycles(GetCurrentCycles(), (nsec * (SystemCoreClockFreq/1000000))/1000);
 }
 
 // Functions to enable/disable interrupts

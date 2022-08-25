@@ -36,6 +36,9 @@
 static IWDG_HandleTypeDef wdHandle;
 #elif LPC17xx
 #include <CoreImp.h>
+#elif RP2040
+# include <hardware/watchdog.h>
+# include <hardware/adc.h>
 #endif
 
 #if STM32
@@ -301,6 +304,8 @@ void SetPinFunction(Pin p, GpioPinFunction f) noexcept
 	p_pio->PIO_ABCDSR[0] = sr0;
 	p_pio->PIO_ABCDSR[1] = sr1;
 	p_pio->PIO_PDR = mask;									// remove the pins from under the control of PIO
+#elif RP2040
+	gpio_set_function(p, (gpio_function)f);
 #else
 # error Unsupported processor
 #endif
@@ -319,6 +324,8 @@ void ClearPinFunction(Pin p) noexcept
 	Pio * const p_pio = GpioPort(p);
 	const uint32_t mask = GpioMask(p);
 	p_pio->PIO_PER = mask;									// put the pins under the control of PIO
+#elif RP2040
+	gpio_init(p);
 #else
 # error Unsupported processor
 #endif
@@ -330,6 +337,8 @@ void EnablePullup(Pin pin) noexcept
 #if SAM4E || SAM4S || SAME70
 	GpioPort(pin)->PIO_PPDDR = GpioMask(pin);						// turn off pulldown
 	GpioPort(pin)->PIO_PUER = GpioMask(pin);						// turn on pullup
+#elif RP2040
+	gpio_pull_up(pin);
 #else
 	PORT->Group[GpioPortNumber(pin)].OUTSET.reg = GpioMask(pin);
 	PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].bit.PULLEN = 1;
@@ -342,10 +351,26 @@ void DisablePullup(Pin pin) noexcept
 #if SAM4E || SAM4S || SAME70
 	GpioPort(pin)->PIO_PUDR = GpioMask(pin);						// turn off pullup
 	GpioPort(pin)->PIO_PPDDR = GpioMask(pin);						// turn off pulldown
+#elif RP2040
+	gpio_disable_pulls(pin);
 #else
 	PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].bit.PULLEN = 0;
 #endif
 }
+
+#if SAME5x || SAMC21 || RP2040
+
+// Set high driver strength on an output pin
+void SetHighDriveStrength(Pin p) noexcept
+{
+#if SAME5x || SAMC21
+	PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].reg |= PORT_PINCFG_DRVSTR;
+#elif RP2040
+	gpio_set_drive_strength(p, GPIO_DRIVE_STRENGTH_8MA);			// 2, 4, 8 and 12mA can be selected
+#endif
+}
+
+#endif
 
 // IoPort::SetPinMode calls this
 // Warning! Changing pin mode will reset the output drive strength to normal.
@@ -374,6 +399,11 @@ void SetPinMode(Pin pin, enum PinMode mode, uint32_t debounceCutoff = 0) noexcep
 			{
 				pio_set_debounce_filter(GpioPort(pin), GpioMask(pin), debounceCutoff);	// enable debounce filter with specified cutoff frequency
 			}
+#elif RP2040
+			ClearPinFunction(pin);
+			gpio_disable_pulls(pin);
+			gpio_set_input_enabled(pin, true);
+			gpio_set_dir(pin, false);
 #else
 			ClearPinFunction(pin);
 			// The direction must be set before the pullup, otherwise setting the pullup doesn't work
@@ -391,6 +421,11 @@ void SetPinMode(Pin pin, enum PinMode mode, uint32_t debounceCutoff = 0) noexcep
 			{
 				pio_set_debounce_filter(GpioPort(pin), GpioMask(pin), debounceCutoff);	// enable debounce filter with specified cutoff frequency
 			}
+#elif RP2040
+			ClearPinFunction(pin);
+			gpio_pull_up(pin);
+			gpio_set_input_enabled(pin, true);
+			gpio_set_dir(pin, false);
 #else
 			ClearPinFunction(pin);
 			// The direction must be set before the pullup, otherwise setting the pullup doesn't work
@@ -410,6 +445,11 @@ void SetPinMode(Pin pin, enum PinMode mode, uint32_t debounceCutoff = 0) noexcep
 			{
 				pio_set_debounce_filter(GpioPort(pin), GpioMask(pin), debounceCutoff);	// enable debounce filter with specified cutoff frequency
 			}
+#elif RP2040
+			ClearPinFunction(pin);
+			gpio_pull_down(pin);
+			gpio_set_input_enabled(pin, true);
+			gpio_set_dir(pin, false);
 #else
 			ClearPinFunction(pin);
 			// The direction must be set before the pullup, otherwise setting the pullup doesn't work
@@ -427,6 +467,11 @@ void SetPinMode(Pin pin, enum PinMode mode, uint32_t debounceCutoff = 0) noexcep
 			{
 				pmc_disable_periph_clk(PioIds[GpioPortNumber(pin)]);
 			}
+#elif RP2040
+			ClearPinFunction(pin);
+			gpio_disable_pulls(pin);
+			gpio_put(pin, false);
+			gpio_set_dir(pin, true);
 #else
 			ClearPinFunction(pin);
 			PORT->Group[GpioPortNumber(pin)].OUTCLR.reg = GpioMask(pin);
@@ -443,6 +488,11 @@ void SetPinMode(Pin pin, enum PinMode mode, uint32_t debounceCutoff = 0) noexcep
 			{
 				pmc_disable_periph_clk(PioIds[GpioPortNumber(pin)]);
 			}
+#elif RP2040
+			ClearPinFunction(pin);
+			gpio_disable_pulls(pin);
+			gpio_put(pin, true);
+			gpio_set_dir(pin, true);
 #else
 			ClearPinFunction(pin);
 			PORT->Group[GpioPortNumber(pin)].OUTSET.reg = GpioMask(pin);
@@ -458,6 +508,8 @@ void SetPinMode(Pin pin, enum PinMode mode, uint32_t debounceCutoff = 0) noexcep
 			GpioPort(pin)->PIO_PPDDR = GpioMask(pin);						// turn off pulldown
 			// Ideally we should record which pins are being used as analog inputs, then we can disable the clock
 			// on any PIO that is being used solely for outputs and ADC inputs. But for now we don't do that.
+#elif RP2040
+			adc_gpio_init(pin);
 #else
 			PORT->Group[GpioPortNumber(pin)].DIRCLR.reg = GpioMask(pin);
 			PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].reg = 0;
@@ -703,6 +755,10 @@ void WatchdogInit() noexcept
     NVIC_ClearPendingIRQ(WDT_IRQn);
     NVIC_SetPriority(WDT_IRQn, 0); //Highest priority
     NVIC_EnableIRQ(WDT_IRQn);
+#elif RP2040
+	watchdog_enable(750, true);									// we reset the timer to run at 750kHz instead of 1MHz, so 1 second is 750 "milliseconds"
+#else
+# error Unsupported processor
 #endif
 }
 
@@ -720,6 +776,10 @@ void WatchdogReset() noexcept
     HAL_IWDG_Refresh(&wdHandle);
 #elif LPC17xx
     Chip_WWDT_Feed(LPC_WWDT);
+#elif RP2040
+	watchdog_update();
+#else
+# error Unsupported processor
 #endif
 }
 
@@ -767,6 +827,8 @@ void ConfigureGclk(unsigned int index, GclkSource source, uint16_t divisor, bool
 }
 
 #endif
+
+#if !RP2040
 
 void EnableTcClock(unsigned int tcNumber, unsigned int gclkNum) noexcept
 {
@@ -824,6 +886,8 @@ void EnableTcClock(unsigned int tcNumber, unsigned int gclkNum) noexcept
 # error Unsupported processor
 #endif
 }
+
+#endif
 
 #if SAME5x || SAMC21
 
