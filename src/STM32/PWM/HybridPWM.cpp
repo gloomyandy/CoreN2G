@@ -59,7 +59,18 @@ void HybridPWMPin::free() noexcept
 
 void HybridPWMPin::set(float value, uint32_t freq) noexcept
 {
-    if (this->freq != freq)
+    // Don't allocate a time until we actually need it!
+    if (!pwm)
+    {
+        if (value != 0.0 && value != 1.0 && freq != 0)
+        {
+            pwm = HybridPWMBase::allocate(this, pin, freq, value);
+            this->value = value;
+            this->freq = freq;
+            return;
+        }
+    }
+    else if (this->freq != freq)
     {
         if (pwm) pwm->free();
         if (freq != 0)

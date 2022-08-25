@@ -22,7 +22,7 @@ V=@
 
 $(info Building RepRapFirmware for STM32H7 based boards:)
 
-OUTPUT_NAME=firmware
+BASE_OUTPUT_NAME=firmware-stm32h7
 
 ## Cross-compilation commands 
 CC      = arm-none-eabi-gcc
@@ -83,17 +83,17 @@ FLAGS += -nostdlib -Wdouble-promotion -fsingle-precision-constant -fstack-usage
 FLAGS += $(DEBUG_FLAGS)
 FLAGS += -MMD -MP 
 
-ifeq ($(NETWORK), ETHERNET)
-        $(info  - Networking: Ethernet)
-        FLAGS += -DLPC_NETWORKING
-else ifeq ($(NETWORK), WIFI)
+ifeq ($(NETWORK), WIFI)
         $(info  - Networking: ESP WIFI) 
         FLAGS += -DESP8266WIFI
+		OUTPUT_NAME =$(BASE_OUTPUT_NAME)-wifi
 else ifeq ($(NETWORK), SBC)
         $(info  - SBC Interface Enabled)
         FLAGS += -DLPC_SBC
+		OUTPUT_NAME =$(BASE_OUTPUT_NAME)-sbc
 else
         $(info  - Networking: None)
+		OUTPUT_NAME =$(BASE_OUTPUT_NAME)
 endif
 
 
@@ -105,6 +105,7 @@ ifeq ($(TMC51XX), true)
         $(info  - Smart Drivers: TMC51XX)
         FLAGS += -DSUPPORT_TMC51xx
 endif
+$(info - Output name: $(OUTPUT_NAME))
 
 CFLAGS   = $(FLAGS) -std=gnu11 -fgnu89-inline -Dnoexcept=
 CXXFLAGS = $(FLAGS) -std=gnu++17 -fno-threadsafe-statics -fexceptions -fno-rtti -Wno-register
@@ -215,7 +216,6 @@ distclean:
 	-rm -rf $(BUILD_DIR)/ 
 
 upload:
-	ST-LINK_CLI.exe -c SWD -P "$(BUILD_DIR)/firmware.bin" 0x8020000 -ClrBP -NoPrompt -Rst -Run
-#	ST-LINK_CLI.exe -c SWD -P "$(BUILD_DIR)/firmware.bin" 0x8000000 -ClrBP -NoPrompt -Rst -Run
+	ST-LINK_CLI.exe -c SWD -P "$(BUILD_DIR)/$(OUTPUT_NAME).bin" 0x8020000 -ClrBP -NoPrompt -Rst -Run
 
 .PHONY: all firmware clean distclean $(BUILD_DIR)/$(OUTPUT_NAME).elf

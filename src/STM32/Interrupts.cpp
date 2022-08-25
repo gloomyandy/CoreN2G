@@ -57,10 +57,11 @@ bool attachInterrupt(Pin pin, StandardCallbackFunction callback, enum InterruptM
 #ifdef STM32F1xx
   pinF1_DisconnectDebug(p);
 #endif /* STM32F1xx */
-
   if (!stm32_interrupt_enable(port, STM_GPIO_PIN(p), callback, it_mode, param))
   {
     debugPrintf("Failed to attach interrupt to pin %c.%d\n", (int)('A'+STM_PORT(p)), (int)STM_PIN(p));
+    if (attachedPins[STM_PIN(p)] != NoPin)
+      debugPrintf("Old pin %c.%d new %c.%d\n", (int)('A'+STM_PORT(attachedPins[STM_PIN(p)])), (int)STM_PIN(attachedPins[STM_PIN(p)]), (int)('A'+STM_PORT(p)), (int)STM_PIN(p));
     return false;
   }
   attachedPins[STM_PIN(p)] = pin;
@@ -81,8 +82,11 @@ void detachInterrupt(Pin pin) noexcept
   if (!port) {
     return;
   }
-  stm32_interrupt_disable(port, STM_GPIO_PIN(p));
-  attachedPins[STM_GPIO_PIN(p)] = pin;
+  if (attachedPins[STM_PIN(p)] == pin)
+  {
+    stm32_interrupt_disable(port, STM_GPIO_PIN(p));
+    attachedPins[STM_PIN(p)] = NoPin;
+  }
 #else
   UNUSED(pin);
 #endif

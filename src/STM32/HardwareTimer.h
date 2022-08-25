@@ -151,6 +151,8 @@ extern HardwareTimerObj_t *HardwareTimer_Handle[TIMER_NUM];
 
 extern timer_index_t get_timer_index(TIM_TypeDef *htim);
 
+extern uint32_t get_timer_id(timer_index_t index);
+
 #endif /* __cplusplus */
 
 #endif  // HAL_TIM_MODULE_ENABLED

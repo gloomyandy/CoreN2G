@@ -4,6 +4,11 @@
 #include "HybridPWM.h"
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 //#define LPC_DEBUG
+# if STM32H7
+# define SYNC_GPIO() __DSB()
+#else
+# define SYNC_GPIO()
+# endif
 #define SPWM_TIMER TIM7
 HardwareTimer SPWMTimer(SPWM_TIMER);
 
@@ -29,7 +34,6 @@ static bool timerReady = false;
 static TIM_HandleTypeDef *timerHandle;
 
 static SoftwarePWM PWMChans[MaxPWMChannels];
-#define LPC_DEBUG
 #ifdef LPC_DEBUG
 uint32_t pwmInts = 0;
 uint32_t pwmCalls = 0;
@@ -179,6 +183,7 @@ void TIM7_IRQHandler(void) noexcept
                 }
                 else
                     fastDigitalWriteLow(s.pin);
+                SYNC_GPIO();
                 // adjust next time by any drift to keep things in sync
                 delta += s.onOffTimes[s.onOffBuffer][newState];
                 s.nextEvent = now + delta;
@@ -241,9 +246,13 @@ static void initTimer() noexcept
     uint32_t preScale = SPWMTimer.getTimerClkFreq()/1000000;
     //debugPrintf("ST base freq %d setting presacle %d\n", static_cast<int>(SPWMTimer.getTimerClkFreq()), static_cast<int>(preScale));
     SPWMTimer.setPrescaleFactor(preScale);
-    SPWMTimer.setOverflow(0, TICK_FORMAT);
+    SPWMTimer.setOverflow(0xffff, TICK_FORMAT);
     SPWMTimer.attachInterrupt(SPWM_Handler);
+    // init hardware and interrupts
     timerHandle = &(HardwareTimer_Handle[get_timer_index(SPWM_TIMER)]->handle);
+    SPWMTimer.setCount(1);
+    SPWMTimer.resume();
+    SPWMTimer.pause();
     timerReady = true;
 }
 
@@ -288,8 +297,8 @@ HybridPWMBase *SoftwarePWM::allocate(Pin pin, uint32_t freq, float value) noexce
             PWMChans[i].setValue(pin, value);
             return &PWMChans[i];
         }
-    return nullptr;
 
+    return nullptr;
 }
 
 void SoftwarePWM::setValue(Pin pin, float value) noexcept

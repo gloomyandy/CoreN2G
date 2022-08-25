@@ -63,7 +63,7 @@ Reset_Handler:
   ldr   sp, =_estack    /* set stack pointer */
 #endif
 #if HAL_RRF
-  cpsid if               /* ensure interrupts are off during startup */
+  cpsid i               /* ensure interrupts are off during startup */
 #endif
 /* Copy the data segment initializers from flash to SRAM */
   ldr r0, =_sdata

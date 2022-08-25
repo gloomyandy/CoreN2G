@@ -58,7 +58,9 @@ HardwareSPI HardwareSPI::SSP6(SPI6);
 #endif
 #else
 static constexpr uint32_t MinDMALength = 0;
-#define CAN_USE_DMA(ptr, len) (true)
+extern uint32_t _sdata;
+extern uint32_t _estack;
+#define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_sdata) && ((const char *)(ptr) + (len) < (const char *)&_estack)))
 
 // Create SPI devices the actual configuration is set later
 #if USE_SSP1
