@@ -51,8 +51,7 @@ inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)STM_GPIO_PIN(p); }
 inline uint32_t GpioPortNumber(Pin p) { return p >> 5;}
 inline constexpr uint32_t GpioPinNumber(Pin p) { return p & 0x1f; }
 inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)1 << GpioPinNumber(p); }
-#else
-#if RP2040
+#elif RP2040
 
 inline constexpr Pin GpioPin(unsigned int n) noexcept { return n; }
 
@@ -68,6 +67,7 @@ inline Pio *GpioPort(Pin p) { return (Pio*)((uint32_t)PIOA + GpioPortNumber(p) *
 #endif
 
 #if !STM32 && !LPC17xx
+#if !RP2040
 /**
  * @brief Return the global pin number for a Port A pin
  *
@@ -743,7 +743,7 @@ static inline constexpr GpioPinFunction GetPeriNumber(PwmOutput pwm) noexcept
 }
 
 #endif
-#endif
+
 #if STM32
 typedef uint32_t AdcInput;
 typedef AdcInput AnalogChannelNumber;
@@ -890,7 +890,6 @@ static inline constexpr unsigned int GetDeviceNumber(SercomIo sercom) noexcept {
  * @return The peripheral ID
  */
 static inline constexpr GpioPinFunction GetPeriNumber(SercomIo sercom) noexcept { return ((uint8_t)sercom >= 0x80) ? GpioPinFunction::D : GpioPinFunction::C; }
-
 #endif
 
 // Addresses of unique ID dwords
@@ -904,6 +903,7 @@ constexpr uint32_t SerialNumberAddresses[4] = { 0x0080A00C, 0x0080A040, 0x0080A0
  * @section AppInterface Functions that must be provided by the application project
  */
 
+#if !STM32 && !LPC17xx
 /**
  * @brief Layout of an entry in the pin table. The client project may add additional fields by deriving from this.
  */

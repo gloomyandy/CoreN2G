@@ -82,6 +82,7 @@
 # define SAM4S				0
 # define SAME5x				0
 # define SAME70				0
+# define RP2040				0
 #elif defined(__STM32H7__)
 # include <stm32h7.h>
 # include <dwt.h>
@@ -94,6 +95,7 @@
 # define SAM4S				0
 # define SAME5x				0
 # define SAME70				0
+# define RP2040				0
 #elif defined(__LPC17xx__)
 # include <lpc17xx.h>
 # define LPC17xx			1
@@ -113,10 +115,7 @@ extern "C" {
 # define SAM4S				0
 # define SAME5x				0
 # define SAME70				0
-<<<<<<< HEAD
-=======
 # define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
->>>>>>> upstream/3.5-dev
 #else
 # error unsupported processor
 #endif
