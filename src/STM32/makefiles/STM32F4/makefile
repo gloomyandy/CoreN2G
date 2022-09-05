@@ -6,7 +6,7 @@ FREERTOS_DIR ?= ./FreeRTOS
 REPRAPFIRMWARE_DIR ?= ./RepRapFirmware
 RRFLIBRARIES_DIR ?= ./RRFLibraries
 CORESTM_DIR ?= ./CoreN2G
-CANLIB_DIR ?= CANLib
+CANLIB_DIR ?= CANlib
 
 BUILD ?= Debug
 
