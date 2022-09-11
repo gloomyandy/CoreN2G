@@ -148,9 +148,13 @@ enum class GpioPinFunction : uint8_t
  */
 void SetPinFunction(Pin p, GpioPinFunction f) noexcept;
 
-#if SAME5x || SAMC21
-void SetHighDriveStrength(Pin p) noexcept;
-#endif
+/**
+ * @brief Set the drive strength of a pin
+ * @param p The pin number
+ * @param strength the strength, where 0 = minimum
+ * The maximum is limited to 3 for the RP2040, and 1 for SAME5x and SAMC21.
+ */
+void SetDriveStrength(Pin p, unsigned int strength) noexcept;
 
 /**
  * @brief Set a pin back to ordinary digital I/O
@@ -771,8 +775,10 @@ typedef AnalogChannelNumber AdcInput;
  */
 enum class AdcInput : uint8_t
 {
-	adc0_0 = 0x00, adc0_1, adc0_2, adc0_3, adc0_tempSense,
-#if !RP2040
+	adc0_0 = 0x00, adc0_1, adc0_2, adc0_3,
+#if RP2040
+	adc0_tempSense,
+#else
 	adc0_4, adc0_5, adc0_6, adc0_7, adc0_8, adc0_9,
 #endif
 #if SAMC21

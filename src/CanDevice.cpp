@@ -36,7 +36,7 @@
 /**
  * \brief CAN receive FIFO element.
  */
-struct CanDevice::RxBufferHeader
+struct CanRxBufferHeader
 {
 	union
 	{
@@ -67,15 +67,10 @@ struct CanDevice::RxBufferHeader
 	const volatile uint32_t *GetDataPointer() const volatile { return (volatile uint32_t*)this + (sizeof(*this)/sizeof(uint32_t)); }
 };
 
-template<size_t DataLength> struct CanRxBufferEntry : public CanDevice::RxBufferHeader
-{
-	uint8_t data[DataLength];
-};
-
 /**
  * \brief CAN transmit FIFO element.
  */
-struct CanDevice::TxBufferHeader
+struct CanTxBufferHeader
 {
 	union
 	{
@@ -104,11 +99,6 @@ struct CanDevice::TxBufferHeader
 	} T1;
 
 	volatile uint32_t *GetDataPointer() volatile { return (volatile uint32_t*)this + (sizeof(*this)/sizeof(uint32_t)); }
-};
-
-template<size_t DataLength> struct CanTxBufferEntry : public CanDevice::TxBufferHeader
-{
-	uint8_t data[DataLength];
 };
 
 /**@}*/
@@ -143,61 +133,6 @@ struct CanDevice::TxEvent
 	} R1;
 };
 
-/**
- * \brief CAN standard message ID filter element structure.
- *
- *  Common element structure for standard message ID filter element.
- */
-struct CanDevice::StandardMessageFilterElement
-{
-	union S0Type
-	{
-		struct
-		{
-			uint32_t SFID2 : 11; /*!< Standard Filter ID 2 */
-			uint32_t : 5;        /*!< Reserved */
-			uint32_t SFID1 : 11; /*!< Standard Filter ID 1 */
-			uint32_t SFEC : 3;   /*!< Standard Filter Configuration */
-			uint32_t SFT : 2;    /*!< Standard Filter Type */
-		} bit;
-		uint32_t val; /*!< Type used for register access */
-	};
-
-	__IO S0Type S0;
-};
-
-/**
- * \brief CAN extended message ID filter element structure.
- *
- *  Common element structure for extended message ID filter element.
- */
-struct CanDevice::ExtendedMessageFilterElement
-{
-	union F0Type
-	{
-		struct
-		{
-			uint32_t EFID1 : 29;	//!< bit: Extended Filter ID 1
-			uint32_t EFEC : 3;		//!< bit: Extended Filter Configuration
-		} bit;
-		uint32_t val;				//!< Type used for register access
-	};
-
-	union F1Type
-	{
-		struct
-		{
-			uint32_t EFID2 : 29;	//!< bit: Extended Filter ID 2
-			uint32_t : 1;			//!< bit: Reserved
-			uint32_t EFT : 2;		//!< bit: Extended Filter Type
-		} bit;
-		uint32_t val;				//!< Type used for register access
-	};
-
-	__IO union F0Type F0;
-	__IO union F1Type F1;
-};
-
 // Macros to handle the differing naming of registers and fields between the SAME70 and the SAME5x/C21
 #if SAME5x || SAMC21
 
@@ -226,14 +161,14 @@ static Can * const CanPorts[2] = { CAN0, CAN1 };
 static const IRQn IRQnsByPort[2] = { CAN0_IRQn, CAN1_IRQn };
 static CanDevice *devicesByPort[2] = { nullptr, nullptr };
 
-CanDevice CanDevice::devices[NumCanDevices];
+static CanDevice devices[NumCanDevices];
 
-inline uint32_t CanDevice::GetRxBufferSize() const noexcept { return sizeof(RxBufferHeader)/sizeof(uint32_t) + (config->dataSize >> 2); }
-inline uint32_t CanDevice::GetTxBufferSize() const noexcept { return sizeof(TxBufferHeader)/sizeof(uint32_t) + (config->dataSize >> 2); }
-inline CanDevice::RxBufferHeader *CanDevice::GetRxFifo0Buffer(uint32_t index) const noexcept { return (RxBufferHeader*)(rx0Fifo + (index * GetRxBufferSize())); }
-inline CanDevice::RxBufferHeader *CanDevice::GetRxFifo1Buffer(uint32_t index) const noexcept { return (RxBufferHeader*)(rx1Fifo + (index * GetRxBufferSize())); }
-inline CanDevice::RxBufferHeader *CanDevice::GetRxBuffer(uint32_t index) const noexcept { return (RxBufferHeader*)(rxBuffers + (index * GetRxBufferSize())); }
-inline CanDevice::TxBufferHeader *CanDevice::GetTxBuffer(uint32_t index) const noexcept { return (TxBufferHeader*)(txBuffers + (index * GetTxBufferSize())); }
+inline uint32_t CanDevice::GetRxBufferSize() const noexcept { return sizeof(CanRxBufferHeader)/sizeof(uint32_t) + (config->dataSize >> 2); }
+inline uint32_t CanDevice::GetTxBufferSize() const noexcept { return sizeof(CanTxBufferHeader)/sizeof(uint32_t) + (config->dataSize >> 2); }
+inline CanRxBufferHeader *CanDevice::GetRxFifo0Buffer(uint32_t index) const noexcept { return (CanRxBufferHeader*)(rx0Fifo + (index * GetRxBufferSize())); }
+inline CanRxBufferHeader *CanDevice::GetRxFifo1Buffer(uint32_t index) const noexcept { return (CanRxBufferHeader*)(rx1Fifo + (index * GetRxBufferSize())); }
+inline CanRxBufferHeader *CanDevice::GetRxBuffer(uint32_t index) const noexcept { return (CanRxBufferHeader*)(rxBuffers + (index * GetRxBufferSize())); }
+inline CanTxBufferHeader *CanDevice::GetTxBuffer(uint32_t index) const noexcept { return (CanTxBufferHeader*)(txBuffers + (index * GetTxBufferSize())); }
 inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept { return &txEventFifo[index]; }
 
 // Initialise a CAN device and return a pointer to it
@@ -276,9 +211,9 @@ inline CanDevice::TxEvent *CanDevice::GetTxEvent(uint32_t index) const noexcept 
 	}
 #endif
 
-	dev.rxStdFilter = (StandardMessageFilterElement*)memStart;
+	dev.rxStdFilter = (CanStandardMessageFilterElement*)memStart;
 	memStart += p_config.GetStandardFiltersMemSize();
-	dev.rxExtFilter = (ExtendedMessageFilterElement*)memStart;
+	dev.rxExtFilter = (CanExtendedMessageFilterElement*)memStart;
 	memStart += p_config.GetExtendedFiltersMemSize();
 	dev.rx0Fifo = memStart;
 	memStart += p_config.rxFifo0Size * p_config.GetRxBufferSize();
@@ -600,7 +535,7 @@ unsigned int CanDevice::NumTxMessagesPending(TxBufferNumber whichBuffer) noexcep
 
 #endif
 
-void CanDevice::CopyMessageForTransmit(CanMessageBuffer *buffer, volatile TxBufferHeader *f) noexcept
+void CanDevice::CopyMessageForTransmit(CanMessageBuffer *buffer, volatile CanTxBufferHeader *f) noexcept
 {
 	if (buffer->extId)
 	{
@@ -706,10 +641,10 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 	return cancelledId;
 }
 
-void CanDevice::CopyReceivedMessage(CanMessageBuffer *null buffer, const volatile RxBufferHeader *f) noexcept
+void CanDevice::CopyReceivedMessage(CanMessageBuffer *null buffer, const volatile CanRxBufferHeader *f) noexcept
 {
 	// The CAN has written the message directly to memory, so we must invalidate the cache before we read it
-	Cache::InvalidateAfterDMAReceive(f, sizeof(RxBufferHeader) + 64);						// flush the header and up to 64 bytes of data
+	Cache::InvalidateAfterDMAReceive(f, sizeof(CanRxBufferHeader) + 64);						// flush the header and up to 64 bytes of data
 
 	if (buffer != nullptr)
 	{
@@ -935,7 +870,7 @@ void CanDevice::SetShortFilterElement(unsigned int index, RxBufferNumber whichBu
 {
 	if (index < config->numShortFilterElements)
 	{
-		StandardMessageFilterElement::S0Type s0;
+		CanStandardMessageFilterElement::S0Type s0;
 		s0.val = 0;										// disable filter, clear reserved fields
 		s0.bit.SFID1 = id;
 		s0.bit.SFT = 0x02;							// classic filter
@@ -981,11 +916,11 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 {
 	if (index < config->numExtendedFilterElements)
 	{
-		volatile ExtendedMessageFilterElement& efp = rxExtFilter[index];
+		volatile CanExtendedMessageFilterElement& efp = rxExtFilter[index];
 		efp.F0.val = 0;									// disable filter
 
-		ExtendedMessageFilterElement::F0Type f0;
-		ExtendedMessageFilterElement::F1Type f1;
+		CanExtendedMessageFilterElement::F0Type f0;
+		CanExtendedMessageFilterElement::F1Type f1;
 		f0.val = 0;									// clear all fields
 		f1.val = 0;									// clear all fields
 		f1.bit.EFT  = 0x02;							// classic filter
@@ -1100,18 +1035,21 @@ void CanDevice::Interrupt() noexcept
 	{
 		hw->REG(IR) = ir;
 
+		// Test whether messages have been received into fifo 0
 		constexpr unsigned int rxFifo0WaitingIndex = (unsigned int)RxBufferNumber::fifo0;
 		if ((ir & CAN_(IR_RF0N)) != 0)
 		{
 			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo0WaitingIndex]);
 		}
 
+		// Test whether messages have been received into fifo 1
 		constexpr unsigned int rxFifo1WaitingIndex = (unsigned int)RxBufferNumber::fifo1;
 		if ((ir & CAN_(IR_RF1N)) != 0)
 		{
 			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo1WaitingIndex]);
 		}
 
+		// Test whether messages have been received into receive buffers
 		if (ir & CAN_(IR_DRX))
 		{
 			// Check which receive buffers have new messages
@@ -1128,6 +1066,7 @@ void CanDevice::Interrupt() noexcept
 			}
 		}
 
+		// Test whether any messages have been transmitted
 		if (ir & CAN_(IR_TC))
 		{
 			// Check which transmit buffers have finished transmitting
@@ -1153,6 +1092,7 @@ void CanDevice::Interrupt() noexcept
 			}
 		}
 
+		// Test for bus off condition
 		if (ir & CAN_(IR_BO))
 		{
 			++busOffCount;
@@ -1161,11 +1101,13 @@ void CanDevice::Interrupt() noexcept
 			return;
 		}
 
+		// Test for messages lost due to receive fifo full
 		if (ir & (CAN_(IR_RF0L) | CAN_(IR_RF1L)))
 		{
 			++messagesLost;
 		}
 
+		// Test whether there are any events in the transmit event fifo
 		if (ir & CAN_(IR_TEFN))
 		{
 			uint32_t txefs;

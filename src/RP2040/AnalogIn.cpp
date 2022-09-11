@@ -17,6 +17,7 @@
 #include <RTOSIface/RTOSIface.h>
 #include <DmacManager.h>
 #include <Cache.h>
+#include <General/Bitmap.h>
 
 #include <hardware/adc.h>
 #include <hardware/dma.h>
@@ -142,10 +143,11 @@ bool AdcClass::IsChannelEnabled(unsigned int chan) const noexcept
 // Indirect callback from the DMA controller ISR
 void AdcClass::ResultReadyCallback(DmaCallbackReason reason) noexcept
 {
+    hw_clear_bits(&adc_hw->cs, ADC_CS_START_MANY_BITS);		// stop the ADC (but it will already have started doing another conversion)
 	dmaFinishedReason = reason;
 	state = State::ready;
 	++conversionsCompleted;
-	DmacManager::DisableChannel(dmaChan);			// disable the sequencer DMA, just in case it is out of sync
+	DmacManager::DisableChannel(dmaChan);					// disable the sequencer DMA, just in case it is out of sync
 	if (taskToWake != nullptr)
 	{
 		TaskBase::GiveFromISR(taskToWake);
@@ -178,11 +180,12 @@ void AdcClass::ReInit() noexcept
 {
 	// Initialise the ADC hardware
 	adc_init();
+	adc_set_temp_sensor_enabled(true);				// need to do this here because the call to adc_init disables it
 	adc_fifo_setup(true /*fifo enabled*/, true /*dreq enabled*/, 1 /*dreq threshold*/, true /*set bit 15 in results if error*/, false /*don't reduce to 8 bits*/);
 
 	// Initialise the DMAC to read the result
 	DmacManager::DisableChannel(dmaChan);
-	DmacManager::SetBtctrl(dmaChan, DMA_CH0_CTRL_TRIG_DATA_SIZE_VALUE_SIZE_HALFWORD | DMA_CH0_CTRL_TRIG_INCR_WRITE_BITS);
+	DmacManager::SetBtctrl(dmaChan, (DMA_CH0_CTRL_TRIG_DATA_SIZE_VALUE_SIZE_HALFWORD << DMA_CH0_CTRL_TRIG_DATA_SIZE_LSB) | DMA_CH0_CTRL_TRIG_INCR_WRITE_BITS);
 	DmacManager::SetSourceAddress(dmaChan, &adc_hw->fifo);
 	DmacManager::SetInterruptCallback(dmaChan, DmaCompleteCallback, CallbackParameter(this));
 	DmacManager::SetTriggerSource(dmaChan, DmaTrigSource::adc);
@@ -248,8 +251,14 @@ bool AdcClass::StartConversion() noexcept
 
 	DmacManager::DisableChannel(dmaChan);
 
+	while ((adc_hw->cs & ADC_CS_READY_BITS) == 0)	// wait until the extra conversion completes
+	{
+		delay(1);
+	}
+
 	adc_fifo_drain();								// make sure no result pending
 	adc_set_round_robin(channelsEnabled);
+	adc_select_input(LowestSetBit(channelsEnabled));
 
 	// Set up DMA to read the results our of the ADC into the results array
 	DmacManager::SetDestinationAddress(dmaChan, results);
@@ -260,7 +269,7 @@ bool AdcClass::StartConversion() noexcept
 	DmacManager::EnableChannel(dmaChan, dmaPrio);
 
 	state = State::converting;
-    hw_set_bits(&adc_hw->cs, ADC_CS_START_ONCE_BITS);
+    hw_set_bits(&adc_hw->cs, ADC_CS_START_MANY_BITS);
 	++conversionsStarted;
 	whenLastConversionStarted = millis();
 	return true;
@@ -374,7 +383,6 @@ uint16_t AnalogIn::ReadChannel(AdcInput adcin) noexcept
 // Enable an on-chip MCU temperature sensor
 void AnalogIn::EnableTemperatureSensor(AnalogInCallbackFunction fn, CallbackParameter param, uint32_t ticksPerCall) noexcept
 {
-	adc_set_temp_sensor_enabled(true);
 	adc->EnableChannel(GetInputNumber(AdcInput::adc0_tempSense), fn, param, ticksPerCall);
 }
 

@@ -358,19 +358,24 @@ void DisablePullup(Pin pin) noexcept
 #endif
 }
 
-#if SAME5x || SAMC21 || RP2040
-
 // Set high driver strength on an output pin
-void SetHighDriveStrength(Pin p) noexcept
+void SetDriveStrength(Pin p, unsigned int strength) noexcept
 {
 #if SAME5x || SAMC21
-	PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].reg |= PORT_PINCFG_DRVSTR;
+	if (strength != 0)
+	{
+		PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].reg |= PORT_PINCFG_DRVSTR;
+	}
+	else
+	{
+		PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].reg &= ~PORT_PINCFG_DRVSTR;
+	}
 #elif RP2040
-	gpio_set_drive_strength(p, GPIO_DRIVE_STRENGTH_8MA);			// 2, 4, 8 and 12mA can be selected
+	gpio_set_drive_strength(p, gpio_drive_strength((gpio_drive_strength)min<unsigned int>(strength, 3)));	// 2, 4, 8 and 12mA can be selected
+#else
+	// This is a NOP on other processors
 #endif
 }
-
-#endif
 
 // IoPort::SetPinMode calls this
 // Warning! Changing pin mode will reset the output drive strength to normal.
@@ -709,7 +714,7 @@ static void RandomInit()
 
 void CoreInit() noexcept
 {
-#if SAME5x || SAMC21 || SAME70
+#if SAME5x || SAMC21 || SAME70 || RP2040
 	DmacManager::Init();
 #endif
 #if SAME5x || SAMC21
@@ -732,7 +737,7 @@ void WatchdogInit() noexcept
 	hri_wdt_write_EWCTRL_reg(WDT, WDT_EWCTRL_EWOFFSET_CYC512);	// early warning control, about 0.5 second
 	hri_wdt_set_INTEN_EW_bit(WDT);								// enable early earning interrupt
 	hri_wdt_write_CTRLA_reg(WDT, WDT_CTRLA_ENABLE);
-#elif SAME70
+#elif SAME70 || SAM4E || SAM4S
 	// This assumes the slow clock is running at 32.768 kHz, watchdog frequency is therefore 32768 / 128 = 256 Hz
 	constexpr uint16_t watchdogTicks = 256;						// about 1 second
 	WDT->WDT_MR = WDT_MR_WDRSTEN | WDT_MR_WDV(watchdogTicks) | WDT_MR_WDD(watchdogTicks);
