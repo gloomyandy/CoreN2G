@@ -4,14 +4,13 @@
  *  Created on: 2 Sep 2020
  *      Author: David
  */
+#include <CoreIO.h>
 
 #if STM32
 #include <stm32CanDevice.h>
 #else
 #ifndef SRC_CANDEVICE_H_
 #define SRC_CANDEVICE_H_
-
-#include <CoreIO.h>
 
 #if SUPPORT_CAN
 

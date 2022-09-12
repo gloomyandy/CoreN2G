@@ -120,6 +120,15 @@ extern "C" {
 # error unsupported processor
 #endif
 
+#if !defined(STM32)
+# define STM32				0
+# define STM32H7			0
+# define STM32F4			0
+#endif
+#if !defined(LPC17xx)
+# define LPC17xx			0
+#endif
+
 #include <inttypes.h>					// for PRIu32 etc.
 #include <ctype.h>
 #include "CoreTypes.h"
