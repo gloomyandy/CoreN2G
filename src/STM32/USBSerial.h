@@ -19,7 +19,7 @@
 #ifndef _USBSERIAL_H_
 #define _USBSERIAL_H_
 
-#if defined (USBCON) && defined(USBD_USE_CDC)
+#if defined (USBCON) && defined(USBD_USE_CDC) && SUPPORT_USB
 #include "Stream.h"
 //#include "usbd_core.h"
 

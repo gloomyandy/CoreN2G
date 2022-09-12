@@ -16,7 +16,7 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#if defined (USBCON) && defined(USBD_USE_CDC)
+#if defined (USBCON) && defined(USBD_USE_CDC) && SUPPORT_USB
 
 #include "USBSerial.h"
 #include "usbinterface.h"
