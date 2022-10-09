@@ -46,6 +46,7 @@ target_compile_options(pico PUBLIC
 )
 
 include_directories(BEFORE ${PICO_SDK_PATH}/../tools/Build-pico-sdk)
+include_directories(BEFORE ${PICO_SDK_PATH}/../FreeRTOSConfig)
 include_directories(BEFORE ${PICO_SDK_PATH}/../../../../FreeRTOS/src/include)
 include_directories(BEFORE ${PICO_SDK_PATH}/../../../../FreeRTOS/src/portable/GCC/ARM_CM0)
 
@@ -99,5 +100,5 @@ target_link_libraries(pico
 )
 
 add_custom_command(TARGET pico POST_BUILD
-	COMMAND ar d libpico.a stdio.c.obj stdio_usb.c.obj stdio_usb_descriptors.c.obj
+	COMMAND arm-none-eabi-ar d libpico.a stdio.c.obj stdio_usb.c.obj stdio_usb_descriptors.c.obj
 )
