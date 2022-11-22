@@ -18,7 +18,7 @@
 #define NEED_PROGMEM 0
 #define READP(VAR) VAR
 
-#define OTG_IRQn OTG_FS_IRQn
+#define OTG_IRQn OTG_HS_IRQn
 
 void
 usb_irq_disable(void)

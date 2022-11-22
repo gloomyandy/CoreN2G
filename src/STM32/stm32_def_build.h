@@ -200,6 +200,8 @@
 #define CMSIS_STARTUP_FILE "startup_stm32g484xx.s"
 #elif defined(STM32GBK1CB)
 #define CMSIS_STARTUP_FILE "startup_stm32gbk1cb.s"
+#elif defined(STM32H723xx)
+#define CMSIS_STARTUP_FILE "startup_stm32h723xx.s"
 #elif defined(STM32H742xx)
 #define CMSIS_STARTUP_FILE "startup_stm32h742xx.s"
 #elif defined(STM32H743xx)

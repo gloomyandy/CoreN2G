@@ -161,6 +161,9 @@ static void ConfigureAdc(ADC_HandleTypeDef& AdcHandle, ADC_TypeDef *inst, uint32
     AdcHandle.Init.OversamplingMode         = DISABLE;                       /* No oversampling */
     AdcHandle.Init.Overrun                  = ADC_OVR_DATA_OVERWRITTEN;      /* DR register is overwritten with the last conversion result in case of overrun */
     AdcHandle.Init.EOCSelection             = ADC_EOC_SINGLE_CONV;           /* EOC flag picked-up to indicate conversion end */
+#if STM32H723xx
+    AdcHandle.Init.DMAContinuousRequests    = ENABLE;
+#endif
 #else
     AdcHandle.Init.ClockPrescaler           = ADC_CLOCK_SYNC_PCLK_DIV8;
     AdcHandle.Init.DataAlign                = ADC_DATAALIGN_RIGHT;           /* Right-alignment for converted data */

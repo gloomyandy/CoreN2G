@@ -11,21 +11,20 @@
 #include "io.h"
 #include "compiler.h"
 
-#if CONFIG_STM32_USB_PB14_PB15
+#if defined(USE_USB_HS_IN_FS)
 #define USB_PERIPH_BASE USB_OTG_HS_PERIPH_BASE
 #define OTG_IRQn OTG_HS_IRQn
+#define IRQ_HANDLER OTG_HS_IRQHandler
 #define USBOTGEN RCC_AHB1ENR_USB1OTGHSEN
-#define GPIO_D_NEG GPIO('B', 14)
-#define GPIO_D_POS GPIO('B', 15)
-#define GPIO_FUNC GPIO_FUNCTION(12)
-DECL_CONSTANT_STR("RESERVE_PINS_USB1", "PB14,PB15");
 #else
 #define USB_PERIPH_BASE USB_OTG_FS_PERIPH_BASE
 #define OTG_IRQn OTG_FS_IRQn
+#define IRQ_HANDLER OTG_FS_IRQHandler
 #define USBOTGEN RCC_AHB1ENR_USB2OTGHSEN
+#endif
 #define GPIO_D_NEG PA_11
 #define GPIO_D_POS PA_12
-#endif
+
 
 /****************************************************************
  * USB transfer memory
@@ -347,7 +346,7 @@ usb_set_configure(void)
 
 // Main irq handler
 void
-OTG_FS_IRQHandler(void)
+IRQ_HANDLER(void)
 {
     uint32_t sts = OTG->GINTSTS;
     if (sts & USB_OTG_GINTSTS_RXFLVL) {
@@ -396,8 +395,13 @@ usb_init(void)
 #endif
 
     // Route pins
+#if defined(USE_USB_HS_IN_FS)
+    pinmap_pinout(GPIO_D_NEG, PinMap_USB_OTG_HS);
+    pinmap_pinout(GPIO_D_POS, PinMap_USB_OTG_HS);
+#else
     pinmap_pinout(GPIO_D_NEG, PinMap_USB_OTG_FS);
     pinmap_pinout(GPIO_D_POS, PinMap_USB_OTG_FS);
+#endif
 
     // Setup USB packet memory
     fifo_configure();

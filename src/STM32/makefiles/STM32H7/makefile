@@ -1,6 +1,6 @@
 PROCESSOR = STM32H7
 
-
+VARIANT ?= STM32H743
 BUILD_DIR ?= ./build
 FREERTOS_DIR ?= ./FreeRTOS
 REPRAPFIRMWARE_DIR ?= ./RepRapFirmware
@@ -21,8 +21,14 @@ STARTUP_DELAY ?= -DSTARTUP_DELAY=10000
 V=@
 
 $(info Building RepRapFirmware for STM32H7 based boards:)
+$(info  - Variant: $(VARIANT))
 
-BASE_OUTPUT_NAME=firmware-stm32h7
+ifeq ($(VARIANT),STM32H723)
+	BASE_OUTPUT_NAME=firmware-stm32h723
+else
+	BASE_OUTPUT_NAME=firmware-stm32h7
+endif
+
 
 ## Cross-compilation commands 
 CC      = arm-none-eabi-gcc
@@ -53,7 +59,7 @@ endif
 	
 
 #Linker script to avoid built in Bootloader
-LINKER_SCRIPT_BASE = $(CORE_DIR)/src/STM32/variants/STM32H743/ldscript
+LINKER_SCRIPT_BASE = $(CORE_DIR)/src/STM32/variants/$(VARIANT)/ldscript
 
 
 
@@ -63,7 +69,7 @@ $(info  - Linker Script used: $(LINKER_SCRIPT))
 
 
 #Flags common for Core in c and c++
-FLAGS  = -D__$(PROCESSOR)__ -D_XOPEN_SOURCE -DSTM32 -DSTM32H7 -DSTM32H743xx -DSTM32H7xx
+FLAGS  = -D__$(PROCESSOR)__ -D_XOPEN_SOURCE -DSTM32 -DSTM32H7 -D$(VARIANT)xx -DSTM32H7xx
 
 # UART configuration
 FLAGS  += -DHAVE_HWSERIAL1 -DHAVE_HWSERIAL2 -DHAVE_HWSERIAL3 -DHAVE_HWSERIAL4 -DHAVE_HWSERIAL5 -DHAVE_HWSERIAL6 -DUSB_CDC_USE_DTR
@@ -148,7 +154,7 @@ $(BUILD_DIR)/libRRFLibraries.a: $(RRFLIBRARIES_OBJS)
 $(BUILD_DIR)/$(OUTPUT_NAME).elf: $(BUILD_DIR)/libSTMCore.a $(BUILD_DIR)/libRRFLibraries.a $(CANLIB_OBJS) $(RRFLIBC_OBJS) $(RRF_OBJS)
 	@echo "\nCreating $(OUTPUT_NAME).bin"
 	$(V)$(MKDIR) $(dir $@)
-	$(V)$(LD) -L$(BUILD_DIR)/ -L$(CORE_DIR)/src/STM32F4/variants/STM32FH743/ -L$(CORE_DIR)/src/STM32/system/CMSIS/CMSIS/DSP/Lib/GCC --specs=nosys.specs -Xlinker -z -Xlinker muldefs -Os -Wl,--fatal-warnings -fmerge-all-constants -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m7 -mthumb -T$(LINKER_SCRIPT) -Wl,-Map,$(BUILD_DIR)/$(OUTPUT_NAME).map -o $(BUILD_DIR)/$(OUTPUT_NAME).elf -Wl,--cref -Wl,--check-sections -Wl,--gc-sections,--relax -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-unresolved-symbols -Wl,--defsym=LD_MAX_SIZE=2097152 -Wl,--defsym=LD_MAX_DATA_SIZE=524288 -Wl,--defsym=LD_FLASH_OFFSET=0x0 -Wl,--start-group $(RRFLIBC_OBJS) -lSTMCore $(RRF_OBJS) $(CANLIB_OBJS) -lRRFLibraries -larm_cortexM7l_math -lc -lm -lgcc -lstdc++ -Wl,--end-group
+	$(V)$(LD) -L$(BUILD_DIR)/ -L$(CORE_DIR)/src/STM32F4/variants/$(VARIANT)/ -L$(CORE_DIR)/src/STM32/system/CMSIS/CMSIS/DSP/Lib/GCC --specs=nosys.specs -Xlinker -z -Xlinker muldefs -Os -Wl,--fatal-warnings -fmerge-all-constants -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m7 -mthumb -T$(LINKER_SCRIPT) -Wl,-Map,$(BUILD_DIR)/$(OUTPUT_NAME).map -o $(BUILD_DIR)/$(OUTPUT_NAME).elf -Wl,--cref -Wl,--check-sections -Wl,--gc-sections,--relax -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-unresolved-symbols -Wl,--defsym=LD_MAX_SIZE=2097152 -Wl,--defsym=LD_MAX_DATA_SIZE=524288 -Wl,--defsym=LD_FLASH_OFFSET=0x0 -Wl,--start-group $(RRFLIBC_OBJS) -lSTMCore $(RRF_OBJS) $(CANLIB_OBJS) -lRRFLibraries -larm_cortexM7l_math -lc -lm -lgcc -lstdc++ -Wl,--end-group
 	$(V)$(OBJCOPY) --strip-unneeded -O binary $(BUILD_DIR)/$(OUTPUT_NAME).elf $(BUILD_DIR)/$(OUTPUT_NAME).bin
 	$(V)$(SIZE) $(BUILD_DIR)/$(OUTPUT_NAME).elf
 	-@$(MAKE_DIR)/staticMemStats.sh $(BUILD_DIR)/$(OUTPUT_NAME)

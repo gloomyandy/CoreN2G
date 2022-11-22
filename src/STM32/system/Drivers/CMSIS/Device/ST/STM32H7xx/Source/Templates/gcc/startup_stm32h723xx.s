@@ -59,7 +59,12 @@ defined in linker script */
   .weak  Reset_Handler
   .type  Reset_Handler, %function
 Reset_Handler:
-  ldr   sp, =_estack      /* set stack pointer */
+#ifndef NO_INITIAL_SP
+  ldr   sp, =_estack    /* set stack pointer */
+#endif
+#if HAL_RRF
+  cpsid i               /* ensure interrupts are off during startup */
+#endif
 
 /* Call the clock system initialization function.*/
   bl  SystemInit
@@ -134,9 +139,15 @@ g_pfnVectors:
   .word  MemManage_Handler
   .word  BusFault_Handler
   .word  UsageFault_Handler
+#if HAL_RRF
+  .word  _firmware_crc
+  .word  VersionText
+  .word  g_pfnVectors
+#else
   .word  0
   .word  0
   .word  0
+#endif
   .word  0
   .word  SVC_Handler
   .word  DebugMon_Handler
