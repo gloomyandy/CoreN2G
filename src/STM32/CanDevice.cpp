@@ -16,6 +16,7 @@
 #include <cstring>
 #include <HardwareTimer.h>
 
+#if STM32H7
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 static FDCAN_GlobalTypeDef * const CanInstance[2] = {FDCAN1, FDCAN2};
@@ -994,5 +995,146 @@ extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint3
 }
 
 #endif
+#else
+extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
+CanDevice CanDevice::devices[NumCanDevices];
+
+// Initialise a CAN device and return a pointer to it
+/*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
+{
+
+	return nullptr;
+}
+
+// get bits 2..15 of an address
+static inline uint32_t Bits2to15(const volatile void *addr) noexcept
+{
+	return reinterpret_cast<uint32_t>(addr) & 0x0000FFFC;
+}
+
+// Do the low level hardware initialisation
+void CanDevice::DoHardwareInit() noexcept
+{
+
+}
+
+// Set the extended ID mask. May only be used while the interface is disabled.
+void CanDevice::SetExtendedIdMask(uint32_t mask) noexcept
+{
+}
+
+// Stop and free this device and the CAN port it uses
+void CanDevice::DeInit() noexcept
+{
+}
+
+// Enable this device
+void CanDevice::Enable() noexcept
+{
+}
+
+// Disable this device
+void CanDevice::Disable() noexcept
+{
+}
+
+// Drain the Tx event fifo. Can use this instead of supplying a Tx event callback in Init() if we don't expect many events.
+void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
+{
+}
+
+uint32_t CanDevice::GetErrorRegister() const noexcept
+{
+	return 0;
+}
+
+// Return true if space is available to send using this buffer or FIFO
+bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) noexcept
+{
+
+	return false;
+}
+
+
+static const uint8_t DLCtoBytes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64};
+static const uint8_t BytesToDLC[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 10, 10, 
+									 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13, 
+                                     14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+									 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15};
+
+// Queue a message for sending via a buffer or FIFO. If the buffer isn't free, cancel the previous message (or oldest message in the fifo) and send it anyway.
+// On return the caller must free or re-use the buffer.
+uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
+{
+
+	return 0;
+}
+
+
+// Receive a message in a buffer or fifo, with timeout. Returns true if successful, false if no message available even after the timeout period.
+bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
+{
+
+	return false;
+}
+
+bool CanDevice::IsMessageAvailable(RxBufferNumber whichBuffer) noexcept
+{
+	return false;
+}
+
+// Disable a short ID filter element
+void CanDevice::DisableShortFilterElement(unsigned int index) noexcept
+{
+}
+
+// Set a short ID field filter element. To disable the filter element, use a zero mask parameter.
+// If whichBuffer is a buffer number not a fifo number, the mask field is ignored except that a zero mask disables the filter element; so only the XIDAM mask filters the ID.
+void CanDevice::SetShortFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
+{
+
+}
+
+// Disable an extended ID filter element
+void CanDevice::DisableExtendedFilterElement(unsigned int index) noexcept
+{
+}
+
+// Set an extended ID field filter element. To disable the filter element, use a zero mask parameter.
+// If whichBuffer is a buffer number not a fifo number, the mask field is ignored except that a zero mask disables the filter element; so only the XIDAM mask filters the ID.
+void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
+{
+
+}
+
+void CanDevice::GetLocalCanTiming(CanTiming &timing) noexcept
+{
+}
+
+void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
+{
+}
+
+void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
+{
+
+}
+
+void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept
+{
+	AtomicCriticalSectionLocker lock;
+
+	rMessagesQueuedForSending = messagesQueuedForSending;
+	rMessagesReceived = messagesReceived;
+	rMessagesLost = messagesLost;
+	rBusOffCount = busOffCount;
+	messagesQueuedForSending = messagesReceived = messagesLost = busOffCount = 0;
+}
+
+#ifdef RTOS
+
+
+#endif
+#endif
 #endif

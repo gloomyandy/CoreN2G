@@ -25,6 +25,7 @@ constexpr unsigned int MaxRxBuffers = 4;			// maximum number of dedicated receiv
 static_assert(MaxTxBuffers <= 31);					// the hardware allows up to 32 if there is no transmit FIFO but our code only supports up to 31 + a FIFO
 static_assert(MaxRxBuffers <= 30);					// the hardware allows up to 64 but our code only supports up to 30 + the FIFOs
 
+#if STM32H7
 typedef FDCAN_HandleTypeDef Can;
 constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
 
@@ -36,7 +37,11 @@ extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs);
 extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan);
 extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorStatusITs);
-
+#else
+class CanMessageBuffer;
+class CanTiming;
+constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
+#endif
 class CanDevice
 {
 public:
@@ -192,7 +197,11 @@ public:
 
 	uint16_t ReadTimeStampCounter() noexcept
 	{
+#if STM32H7
 		return HAL_FDCAN_GetTimestampCounter(&hw);
+#else
+		return 0;
+#endif
 	}
 
 #if !SAME70
@@ -220,9 +229,11 @@ private:
 	void DoHardwareInit() noexcept;
 	void UpdateLocalCanTiming(const CanTiming& timing) noexcept;
 
+#if STM32H7
 	void CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr) noexcept;
 
 	Can hw;														// HAL structure for the can device
+#endif
 
 	unsigned int whichCan;										// which CAN device we are
 	unsigned int whichPort;										// which CAN port number we use, 0 or 1
@@ -251,12 +262,14 @@ private:
 
 	bool useFDMode;
 
+#if STM32H7
 	friend void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEventFifoITs);
 	friend void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t transmitDone);
 	friend void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs);
 	friend void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs);
 	friend void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan);
 	friend void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorStatusITs);
+#endif
 
 };
 

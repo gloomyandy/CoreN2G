@@ -74,7 +74,7 @@ FLAGS  += -DUSE_SSP1=1 -DUSE_SSP2=1 -DUSE_SSP3=1 -DUSE_SWSPI=1
 # SDIO configuration
 FLAGS  += -DUSE_SDIO=1
 FLAGS += -DRTOS -DFREERTOS_USED -DUSBCON -DUSBD_USE_CDC -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x8000
-FLAGS += -DHAL_RRF=1
+FLAGS += -DHAL_RRF=1 -DSUPPORT_CAN=1
 FLAGS +=  -Wall -c -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m4 -mthumb -ffunction-sections -fdata-sections
 FLAGS += -nostdlib -Wdouble-promotion -fsingle-precision-constant -fstack-usage
 #FLAGS += -Wfloat-equal
@@ -110,6 +110,7 @@ CFLAGS   = $(FLAGS) -std=gnu11 -fgnu89-inline -Dnoexcept=
 CXXFLAGS = $(FLAGS) -std=gnu++17 -fno-threadsafe-statics -fexceptions -fno-rtti -Wno-register
 CXXFLAGS_RRFL = $(FLAGS) -std=gnu++17 -fno-threadsafe-statics -fno-exceptions -fno-rtti -Wno-register
 CXXFLAGS_CORE = $(FLAGS) -std=gnu++17 -fno-threadsafe-statics -fno-exceptions -fno-rtti -Wno-register
+CXXFLAGS_CANLIB = $(FLAGS) -std=gnu++17 -fno-threadsafe-statics -fno-exceptions -fno-rtti -Wno-register
 
 
 #all Includes (RRF + Core)
@@ -168,6 +169,13 @@ $(BUILD_DIR)/$(CORESTM_DIR)/%.o : $(CORESTM_DIR)/%.cpp
 	$(V)$(MKDIR) $(dir $@)
 	$(V)$(CXX) $(CXXFLAGS_CORE) $(DEFINES) $(INCLUDES) -MMD -MP -MM -MF $(patsubst %.o,%.d,$@) $<
 	$(V)$(CXX) $(CXXFLAGS_CORE) $(DEFINES) $(INCLUDES) -MMD -MP -o $@ $<
+
+$(BUILD_DIR)/$(CANLIB_DIR)/%.o : $(CANLIB_DIR)/%.cpp
+	@echo "CANLIB [$<]"
+	$(V)$(MKDIR) $(dir $@)
+	$(V)$(CXX) $(CXXFLAGS_CANLIB) $(DEFINES) $(INCLUDES) -MMD -MP -MM -MF $(patsubst %.o,%.d,$@) $<
+	$(V)$(CXX) $(CXXFLAGS_CANLIB) $(DEFINES) $(INCLUDES) -MMD -MP -o $@ $<
+
 
 $(BUILD_DIR)/%.o: %.cpp
 	@echo "[$<]"
