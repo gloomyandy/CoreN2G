@@ -997,14 +997,47 @@ extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint3
 #endif
 #else
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
-
+#include "drv_canfdspi_api.h"
+#include "drv_spi.h"
 CanDevice CanDevice::devices[NumCanDevices];
 
 // Initialise a CAN device and return a pointer to it
 /*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
 {
-
-	return nullptr;
+	int8_t status;
+	debugPrintf("Can Init\n");
+	DRV_SPI_Initialize();
+	debugPrintf("After SPI init\n");
+	#if 0
+	while (1)
+	{
+	//debugPrintf("After SPI init\n");
+	//status = DRV_CANFDSPI_Reset();
+	//debugPrintf("Reset returns %d\n", status);
+	//delay(1);
+	//uint32_t mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
+	//debugPrintf("Get op mode returns %d\n", mode);
+	//delay(1);
+	DRV_CANFDSPI_OperationModeSelect(CAN_CONFIGURATION_MODE);
+	delay(1);
+	//mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
+	//debugPrintf("Get op mode returns %d\n", mode);
+	//delay(1);
+	}
+	#endif
+	uint32_t mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
+	debugPrintf("Get op mode returns %d\n", mode);
+	delay(100);
+	mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
+	debugPrintf("Get op mode returns %d\n", mode);
+	DRV_CANFDSPI_OperationModeSelect(CAN_NORMAL_MODE);
+	mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
+	debugPrintf("Get op mode returns %d\n", mode);
+	DRV_CANFDSPI_Reset();
+	debugPrintf("Issue reset\n");
+	mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
+	debugPrintf("Get op mode returns %d\n", mode);
+	return &devices[0];
 }
 
 // get bits 2..15 of an address
@@ -1075,7 +1108,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 // Receive a message in a buffer or fifo, with timeout. Returns true if successful, false if no message available even after the timeout period.
 bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
-
+	delay(10);
 	return false;
 }
 
