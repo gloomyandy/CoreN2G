@@ -1,16 +1,44 @@
 /*******************************************************************************
-CAN FD SPI Driver: 
-	API Defines Header File
+   CAN FD SPI Driver: API Defines Header File
 
-File Name:
-    	drv_canfdspi_defines.h
+  Company:
+    Microchip Technology Inc.
 
-Summary:
-    	This header file contains object declarations used in the API. This also contains device specific defines.
+  File Name:
+    drv_canfdspi_defines.h
 
-Description:
-    	This file is used by the API.
+  Summary:
+    This header file contains object declarations used in the API.
+    This also contains device specific defines.
+
+  Description:
+    None.
  *******************************************************************************/
+
+// DOM-IGNORE-BEGIN
+/*******************************************************************************
+* Copyright (C) 2016-2018 Microchip Technology Inc. and its subsidiaries.
+*
+* Subject to your compliance with these terms, you may use Microchip software
+* and any derivatives exclusively with Microchip products. It is your
+* responsibility to comply with third party license terms applicable to your
+* use of third party software (including open source software) that may
+* accompany Microchip software.
+*
+* THIS SOFTWARE IS SUPPLIED BY MICROCHIP "AS IS". NO WARRANTIES, WHETHER
+* EXPRESS, IMPLIED OR STATUTORY, APPLY TO THIS SOFTWARE, INCLUDING ANY IMPLIED
+* WARRANTIES OF NON-INFRINGEMENT, MERCHANTABILITY, AND FITNESS FOR A
+* PARTICULAR PURPOSE.
+*
+* IN NO EVENT WILL MICROCHIP BE LIABLE FOR ANY INDIRECT, SPECIAL, PUNITIVE,
+* INCIDENTAL OR CONSEQUENTIAL LOSS, DAMAGE, COST OR EXPENSE OF ANY KIND
+* WHATSOEVER RELATED TO THE SOFTWARE, HOWEVER CAUSED, EVEN IF MICROCHIP HAS
+* BEEN ADVISED OF THE POSSIBILITY OR THE DAMAGES ARE FORESEEABLE. TO THE
+* FULLEST EXTENT ALLOWED BY LAW, MICROCHIP'S TOTAL LIABILITY ON ALL CLAIMS IN
+* ANY WAY RELATED TO THIS SOFTWARE WILL NOT EXCEED THE AMOUNT OF FEES, IF ANY,
+* THAT YOU HAVE PAID DIRECTLY TO MICROCHIP FOR THIS SOFTWARE.
+ *******************************************************************************/
+// DOM-IGNORE-END
 
 #ifndef _DRV_CANFDSPI_DEFINES_H
 #define _DRV_CANFDSPI_DEFINES_H
@@ -29,7 +57,7 @@ Description:
 #ifdef __cplusplus  // Provide C++ Compatibility
 extern "C" {
 #endif
-// DOM-IGNORE-END  
+// DOM-IGNORE-END
 
 
 // *****************************************************************************
@@ -38,19 +66,14 @@ extern "C" {
 
 // Device selection
 #define MCP2517FD
-  
-// Select ISO/non-ISO CRC
-#define ISO_CRC 1  
-  
-#define CAN_TXQUEUE_IMPLEMENTED
-  
+//#define MCP2518FD
+
 // Maximum Size of TX/RX Object
 #define MAX_MSG_SIZE 76
 
 // Maximum number of data bytes in message
 #define MAX_DATA_BYTES 64
 
-  
 // *****************************************************************************
 // *****************************************************************************
 // Section: Object definitions
@@ -58,7 +81,7 @@ extern "C" {
 //! CAN FIFO Channels
 
 typedef enum {
-    CAN_FIFO_CH0,
+    CAN_FIFO_CH0,   // CAN_TXQUEUE_CH0
     CAN_FIFO_CH1,
     CAN_FIFO_CH2,
     CAN_FIFO_CH3,
@@ -93,8 +116,8 @@ typedef enum {
     CAN_FIFO_TOTAL_CHANNELS
 } CAN_FIFO_CHANNEL;
 
-#define CAN_FIFO_FIRST_CHANNEL  CAN_FIFO_CH1
-#define CAN_TXQUEUE_CH0         CAN_FIFO_CH0
+// FIFO0 is a special FIFO, the TX Queue
+#define CAN_TXQUEUE_CH0 CAN_FIFO_CH0
 
 //! CAN Filter Channels
 
@@ -305,8 +328,12 @@ typedef struct _CAN_TX_MSGOBJ_CTRL {
     uint32_t BRS : 1;
     uint32_t FDF : 1;
     uint32_t ESI : 1;
+#ifdef MCP2517FD
     uint32_t SEQ : 7;
     uint32_t unimplemented1 : 16;
+#else
+    uint32_t SEQ : 23;
+#endif
 } CAN_TX_MSGOBJ_CTRL;
 
 //! CAN RX Message Object Control
@@ -479,24 +506,24 @@ typedef enum {
 //! CAN Bit Time Setup: Arbitration/Data Bit Phase
 
 typedef enum {
-    CAN_500K_1M,    // 0x00
-    CAN_500K_2M,    // 0x01
+    CAN_500K_1M, // 0x00
+    CAN_500K_2M, // 0x01
     CAN_500K_3M,
     CAN_500K_4M,
-    CAN_500K_5M,    // 0x04
+    CAN_500K_5M, // 0x04
     CAN_500K_6M7,
-    CAN_500K_8M,    // 0x06
+    CAN_500K_8M, // 0x06
     CAN_500K_10M,
-    CAN_250K_500K,  // 0x08
+    CAN_250K_500K, // 0x08
     CAN_250K_833K,
     CAN_250K_1M,
     CAN_250K_1M5,
     CAN_250K_2M,
     CAN_250K_3M,
     CAN_250K_4M,
-    CAN_1000K_4M,   // 0x0f
+    CAN_1000K_4M, // 0x0f
     CAN_1000K_8M,
-    CAN_125K_500K   // 0x11
+    CAN_125K_500K // 0x11
 } CAN_BITTIME_SETUP;
 
 //! CAN Nominal Bit Time Setup
@@ -574,8 +601,8 @@ typedef enum {
 //! GPIO Pin Position
 
 typedef enum {
-    MCP2517_GPIO_PIN_0,
-    MCP2517_GPIO_PIN_1
+    MCP2517FD_GPIO_PIN_0,
+    MCP2517FD_GPIO_PIN_1
 } GPIO_PIN_POS;
 
 //! GPIO Pin Modes
@@ -704,6 +731,9 @@ typedef struct _CAN_OSC_CTRL {
     uint32_t OscDisable : 1;
     uint32_t SclkDivide : 1;
     uint32_t ClkOutDivide : 2;
+#ifndef MCP2517FD
+    uint32_t LowPowerModeEnable : 1;
+#endif
 } CAN_OSC_CTRL;
 
 //! Oscillator Status
@@ -767,8 +797,7 @@ typedef enum {
 //! RXCODE
 
 typedef enum {
-    CAN_RXCODE_FIFO_CH0,
-    CAN_RXCODE_FIFO_CH1,
+    CAN_RXCODE_FIFO_CH1=1,
     CAN_RXCODE_FIFO_CH2,
     CAN_RXCODE_FIFO_CH3,
     CAN_RXCODE_FIFO_CH4,
@@ -860,6 +889,7 @@ typedef enum {
     OSC_CLKO_DIV4,
     OSC_CLKO_DIV10
 } OSC_CLKO_DIVIDE;
+
 #ifdef __cplusplus  // Provide C++ Compatibility
 }
 #endif

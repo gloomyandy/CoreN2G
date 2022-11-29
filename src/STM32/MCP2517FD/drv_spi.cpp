@@ -29,7 +29,7 @@ extern "C" void DRV_SPI_Initialize()
 }
 
 
-extern "C" int8_t DRV_SPI_TransferData(uint32_t *SpiTxData, uint32_t *SpiRxData, size_t spiTransferSize)
+extern "C" int8_t DRV_SPI_TransferData(uint32_t index, uint8_t *SpiTxData, uint8_t *SpiRxData, size_t spiTransferSize)
 {
     pinMode(csPin, OUTPUT_LOW);
     uint32_t ret = spiDev->transceivePacket((const uint8_t *) SpiTxData, (uint8_t *)SpiRxData, spiTransferSize);
