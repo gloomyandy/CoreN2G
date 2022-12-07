@@ -34,6 +34,6 @@ extern "C" int8_t DRV_SPI_TransferData(uint32_t index, uint8_t *SpiTxData, uint8
     pinMode(csPin, OUTPUT_LOW);
     uint32_t ret = spiDev->transceivePacket((const uint8_t *) SpiTxData, (uint8_t *)SpiRxData, spiTransferSize);
     pinMode(csPin, OUTPUT_HIGH);
-    debugPrintf("SPI transfer len %d ret %d\n", spiTransferSize, ret);
+    //debugPrintf("SPI transfer len %d ret %d\n", spiTransferSize, ret);
     return (int8_t) ret;
 }

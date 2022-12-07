@@ -56,7 +56,7 @@
 #define CRCBASE    0xFFFF
 #define CRCUPPER   1
 
-
+extern void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 // *****************************************************************************
 // *****************************************************************************
 // Section: Variables
@@ -1091,6 +1091,7 @@ int8_t DRV_CANFDSPI_FilterObjectConfigure(CANFDSPI_MODULE_ID index,
     // Setup
     fObj.word = 0;
     fObj.bF = *id;
+    debugPrintf("sid %x eid %x exid %x sid11 %x\n", fObj.bF.SID, fObj.bF.EID, fObj.bF.EXIDE, fObj.bF.SID11);
     a = cREGADDR_CiFLTOBJ + (filter * CiFILTER_OFFSET);
 
     spiTransferError = DRV_CANFDSPI_WriteWord(index, a, fObj.word);
@@ -3187,6 +3188,13 @@ int8_t DRV_CANFDSPI_BitTimeConfigureNominal20MHz(CANFDSPI_MODULE_ID index,
             ciNbtcfg.bF.SJW = 31;
             break;
 
+        case CAN_1000K_1M:
+            ciNbtcfg.bF.BRP = 0;
+            ciNbtcfg.bF.TSEG1 = 10;
+            ciNbtcfg.bF.TSEG2 = 7;
+            ciNbtcfg.bF.SJW = 3;
+            break;
+
         default:
             return -1;
             break;
@@ -3326,6 +3334,16 @@ int8_t DRV_CANFDSPI_BitTimeConfigureData20MHz(CANFDSPI_MODULE_ID index,
             ciDbtcfg.bF.SJW = 0;
             // SSP
             ciTdc.bF.TDCOffset = 3;
+            ciTdc.bF.TDCValue = tdcValue;
+            break;
+
+        case CAN_1000K_1M:
+            ciDbtcfg.bF.BRP = 0;
+            ciDbtcfg.bF.TSEG1 = 10;
+            ciDbtcfg.bF.TSEG2 = 7;
+            ciDbtcfg.bF.SJW = 3;
+            // SSP
+            ciTdc.bF.TDCOffset = 11;
             ciTdc.bF.TDCValue = tdcValue;
             break;
 

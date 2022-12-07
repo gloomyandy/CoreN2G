@@ -16,7 +16,8 @@
 #include <cstring>
 #include <HardwareTimer.h>
 
-#if STM32H7
+//#if STM32H7
+#if 0
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 static FDCAN_GlobalTypeDef * const CanInstance[2] = {FDCAN1, FDCAN2};
@@ -1000,6 +1001,7 @@ extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf
 #include "drv_canfdspi_api.h"
 #include "drv_spi.h"
 CanDevice CanDevice::devices[NumCanDevices];
+static Mutex SPIMutex;
 
 // Initialise a CAN device and return a pointer to it
 /*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
@@ -1007,36 +1009,139 @@ CanDevice CanDevice::devices[NumCanDevices];
 	int8_t status;
 	debugPrintf("Can Init\n");
 	DRV_SPI_Initialize();
-	debugPrintf("After SPI init\n");
-	#if 0
-	while (1)
+	DRV_CANFDSPI_Reset(0);
+	// Hardware should be in configuration mode after a reset
+	if (DRV_CANFDSPI_OperationModeGet(0) != CAN_CONFIGURATION_MODE)
 	{
-	//debugPrintf("After SPI init\n");
-	//status = DRV_CANFDSPI_Reset();
-	//debugPrintf("Reset returns %d\n", status);
-	//delay(1);
-	//uint32_t mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
-	//debugPrintf("Get op mode returns %d\n", mode);
-	//delay(1);
-	DRV_CANFDSPI_OperationModeSelect(CAN_CONFIGURATION_MODE);
-	delay(1);
-	//mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
-	//debugPrintf("Get op mode returns %d\n", mode);
-	//delay(1);
+		debugPrintf("SPI CAN device not in configuration mode\n");
+		return nullptr;
 	}
-	#endif
-	uint32_t mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
-	debugPrintf("Get op mode returns %d\n", mode);
-	delay(100);
-	mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
-	debugPrintf("Get op mode returns %d\n", mode);
-	DRV_CANFDSPI_OperationModeSelect(CAN_NORMAL_MODE);
-	mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
-	debugPrintf("Get op mode returns %d\n", mode);
-	DRV_CANFDSPI_Reset();
-	debugPrintf("Issue reset\n");
-	mode = (uint32_t)DRV_CANFDSPI_OperationModeGet();
-	debugPrintf("Get op mode returns %d\n", mode);
+	// Configure the clocks
+	CAN_OSC_CTRL osc;
+	DRV_CANFDSPI_OscillatorControlObjectReset(&osc);
+    osc.PllEnable = 0;
+    osc.OscDisable = 0;
+    osc.SclkDivide = 0;
+    osc.ClkOutDivide = 0;
+	status = DRV_CANFDSPI_OscillatorControlSet(0, osc);
+	if (status != 0)
+	{
+		debugPrintf("Failed to configure SPI CAN clocks %d\n", status);
+		return nullptr;
+	}
+	CAN_OSC_STATUS ostat;
+	status = DRV_CANFDSPI_OscillatorStatusGet(0, &ostat);
+	debugPrintf("SPI CAN clock status %d pll %d osc %d sclk %d\n", status, ostat.PllReady, ostat.OscReady, ostat.SclkReady);
+
+	// Now configure can fifos and memory usage
+	CAN_CONFIG config;
+	DRV_CANFDSPI_ConfigureObjectReset(&config);
+    config.IsoCrcEnable = 1;
+    config.StoreInTEF = 1;
+    config.TXQEnable = 1;
+	status = DRV_CANFDSPI_Configure(0, &config);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set can config\n");
+		return nullptr;
+	}
+
+	status = DRV_CANFDSPI_BitTimeConfigure(0, CAN_1000K_1M, CAN_SSP_MODE_AUTO, CAN_SYSCLK_20M);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set bit rates\n");
+		return nullptr;
+	}
+
+	CAN_TEF_CONFIG tef;
+	DRV_CANFDSPI_TefConfigureObjectReset(&tef);
+    //tef.FifoSize = p_config.txEventFifoSize;
+	tef.FifoSize = 8 - 1;
+    tef.TimeStampEnable = 1;
+	status = DRV_CANFDSPI_TefConfigure(0, &tef);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set tef config\n");
+		return nullptr;
+	}
+	CAN_TX_QUEUE_CONFIG txq;
+	DRV_CANFDSPI_TransmitQueueConfigureObjectReset(&txq);
+    //txq.FifoSize = p_config.txFifoSize;
+    txq.FifoSize = 8 - 1;
+    txq.PayLoadSize = CAN_PLSIZE_64;
+	status = DRV_CANFDSPI_TransmitQueueConfigure(0, &txq);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set txq config\n");
+		return nullptr;
+	}
+	debugPrintf("Configuring %d tx buffers starting at fifo %d\n", p_config.numTxBuffers, CAN_FIFO_CH1);
+	// We use one tx fifo of size 1 for each "buffer/channel"
+	for(size_t i = 0; i < p_config.numTxBuffers; i++)
+	{
+		CAN_TX_FIFO_CONFIG txc;
+		DRV_CANFDSPI_TransmitChannelConfigureObjectReset(&txc);
+    	txc.FifoSize = 1 - 1;
+    	txc.PayLoadSize = CAN_PLSIZE_64;
+		status = DRV_CANFDSPI_TransmitChannelConfigure(0, (CAN_FIFO_CHANNEL)(CAN_FIFO_CH1 + i), &txc);
+		if (status != 0)
+		{
+			debugPrintf("SPI CAN Failed to set txc chan %d config\n", i);
+			return nullptr;
+		}
+	}
+	debugPrintf("Configuring rx fifos starting at %d\n", CAN_FIFO_CH1 + p_config.numTxBuffers);
+	// RX fifos
+	CAN_RX_FIFO_CONFIG rxc;
+	DRV_CANFDSPI_ReceiveChannelConfigureObjectReset(&rxc);
+	rxc.FifoSize = 8 - 1;
+	rxc.PayLoadSize = CAN_PLSIZE_64;
+    rxc.RxTimeStampEnable = 1;
+ 	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(CAN_FIFO_CH1 + p_config.numTxBuffers), &rxc);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set rxc chan 0 config\n");
+		return nullptr;
+	}
+	rxc.FifoSize = 5 - 1;
+ 	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(CAN_FIFO_CH1 + p_config.numTxBuffers + 1), &rxc);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set rxc chan 1 config\n");
+		return nullptr;
+	}
+
+	status = DRV_CANFDSPI_EccEnable(0);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to enable ecc\n");
+		return nullptr;
+	}
+	status = DRV_CANFDSPI_RamInit(0, 0xff);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to init ram\n");
+		return nullptr;
+	}
+
+	// Setup timestamps
+	devices[0].bitPeriod = 48; // Duet code assumes 48MHz base clock
+	DRV_CANFDSPI_TimeStampPrescalerSet(0, 19);
+	DRV_CANFDSPI_TimeStampSet(0, 0);
+	DRV_CANFDSPI_TimeStampEnable(0);
+	DRV_CANFDSPI_OperationModeSelect(0, CAN_NORMAL_MODE);
+	if (DRV_CANFDSPI_OperationModeGet(0) != CAN_NORMAL_MODE)
+	{
+		debugPrintf("SPI CAN device not in normal mode\n");
+		return nullptr;
+	}
+	status = DRV_CANFDSPI_OscillatorStatusGet(0, &ostat);
+	debugPrintf("SPI CAN clock status %d pll %d osc %d sclk %d\n", status, ostat.PllReady, ostat.OscReady, ostat.SclkReady);
+	DRV_CANFDSPI_OscillatorEnable(0);
+	status = DRV_CANFDSPI_OscillatorStatusGet(0, &ostat);
+	debugPrintf("SPI CAN clock status %d pll %d osc %d sclk %d\n", status, ostat.PllReady, ostat.OscReady, ostat.SclkReady);
+	devices[0].config = &p_config;
+	SPIMutex.Create("CanTrans");
 	return &devices[0];
 }
 
@@ -1065,16 +1170,43 @@ void CanDevice::DeInit() noexcept
 // Enable this device
 void CanDevice::Enable() noexcept
 {
+	debugPrintf("Enable CAN\n");
 }
 
 // Disable this device
 void CanDevice::Disable() noexcept
 {
+	debugPrintf("Disable CAN\n");
 }
 
 // Drain the Tx event fifo. Can use this instead of supplying a Tx event callback in Init() if we don't expect many events.
 void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 {
+	//debugPrintf("Poll events\n");
+	MutexLocker lock(SPIMutex);
+	CAN_TEF_FIFO_STATUS status;
+	DRV_CANFDSPI_TefStatusGet(0, &status);
+	//debugPrintf("TEF status %x\n", status);
+	while (status & CAN_TEF_FIFO_NOT_EMPTY)
+	{
+		//debugPrintf("TEF status %x\n", status);
+		CanId id;
+		CAN_TEF_MSGOBJ tefObj;
+		DRV_CANFDSPI_TefMessageGet(0, &tefObj);
+		id.SetReceivedId(tefObj.bF.id.EID | ((uint32_t)tefObj.bF.id.SID << 18));
+
+		p_txCallback(tefObj.bF.ctrl.SEQ, id, tefObj.bF.timeStamp);
+		DRV_CANFDSPI_TefStatusGet(0, &status);
+	}
+}
+
+uint16_t CanDevice::ReadTimeStampCounter() noexcept
+{
+	//debugPrintf("get timestamp\n");
+	MutexLocker lock(SPIMutex);
+	uint32_t ts;
+	DRV_CANFDSPI_TimeStampGet(0, &ts);
+	return ts & 0xffff;
 }
 
 uint32_t CanDevice::GetErrorRegister() const noexcept
@@ -1085,8 +1217,75 @@ uint32_t CanDevice::GetErrorRegister() const noexcept
 // Return true if space is available to send using this buffer or FIFO
 bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) noexcept
 {
+	uint32_t start = millis();
+	do
+	{
+		{
+			MutexLocker lock(SPIMutex);
+			CAN_TX_FIFO_STATUS status;
+			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+			//debugPrintf("send message buffer %d dst %d typ %d status %x\n", whichBuffer, buffer->id.Dst(), buffer->id.MsgType(), status);
+			if (status & CAN_TX_FIFO_NOT_FULL)
+				return true;
+		}
+		delay(1);
+	} while (millis() - start <= timeout);
 
 	return false;
+}
+
+void CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
+{
+	debugPrintf("Abort message buffer %d\n", whichBuffer);
+	MutexLocker lock(SPIMutex);
+	uint8_t rec, tec;
+	CAN_ERROR_STATE flags;
+	DRV_CANFDSPI_ErrorCountStateGet(0, &tec, &rec, &flags);
+	CAN_BUS_DIAGNOSTIC bd;
+	DRV_CANFDSPI_BusDiagnosticsGet(0, &bd);
+	debugPrintf("CAN diag tec %d rec %d flags %x tx full %d mode %d B/O %d\n", tec, rec, flags, txBufferFull, DRV_CANFDSPI_OperationModeGet(0), bd.bF.flag.TXBO_ERR);
+	CAN_TX_FIFO_STATUS status;
+	for(size_t i = 0; i < config->numTxBuffers+1; i++)
+	{
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
+		debugPrintf("chan %d status %x\n", (int)i, status);
+	}
+	if (tec > 127 || (flags & CAN_TX_BUS_PASSIVE_STATE))
+	{
+		debugPrintf("Reset all tx channels\n");
+		DRV_CANFDSPI_TransmitAbortAll(0);
+		delay(100);
+		for(size_t i = 0; i < config->numTxBuffers+1; i++)
+		{
+			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
+			debugPrintf("chan %d status %x\n", (int)i, status);
+
+			DRV_CANFDSPI_TransmitChannelReset(0, (CAN_FIFO_CHANNEL) i);
+			delay(10);
+			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
+			debugPrintf("chan %d status %x\n", (int)i, status);
+		}
+	}
+
+	uint32_t txReq;
+	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
+	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	debugPrintf("Before cancel txReq %x status %x\n", txReq, status);
+	DRV_CANFDSPI_TransmitChannelAbort(0, (CAN_FIFO_CHANNEL) whichBuffer);
+	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
+	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	debugPrintf("After1 cancel txReq %x status %x\n", txReq, status);
+	delay(100);
+	DRV_CANFDSPI_TransmitChannelReset(0, (CAN_FIFO_CHANNEL) whichBuffer);
+	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
+	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	debugPrintf("After2 cancel txReq %x status %x\n", txReq, status);
+	for(size_t i = 0; i < config->numTxBuffers+1; i++)
+	{
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+		debugPrintf("chan %d status %x\n", (int)i, status);
+	}
+
 }
 
 
@@ -1100,15 +1299,101 @@ static const uint8_t BytesToDLC[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 10, 
 // On return the caller must free or re-use the buffer.
 uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
+	if (!IsSpaceAvailable(whichBuffer, timeout))
+	{
+		debugPrintf("Buffer %d no space\n", whichBuffer);
+		AbortMessage(whichBuffer);
+	}
+	{
+		MutexLocker lock(SPIMutex);
+		CAN_TX_FIFO_STATUS status;
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+		//debugPrintf("send message buffer %d dst %d typ %d status %x\n", whichBuffer, buffer->id.Dst(), buffer->id.MsgType(), status);
+		if (status & CAN_TX_FIFO_NOT_FULL)
+		{
+			CAN_TX_MSGOBJ txObj;
+			txObj.word[0] = 0;
+			txObj.word[1] = 0;
+			txObj.bF.id.EID = buffer->id.GetWholeId();
+			txObj.bF.id.SID = buffer->id.GetWholeId() >> 18;
+			txObj.bF.ctrl.IDE = buffer->extId;
+			txObj.bF.ctrl.FDF = buffer->fdMode;
+			txObj.bF.ctrl.BRS = buffer->useBrs;
+			txObj.bF.ctrl.RTR = buffer->remote;
+			if (buffer->reportInFifo)
+				txObj.bF.ctrl.SEQ = buffer->marker;
+			else
+				txObj.bF.ctrl.SEQ = 0;
+			uint32_t dataLen = buffer->dataLength;
+			uint32_t dlcLen = BytesToDLC[dataLen];
+			txObj.bF.ctrl.DLC = dlcLen;
+			dlcLen = DLCtoBytes[dlcLen];
+			while (dataLen < dlcLen)
+			{
+				buffer->msg.raw[dataLen++] = 0;				// zero fill up to the CANFD buffer length
+			}
 
+			DRV_CANFDSPI_TransmitChannelLoad(0, (CAN_FIFO_CHANNEL) whichBuffer, &txObj, buffer->msg.raw, dlcLen, true);
+			messagesQueuedForSending++;
+		}
+		else
+		{
+			// FIXME handle no space to send
+			debugPrintf("No space after abort\n");
+			txBufferFull++;
+		}
+	}
 	return 0;
+}
+
+void CanDevice::CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcept
+{
+	buffer->extId = hdr->bF.ctrl.IDE;
+	buffer->id.SetReceivedId(hdr->bF.id.EID | ((uint32_t)hdr->bF.id.SID << 18));
+	buffer->remote = hdr->bF.ctrl.RTR;
+	buffer->timeStamp = hdr->bF.timeStamp;
+	buffer->dataLength = DLCtoBytes[hdr->bF.ctrl.DLC];
+	++messagesReceived;
 }
 
 
 // Receive a message in a buffer or fifo, with timeout. Returns true if successful, false if no message available even after the timeout period.
 bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
-	delay(10);
+	uint32_t start = millis();
+	do
+	{
+		{
+			MutexLocker lock(SPIMutex);
+			CAN_RX_FIFO_STATUS status;
+			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+			//debugPrintf("Recv message %d status %x op mode %d\n", whichBuffer, status, DRV_CANFDSPI_OperationModeGet(0));
+			if (status & CAN_RX_FIFO_OVERFLOW)
+			{
+				debugPrintf("rx queue %d overflow status %x\n", whichBuffer, status);
+				messagesLost++;
+				DRV_CANFDSPI_ReceiveChannelEventOverflowClear(0, (CAN_FIFO_CHANNEL) whichBuffer);
+			}
+			if (status & CAN_RX_FIFO_NOT_EMPTY)
+			{
+			//debugPrintf("Recv message %d status %x op mode %d\n", whichBuffer, status, DRV_CANFDSPI_OperationModeGet(0));
+				CAN_RX_MSGOBJ rxObj;
+				uint8_t status2;
+				status2 = DRV_CANFDSPI_ReceiveMessageGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &rxObj, buffer->msg.raw, sizeof(buffer->msg.raw));
+				CopyHeader(buffer, &rxObj);
+			if (status & CAN_RX_FIFO_OVERFLOW)
+			{
+			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+				debugPrintf("rx queue %d status2 %x\n", whichBuffer, status);
+			}
+				//debugPrintf("src %d dst %d type %d len %d\n", buffer->id.Src(), buffer->id.Dst(), buffer->id.MsgType(), buffer->dataLength);
+				return true;
+			}
+		}
+		delay(1);
+	} while (millis() - start <= timeout);
+
+
 	return false;
 }
 
@@ -1138,7 +1423,25 @@ void CanDevice::DisableExtendedFilterElement(unsigned int index) noexcept
 // If whichBuffer is a buffer number not a fifo number, the mask field is ignored except that a zero mask disables the filter element; so only the XIDAM mask filters the ID.
 void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
 {
-
+	debugPrintf("Set EFE index %d limit %d\n", index, config->numExtendedFilterElements);
+	if (index < config->numExtendedFilterElements)
+	{
+		debugPrintf("Add filter index %d buffer %d id %x mask %x\n", index, whichBuffer, id, mask);
+		MutexLocker lock(SPIMutex);
+		DRV_CANFDSPI_FilterDisable(0, (CAN_FILTER) index);
+		CAN_FILTEROBJ_ID idObj;
+		idObj.EID = id;
+		idObj.SID = id >> 18;
+		idObj.EXIDE = 1;
+		mask |= 0x40000000;
+		DRV_CANFDSPI_FilterObjectConfigure(0, (CAN_FILTER) index, &idObj);
+		CAN_MASKOBJ_ID maskObj;
+		maskObj.MEID = mask;
+		maskObj.MSID = mask >> 18;
+		maskObj.MIDE = 1;
+		DRV_CANFDSPI_FilterMaskConfigure(0, (CAN_FILTER) index, &maskObj);
+		DRV_CANFDSPI_FilterToFifoLink(0, (CAN_FILTER) index, (CAN_FIFO_CHANNEL) whichBuffer, true);
+	}
 }
 
 void CanDevice::GetLocalCanTiming(CanTiming &timing) noexcept
@@ -1156,6 +1459,24 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 
 void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept
 {
+	{
+		MutexLocker lock(SPIMutex);
+		for(size_t i = 0; i < config->numTxBuffers+1; i++)
+		{
+			CAN_TX_FIFO_STATUS status;
+			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
+			debugPrintf("chan %d status %x\n", (int)i, status);
+		}
+
+		uint8_t rec, tec;
+		CAN_ERROR_STATE flags;
+		DRV_CANFDSPI_ErrorCountStateGet(0, &tec, &rec, &flags);
+		CAN_BUS_DIAGNOSTIC bd;
+		DRV_CANFDSPI_BusDiagnosticsGet(0, &bd);
+		debugPrintf("CAN diag tec %d rec %d flags %x tx full %d mode %d B/O %d te %d/%d re %d/%d\n", tec, rec, flags, txBufferFull, DRV_CANFDSPI_OperationModeGet(0), bd.bF.flag.TXBO_ERR, bd.bF.errorCount.DTEC, bd.bF.errorCount.NTEC, bd.bF.errorCount.DREC, bd.bF.errorCount.NREC);
+		txBufferFull = 0;
+		DRV_CANFDSPI_BusDiagnosticsClear(0);	
+	}
 	AtomicCriticalSectionLocker lock;
 
 	rMessagesQueuedForSending = messagesQueuedForSending;

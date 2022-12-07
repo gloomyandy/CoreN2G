@@ -415,14 +415,16 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
     if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
     {
 #ifdef RTOS
+if (waitingTask != 0) debugPrintf("SPI busy\n");
         waitingTask = xTaskGetCurrentTaskHandle();
         startTransfer(tx_data, rx_data, len, transferComplete);
         spi_status_t ret = SPI_OK;
+        uint32_t start = millis();
         const TickType_t xDelay = SPITimeoutMillis / portTICK_PERIOD_MS; //timeout
         if( ulTaskNotifyTake(pdTRUE, xDelay) == 0) // timed out
         {
             ret = SPI_TIMEOUT;
-            debugPrintf("SPI timeout\n");
+            debugPrintf("SPI timeout delay %d actual %d active %d\n", xDelay, millis()-start, transferActive);
             stopTransfer();
         }
         waitingTask = 0;

@@ -523,7 +523,8 @@ typedef enum {
     CAN_250K_4M,
     CAN_1000K_4M, // 0x0f
     CAN_1000K_8M,
-    CAN_125K_500K // 0x11
+    CAN_125K_500K,// 0x11
+    CAN_1000K_1M  // Special entry for Duet mode
 } CAN_BITTIME_SETUP;
 
 //! CAN Nominal Bit Time Setup

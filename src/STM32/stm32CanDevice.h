@@ -41,13 +41,14 @@ extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint3
 class CanMessageBuffer;
 class CanTiming;
 constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
+#include "drv_canfdspi_defines.h"
 #endif
 class CanDevice
 {
 public:
 	enum class RxBufferNumber : uint32_t
 	{
-		fifo0 = 0, fifo1,
+		fifo0 = 6, fifo1,
 		buffer0, buffer1, buffer2, buffer3,
 		none = 0xFFFF
 	};
@@ -55,7 +56,7 @@ public:
 	enum class TxBufferNumber : uint32_t
 	{
 		fifo = 0,
-		buffer0, buffer1, buffer2, buffer3, buffer4, buffer5,
+		buffer0, buffer1, buffer2, buffer3, buffer4,
 	};
 
 	// Struct used to pass configuration constants, with default values
@@ -196,13 +197,13 @@ public:
 	void GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept;
 
 	uint16_t ReadTimeStampCounter() noexcept
-	{
 #if STM32H7
+	{
 		return HAL_FDCAN_GetTimestampCounter(&hw);
-#else
-		return 0;
-#endif
 	}
+#else
+	;
+#endif
 
 #if !SAME70
 	uint16_t GetTimeStampPeriod() noexcept
@@ -228,11 +229,13 @@ private:
 	CanDevice() noexcept { }
 	void DoHardwareInit() noexcept;
 	void UpdateLocalCanTiming(const CanTiming& timing) noexcept;
-
 #if STM32H7
 	void CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr) noexcept;
 
 	Can hw;														// HAL structure for the can device
+#else
+	void CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcept;
+	void AbortMessage(TxBufferNumber whichBuffer) noexcept;
 #endif
 
 	unsigned int whichCan;										// which CAN device we are
@@ -245,6 +248,7 @@ private:
 	unsigned int messagesQueuedForSending;
 	unsigned int messagesReceived;
 	unsigned int messagesLost;									// count of received messages lost because the receive FIFO was full
+	unsigned int txBufferFull;									// count of times TX FIFO was full
 	unsigned int busOffCount;									// count of the number of times we have reset due to bus off
 
 	TxEventCallbackFunction txCallback;							// function that gets called by the ISR when a transmit event for a message with a nonzero marker occurs
