@@ -236,6 +236,8 @@ private:
 #else
 	void CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcept;
 	void AbortMessage(TxBufferNumber whichBuffer) noexcept;
+	bool ChangeMode(CAN_OPERATION_MODE newMode) noexcept;
+	void CheckBusStatus(uint32_t checkNo) noexcept;
 #endif
 
 	unsigned int whichCan;										// which CAN device we are
