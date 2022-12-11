@@ -33,7 +33,7 @@ bool SoftwareSPI::waitForTxEmpty() noexcept
 }
 
 
-void SoftwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, NvicPriority priority) noexcept
+void SoftwareSPI::initPins(Pin clk, Pin miso, Pin mosi, NvicPriority priority) noexcept
 {
     this->sck = clk;
     this->miso = miso;
@@ -79,9 +79,10 @@ SoftwareSPI::SoftwareSPI() noexcept
 
 }
 
-spi_status_t SoftwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
+spi_status_t SoftwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs) noexcept
 {
     if (sck == NoPin) return SPI_ERROR;
+    if (cs != NoPin) fastDigitalWriteLow(cs);
     uint32_t startTime = millis();
     for (uint32_t i = 0; i < len; ++i)
     {
@@ -89,6 +90,7 @@ spi_status_t SoftwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
         uint8_t dIn = (mode & 2 ? mode23TransferByte(dOut) : mode01TransferByte(dOut));
         if(rx_data != nullptr) *rx_data++ = dIn;
     }
+    if (cs != NoPin) fastDigitalWriteHigh(cs);
     if (millis() - startTime > 1000) debugPrintf("Software SPI request took %dms\n", (int)(millis() - startTime));
 	return SPI_OK;
 }

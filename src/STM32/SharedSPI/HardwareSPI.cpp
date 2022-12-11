@@ -2,9 +2,7 @@
 #include "HardwareSPI.h"
 
 #ifdef RTOS
-#include "FreeRTOS.h"
-#include "semphr.h"
-#include "task.h"
+#include <RTOSIface/RTOSIface.h>
 #endif
 #include "spi_com.h"
 #include "Cache.h"
@@ -223,18 +221,17 @@ bool HardwareSPI::waitForTxEmpty() noexcept
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
 {
-    BaseType_t higherPriorityTaskWoken = pdFALSE;
-    vTaskNotifyGiveFromISR(spiDevice->waitingTask, &higherPriorityTaskWoken);
-    portYIELD_FROM_ISR(higherPriorityTaskWoken);
+    if (spiDevice->csPin != NoPin) fastDigitalWriteHigh(spiDevice->csPin);
+    spiDevice->waitingTask->GiveFromISR();
 }
 #endif
 
-void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, Pin cs, NvicPriority priority) noexcept
+void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, NvicPriority priority) noexcept
 {
     spi.pin_sclk = clk;
     spi.pin_miso = miso;
     spi.pin_mosi = mosi;
-    spi.pin_ssel = csPin = cs;
+    csPin = NoPin;
     if (usingDma)
     {
         initDma(priority);   
@@ -281,9 +278,8 @@ void HardwareSPI::initDma(NvicPriority priority) noexcept
 #endif
 }
 
-void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, bool hardwareCS) noexcept
+void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, Pin cs) noexcept
 {
-    Pin cs = (hardwareCS ? csPin : NoPin);
     if (!initComplete || bitRate != curBitRate || bits != curBits || clockMode != curClockMode )
     {
         if (initComplete)
@@ -305,7 +301,7 @@ void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t c
 //setup the master device.
 void HardwareSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept
 {
-    configureDevice(SPI_MODE_MASTER, bits, clockMode, bitRate, false);
+    configureDevice(SPI_MODE_MASTER, bits, clockMode, bitRate);
 }
 
 HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrqNo,
@@ -388,7 +384,7 @@ void HardwareSPI::stopTransfer() noexcept
             transferActive = false;
 #else
             disable();
-            configureDevice(spi.handle.Init.Mode, curBits, curClockMode, curBitRate, spi.pin_ssel != NoPin);
+            configureDevice(spi.handle.Init.Mode, curBits, curClockMode, curBitRate, spi.pin_ssel);
 #endif
         }
         __HAL_SPI_DISABLE(&(spi.handle));
@@ -410,27 +406,28 @@ void HardwareSPI::startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data,
         debugPrintf("SPI Error %d\n", (int)status);
 }
 
-spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
+spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs) noexcept
 {
+    spi_status_t ret = SPI_OK;
+    if (cs != NoPin) fastDigitalWriteLow(cs);
     if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
     {
 #ifdef RTOS
 if (waitingTask != 0) debugPrintf("SPI busy\n");
-        waitingTask = xTaskGetCurrentTaskHandle();
+        waitingTask = TaskBase::GetCallerTaskHandle();
+        csPin = cs;
         startTransfer(tx_data, rx_data, len, transferComplete);
-        spi_status_t ret = SPI_OK;
         uint32_t start = millis();
-        const TickType_t xDelay = SPITimeoutMillis / portTICK_PERIOD_MS; //timeout
-        if( ulTaskNotifyTake(pdTRUE, xDelay) == 0) // timed out
+        if(!TaskBase::Take(SPITimeoutMillis)) // timed out
         {
             ret = SPI_TIMEOUT;
-            debugPrintf("SPI timeout delay %d actual %d active %d\n", xDelay, millis()-start, transferActive);
+            debugPrintf("SPI timeout delay %d actual %d active %d\n", SPITimeoutMillis, (int)(millis()-start), transferActive);
             stopTransfer();
         }
         waitingTask = 0;
+        csPin = NoPin;
 #else
         startTransfer(tx_data, rx_data, len, nullptr);
-        spi_status_t ret = SPI_OK;
         uint32_t start = millis();
         while(transferActive && millis() - start < SPITimeoutMillis)
         {
@@ -443,12 +440,12 @@ if (waitingTask != 0) debugPrintf("SPI busy\n");
         }
 #endif
         if (rx_data != nullptr) Cache::InvalidateAfterDMAReceive(rx_data, len);
-        return ret;
     }
     else
     {
         startTransferAndWait(tx_data, rx_data, len);
-        return SPI_OK;
     }
+    if (cs != NoPin) fastDigitalWriteHigh(cs);
+    return ret;
 }
 #endif

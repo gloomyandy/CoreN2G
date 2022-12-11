@@ -5,8 +5,7 @@
 #include "SPI.h"
 
 #ifdef RTOS
-#include "FreeRTOS.h"
-#include "task.h"
+#include <RTOSIface/RTOSIface.h>
 #endif
 #include "spi_com.h"
 #if SPI1DMA
@@ -36,11 +35,11 @@ public:
     HardwareSPI(SPI_TypeDef *spi) noexcept;
     HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrqNo,
                             DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrqNo) noexcept;
-    spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;
+    spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs = NoPin) noexcept;
     bool waitForTxEmpty() noexcept;
     void configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept; // Master mode
-    void configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, bool hardwareCS) noexcept;
-    void initPins(Pin sck, Pin miso, Pin mosi, Pin cs = NoPin, NvicPriority priority = -1) noexcept;
+    void configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, Pin cs = NoPin) noexcept;
+    void initPins(Pin sck, Pin miso, Pin mosi, NvicPriority priority = -1) noexcept;
     void disable() noexcept;
     void flushRx() noexcept;
     void startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept;
@@ -67,7 +66,7 @@ private:
     uint32_t curClockMode;
     SPICallbackFunction callback;
 #ifdef RTOS
-    TaskHandle_t waitingTask;
+    TaskBase *waitingTask;
 #endif
     bool initComplete;
     bool transferActive;

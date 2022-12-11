@@ -48,9 +48,9 @@ class SPI
 {
 public:
     virtual void configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept;
-    virtual spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;    
+    virtual spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs = NoPin) noexcept;    
     virtual bool waitForTxEmpty() noexcept;
-    virtual void initPins(Pin sck, Pin miso, Pin mosi, Pin cs = NoPin, NvicPriority priority = -1) noexcept;
+    virtual void initPins(Pin sck, Pin miso, Pin mosi, NvicPriority priority = -1) noexcept;
     static SPI *getSSPDevice(SSPChannel channel) noexcept;
 };
 
