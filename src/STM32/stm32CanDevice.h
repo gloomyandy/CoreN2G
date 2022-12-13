@@ -46,6 +46,20 @@ constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one
 class CanDevice
 {
 public:
+#if STM32H7
+	enum class RxBufferNumber : uint32_t
+	{
+		fifo0 = 0, fifo1,
+		buffer0, buffer1, buffer2, buffer3,
+		none = 0xFFFF
+	};
+
+	enum class TxBufferNumber : uint32_t
+	{
+		fifo = 0,
+		buffer0, buffer1, buffer2, buffer3, buffer4,
+	};
+#else
 	enum class RxBufferNumber : uint32_t
 	{
 		fifo0 = 6, fifo1,
@@ -58,6 +72,7 @@ public:
 		fifo = 0,
 		buffer0, buffer1, buffer2, buffer3, buffer4,
 	};
+#endif
 
 	// Struct used to pass configuration constants, with default values
 	struct Config
