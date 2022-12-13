@@ -16,8 +16,7 @@
 #include <cstring>
 #include <HardwareTimer.h>
 
-//#if STM32H7
-#if 0
+#if STM32H7
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 static FDCAN_GlobalTypeDef * const CanInstance[2] = {FDCAN1, FDCAN2};
@@ -1105,6 +1104,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
     	txc.FifoSize = 1 - 1;
     	txc.PayLoadSize = CAN_PLSIZE_64;
 		txc.TxAttempts = 3;
+		txc.TxPriority = p_config.numTxBuffers - i;
 		status = DRV_CANFDSPI_TransmitChannelConfigure(0, (CAN_FIFO_CHANNEL)(CAN_FIFO_CH1 + i), &txc);
 		if (status != 0)
 		{
@@ -1273,7 +1273,7 @@ void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 {
 	//debugPrintf("Poll events\n");
 	MutexLocker lock(SPIMutex);
-	CheckBusStatus(1);
+	//CheckBusStatus(1);
 	CAN_TEF_FIFO_STATUS status;
 	DRV_CANFDSPI_TefStatusGet(0, &status);
 	//debugPrintf("TEF status %x\n", status);
@@ -1283,9 +1283,12 @@ void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 		CanId id;
 		CAN_TEF_MSGOBJ tefObj;
 		DRV_CANFDSPI_TefMessageGet(0, &tefObj);
-		id.SetReceivedId(tefObj.bF.id.EID | ((uint32_t)tefObj.bF.id.SID << 18));
+		if (tefObj.bF.ctrl.SEQ != 0)
+		{
+			id.SetReceivedId(tefObj.bF.id.EID | ((uint32_t)tefObj.bF.id.SID << 18));
 
-		p_txCallback(tefObj.bF.ctrl.SEQ, id, tefObj.bF.timeStamp);
+			p_txCallback(tefObj.bF.ctrl.SEQ, id, tefObj.bF.timeStamp);
+		}
 		DRV_CANFDSPI_TefStatusGet(0, &status);
 	}
 }
@@ -1304,20 +1307,26 @@ uint32_t CanDevice::GetErrorRegister() const noexcept
 	return 0;
 }
 
+uint32_t bufReqCnt[20];
+uint32_t bufFullCnt[20];
+
 // Return true if space is available to send using this buffer or FIFO
 bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) noexcept
 {
+	bufReqCnt[(int)whichBuffer]++;
 	uint32_t start = millis();
 	do
 	{
 		{
 			MutexLocker lock(SPIMutex);
-			CheckBusStatus(2);
+			//CheckBusStatus(2);
 			CAN_TX_FIFO_STATUS status;
 			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 			//debugPrintf("send message buffer %d dst %d typ %d status %x\n", whichBuffer, buffer->id.Dst(), buffer->id.MsgType(), status);
 			if (status & CAN_TX_FIFO_NOT_FULL)
 				return true;
+			bufFullCnt[(int)whichBuffer]++;
+
 		}
 		delay(1);
 	} while (millis() - start <= timeout);
@@ -1404,7 +1413,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 	}
 	{
 		MutexLocker lock(SPIMutex);
-		CheckBusStatus(4);
+		//CheckBusStatus(4);
 		CAN_TX_FIFO_STATUS status;
 		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 		//debugPrintf("send message buffer %d dst %d typ %d status %x\n", whichBuffer, buffer->id.Dst(), buffer->id.MsgType(), status);
@@ -1464,7 +1473,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 	{
 		{
 			MutexLocker lock(SPIMutex);
-			CheckBusStatus(5);
+			//CheckBusStatus(5);
 			CAN_RX_FIFO_STATUS status;
 			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 			//debugPrintf("Recv message %d status %x op mode %d\n", whichBuffer, status, DRV_CANFDSPI_OperationModeGet(0));
@@ -1567,7 +1576,8 @@ void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsign
 		{
 			CAN_TX_FIFO_STATUS status;
 			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
-			debugPrintf("chan %d status %x\n", (int)i, status);
+			debugPrintf("chan %d status %x req %d full %d\n", (int)i, status, bufReqCnt[i], bufFullCnt[i]);
+			bufFullCnt[i] = bufReqCnt[i] = 0;
 		}
 
 		uint8_t rec, tec;
