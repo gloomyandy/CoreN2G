@@ -218,11 +218,17 @@ bool HardwareSPI::waitForTxEmpty() noexcept
 }
 
 #ifdef RTOS
+uint32_t SpiNoTask = 0;
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
 {
     if (spiDevice->csPin != NoPin) fastDigitalWriteHigh(spiDevice->csPin);
-    spiDevice->waitingTask->GiveFromISR();
+    if (spiDevice->waitingTask != nullptr)
+        spiDevice->waitingTask->GiveFromISR();
+    else
+    {
+        SpiNoTask++;
+    }
 }
 #endif
 
@@ -418,7 +424,13 @@ if (waitingTask != 0) debugPrintf("SPI busy\n");
         csPin = cs;
         startTransfer(tx_data, rx_data, len, transferComplete);
         uint32_t start = millis();
-        if(!TaskBase::Take(SPITimeoutMillis)) // timed out
+        int32_t timeout = SPITimeoutMillis;
+        do {
+            TaskBase::Take(timeout);
+            if (!transferActive) break;
+            timeout = timeout - (millis() - start);
+        } while (timeout > 0);
+        if(transferActive) // timed out
         {
             ret = SPI_TIMEOUT;
             debugPrintf("SPI timeout delay %d actual %d active %d\n", SPITimeoutMillis, (int)(millis()-start), transferActive);
