@@ -433,7 +433,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				{
 					return false;
 				}
-				TaskBase::ClearNotifyCount();
+				TaskBase::ClearCurrentTaskNotifyCount();
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
 				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0);
@@ -474,7 +474,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 					debugPrintf("Fifo 1 timeout\n");
 					return false;
 				}
-				TaskBase::ClearNotifyCount();
+				TaskBase::ClearCurrentTaskNotifyCount();
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
 				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0);
@@ -518,7 +518,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 					debugPrintf("Buffer %d timeout\n", (int)bufferNumber);
 					return false;
 				}
-				TaskBase::ClearNotifyCount();
+				TaskBase::ClearCurrentTaskNotifyCount();
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
 				rxBuffersWaiting |= ndatMask;

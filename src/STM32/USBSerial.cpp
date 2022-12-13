@@ -24,7 +24,7 @@
 
 extern __IO  uint32_t lineState;
 
-USBSerial SerialUSB;
+USBSerial serialUSB;
 void serialEventUSB() __attribute__((weak));
 
 void USBSerial::begin(void) noexcept
