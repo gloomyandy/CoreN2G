@@ -62,14 +62,14 @@ public:
 #else
 	enum class RxBufferNumber : uint32_t
 	{
-		fifo0 = 6, fifo1,
+		fifo0 = 8, fifo1,
 		buffer0, buffer1, buffer2, buffer3,
 		none = 0xFFFF
 	};
 
 	enum class TxBufferNumber : uint32_t
 	{
-		fifo = 0,
+		fifo = 1,
 		buffer0, buffer1, buffer2, buffer3, buffer4,
 	};
 #endif

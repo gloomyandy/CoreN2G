@@ -1038,8 +1038,8 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	DRV_CANFDSPI_OscillatorControlObjectReset(&osc);
     osc.PllEnable = 0;
     osc.OscDisable = 0;
-    osc.SclkDivide = 0;
-    osc.ClkOutDivide = 0;
+    osc.SclkDivide = 1;
+    osc.ClkOutDivide = 1;
 	status = DRV_CANFDSPI_OscillatorControlSet(0, osc);
 	if (status != 0)
 	{
@@ -1055,7 +1055,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	DRV_CANFDSPI_ConfigureObjectReset(&config);
     config.IsoCrcEnable = 1;
     config.StoreInTEF = 1;
-    config.TXQEnable = 1;
+    config.TXQEnable = 0;
 	config.TxBandWidthSharing = 1;
 	config.RestrictReTxAttempts = 1;
 	status = DRV_CANFDSPI_Configure(0, &config);
@@ -1083,19 +1083,19 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		debugPrintf("SPI CAN Failed to set tef config\n");
 		return nullptr;
 	}
-	CAN_TX_QUEUE_CONFIG txq;
-	DRV_CANFDSPI_TransmitQueueConfigureObjectReset(&txq);
-    //txq.FifoSize = p_config.txFifoSize;
-    txq.FifoSize = 8 - 1;
-    txq.PayLoadSize = CAN_PLSIZE_64;
-	txq.TxAttempts = 3;
-	status = DRV_CANFDSPI_TransmitQueueConfigure(0, &txq);
+	CAN_TX_FIFO_CONFIG txf;
+	DRV_CANFDSPI_TransmitChannelConfigureObjectReset(&txf);
+	txf.FifoSize = 8 - 1;
+	txf.PayLoadSize = CAN_PLSIZE_64;
+	txf.TxAttempts = 3;
+	txf.TxPriority = 0;
+	status = DRV_CANFDSPI_TransmitChannelConfigure(0, (CAN_FIFO_CHANNEL)(TxBufferNumber::fifo), &txf);
 	if (status != 0)
 	{
-		debugPrintf("SPI CAN Failed to set txq config\n");
+		debugPrintf("SPI CAN Failed to set txf chan config\n");
 		return nullptr;
 	}
-	debugPrintf("Configuring %d tx buffers starting at fifo %d\n", p_config.numTxBuffers, CAN_FIFO_CH1);
+	debugPrintf("Configuring %d tx buffers starting at fifo %d\n", p_config.numTxBuffers, CAN_FIFO_CH2);
 	// We use one tx fifo of size 1 for each "buffer/channel"
 	for(size_t i = 0; i < p_config.numTxBuffers; i++)
 	{
@@ -1105,28 +1105,28 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
     	txc.PayLoadSize = CAN_PLSIZE_64;
 		txc.TxAttempts = 3;
 		txc.TxPriority = p_config.numTxBuffers - i;
-		status = DRV_CANFDSPI_TransmitChannelConfigure(0, (CAN_FIFO_CHANNEL)(CAN_FIFO_CH1 + i), &txc);
+		status = DRV_CANFDSPI_TransmitChannelConfigure(0, (CAN_FIFO_CHANNEL)((size_t)TxBufferNumber::buffer0 + i), &txc);
 		if (status != 0)
 		{
 			debugPrintf("SPI CAN Failed to set txc chan %d config\n", i);
 			return nullptr;
 		}
 	}
-	debugPrintf("Configuring rx fifos starting at %d\n", CAN_FIFO_CH1 + p_config.numTxBuffers);
+	debugPrintf("Configuring rx fifos starting at %d\n", RxBufferNumber::fifo0);
 	// RX fifos
 	CAN_RX_FIFO_CONFIG rxc;
 	DRV_CANFDSPI_ReceiveChannelConfigureObjectReset(&rxc);
 	rxc.FifoSize = 8 - 1;
 	rxc.PayLoadSize = CAN_PLSIZE_64;
     rxc.RxTimeStampEnable = 1;
- 	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(CAN_FIFO_CH1 + p_config.numTxBuffers), &rxc);
+ 	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(RxBufferNumber::fifo0), &rxc);
 	if (status != 0)
 	{
 		debugPrintf("SPI CAN Failed to set rxc chan 0 config\n");
 		return nullptr;
 	}
 	rxc.FifoSize = 5 - 1;
- 	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(CAN_FIFO_CH1 + p_config.numTxBuffers + 1), &rxc);
+ 	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(RxBufferNumber::fifo1), &rxc);
 	if (status != 0)
 	{
 		debugPrintf("SPI CAN Failed to set rxc chan 1 config\n");
@@ -1246,7 +1246,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 		debugPrintf("T:%d Check %d tx errors or passive state\n", millis(), checkNo);
 		PrintErrorInfo();
 		CAN_TX_FIFO_STATUS status;
-		for(size_t i = 0; i < config->numTxBuffers+1; i++)
+		for(size_t i = 1; i < config->numTxBuffers+2; i++)
 		{
 			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
 			debugPrintf("chan %d status %x\n", (int)i, status);
@@ -1293,12 +1293,25 @@ void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 	}
 }
 
+uint32_t crcErrors = 0;
+uint32_t rollovers = 0;
+
 uint16_t CanDevice::ReadTimeStampCounter() noexcept
 {
 	//debugPrintf("get timestamp\n");
 	MutexLocker lock(SPIMutex);
-	uint32_t ts;
-	DRV_CANFDSPI_TimeStampGet(0, &ts);
+	uint16_t ts;
+	int8_t status;
+	bool goodCrc;
+	do {
+		//DRV_CANFDSPI_TimeStampGet(0, &ts);
+		status = DRV_CANFDSPI_ReadByteArrayWithCRC(0, cREGADDR_CiTBC,
+			(uint8_t *)&ts, 2, false, &goodCrc);
+    
+	    if (!goodCrc) crcErrors++;
+		if ((ts & 0xff) >= 0xfe) rollovers++;
+	} while (!goodCrc || (ts & 0xff) >= 0xfe);
+
 	return ts & 0xffff;
 }
 
@@ -1326,9 +1339,10 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 			if (status & CAN_TX_FIFO_NOT_FULL)
 				return true;
 			bufFullCnt[(int)whichBuffer]++;
+			CheckBusStatus(2);
 
 		}
-		delay(1);
+		//delay(1);
 	} while (millis() - start <= timeout);
 
 	return false;
@@ -1347,7 +1361,7 @@ void CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
 	DRV_CANFDSPI_BusDiagnosticsGet(0, &bd);
 	debugPrintf("CAN diag tec %d rec %d flags %x tx full %d mode %d B/O %d\n", tec, rec, flags, txBufferFull, DRV_CANFDSPI_OperationModeGet(0), bd.bF.flag.TXBO_ERR);
 	CAN_TX_FIFO_STATUS status;
-	for(size_t i = 0; i < config->numTxBuffers+1; i++)
+	for(size_t i = 1; i < config->numTxBuffers+2; i++)
 	{
 		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
 		debugPrintf("chan %d status %x\n", (int)i, status);
@@ -1360,7 +1374,7 @@ void CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
 #if 0
 		DRV_CANFDSPI_TransmitAbortAll(0);
 		delay(100);
-		for(size_t i = 0; i < config->numTxBuffers+1; i++)
+		for(size_t i = 1; i < config->numTxBuffers+2; i++)
 		{
 			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
 			debugPrintf("chan %d status %x\n", (int)i, status);
@@ -1387,7 +1401,7 @@ void CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
 	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
 	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 	debugPrintf("After2 cancel txReq %x status %x\n", txReq, status);
-	for(size_t i = 0; i < config->numTxBuffers+1; i++)
+	for(size_t i = 1; i < config->numTxBuffers+2; i++)
 	{
 		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 		debugPrintf("chan %d status %x\n", (int)i, status);
@@ -1485,6 +1499,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 				debugPrintf("rx queue %d status2 %x\n", whichBuffer, status);
 			}
+			if (status & CAN_RX_FIFO_FULL) bufFullCnt[(int)whichBuffer]++;
 			if (status & CAN_RX_FIFO_NOT_EMPTY)
 			{
 			//debugPrintf("Recv message %d status %x op mode %d\n", whichBuffer, status, DRV_CANFDSPI_OperationModeGet(0));
@@ -1498,6 +1513,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				debugPrintf("rx queue %d status3 %x\n", whichBuffer, status);
 			}
 				//debugPrintf("src %d dst %d type %d len %d\n", buffer->id.Src(), buffer->id.Dst(), buffer->id.MsgType(), buffer->dataLength);
+				bufReqCnt[(int)whichBuffer]++;
 				return true;
 			}
 		}
@@ -1572,10 +1588,18 @@ void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsign
 {
 	{
 		MutexLocker lock(SPIMutex);
-		for(size_t i = 0; i < config->numTxBuffers+1; i++)
+		for(size_t i = (size_t)TxBufferNumber::fifo; i <= (size_t)TxBufferNumber::buffer4; i++)
 		{
 			CAN_TX_FIFO_STATUS status;
 			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
+			debugPrintf("chan %d status %x req %d full %d\n", (int)i, status, bufReqCnt[i], bufFullCnt[i]);
+			bufFullCnt[i] = bufReqCnt[i] = 0;
+		}
+
+		for(size_t i = (size_t)RxBufferNumber::fifo0; i <= (size_t)RxBufferNumber::fifo1; i++)
+		{
+			CAN_RX_FIFO_STATUS status;
+			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
 			debugPrintf("chan %d status %x req %d full %d\n", (int)i, status, bufReqCnt[i], bufFullCnt[i]);
 			bufFullCnt[i] = bufReqCnt[i] = 0;
 		}
@@ -1586,6 +1610,8 @@ void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsign
 		CAN_BUS_DIAGNOSTIC bd;
 		DRV_CANFDSPI_BusDiagnosticsGet(0, &bd);
 		debugPrintf("CAN diag tec %d rec %d flags %x tx full %d mode %d B/O %d te %d/%d re %d/%d\n", tec, rec, flags, txBufferFull, DRV_CANFDSPI_OperationModeGet(0), bd.bF.flag.TXBO_ERR, bd.bF.errorCount.DTEC, bd.bF.errorCount.NTEC, bd.bF.errorCount.DREC, bd.bF.errorCount.NREC);
+		debugPrintf("CRC errors %d rollovers %d\n", crcErrors, rollovers);
+		crcErrors = rollovers = 0;
 		txBufferFull = 0;
 		DRV_CANFDSPI_BusDiagnosticsClear(0);	
 	}
