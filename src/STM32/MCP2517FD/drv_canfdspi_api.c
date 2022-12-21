@@ -2925,6 +2925,13 @@ int8_t DRV_CANFDSPI_BitTimeConfigureNominal40MHz(CANFDSPI_MODULE_ID index,
             ciNbtcfg.bF.SJW = 7;
             break;
 
+        case CAN_1000K_1M:
+            ciNbtcfg.bF.BRP = 0;
+            ciNbtcfg.bF.TSEG1 = 21;
+            ciNbtcfg.bF.TSEG2 = 16;
+            ciNbtcfg.bF.SJW = 7;
+            break;
+
         case CAN_125K_500K:
             ciNbtcfg.bF.BRP = 0;
             ciNbtcfg.bF.TSEG1 = 254;
@@ -3000,6 +3007,17 @@ int8_t DRV_CANFDSPI_BitTimeConfigureData40MHz(CANFDSPI_MODULE_ID index,
             ciTdc.bF.TDCOffset = 7;
             ciTdc.bF.TDCValue = tdcValue;
             break;
+
+        case CAN_1000K_1M:
+            ciDbtcfg.bF.BRP = 0;
+            ciDbtcfg.bF.TSEG1 = 21;
+            ciDbtcfg.bF.TSEG2 = 16;
+            ciDbtcfg.bF.SJW = 7;
+            // SSP
+            ciTdc.bF.TDCOffset = 22;
+            ciTdc.bF.TDCValue = tdcValue;
+            break;
+
         case CAN_500K_5M:
             // Data BR
             ciDbtcfg.bF.BRP = 0;

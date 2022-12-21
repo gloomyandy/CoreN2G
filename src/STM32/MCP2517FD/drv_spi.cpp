@@ -25,7 +25,7 @@ extern "C" void DRV_SPI_Initialize()
     csPin = PA_15;
     spiDev = &HardwareSPI::SSP3;
     pinMode(csPin, OUTPUT_HIGH);
-    spiDev->configureDevice(8, 0, 10000000);
+    spiDev->configureDevice(8, 0, 15000000);
 }
 
 
