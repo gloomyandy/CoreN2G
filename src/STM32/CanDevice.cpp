@@ -1,8 +1,8 @@
 /*
  * CanDevice.cpp
  *
- *  Created on: 2 Sep 2020
- *      Author: David
+ *  Created on: 8 Jan 2022
+ *      Author: Andy
  */
 
 #include "CanDevice.h"
@@ -17,6 +17,7 @@
 #include <HardwareTimer.h>
 
 #if STM32H7
+// On the STM32H7 we use the built in CAN FD module
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 static FDCAN_GlobalTypeDef * const CanInstance[2] = {FDCAN1, FDCAN2};
@@ -996,9 +997,14 @@ extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint3
 
 #endif
 #else
+// On devices without a built in CAN-FD module we use an external SPI based device based on the MCP251XFD
+
+// Note that this implementation is very basic and provides just enough functionality to support RRF.
+
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
-#include "drv_canfdspi_api.h"
-#include "drv_spi.h"
+#include "CanFdSpiApi.h"
+#include "CanSpi.h"
+
 CanDevice CanDevice::devices[NumCanDevices];
 static Mutex SPIMutex;
 constexpr uint32_t AbortTimeout = 100U;
@@ -1026,7 +1032,11 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 {
 	int8_t status;
 	debugPrintf("Can Init\n");
-	DRV_SPI_Initialize();
+	if (!DRV_SPI_Initialize())
+	{
+		debugPrintf("Unable to initialise CAN SPI interface, CAN will be disabled\n");
+		return nullptr;
+	}
 	DRV_CANFDSPI_Reset(0);
 	// Hardware should be in configuration mode after a reset
 	if (DRV_CANFDSPI_OperationModeGet(0) != CAN_CONFIGURATION_MODE)
@@ -1159,6 +1169,9 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	debugPrintf("SPI CAN clock status %d pll %d osc %d sclk %d\n", status, ostat.PllReady, ostat.OscReady, ostat.SclkReady);
 	devices[0].config = &p_config;
 	SPIMutex.Create("CanTrans");
+	uint16_t ts1 = devices[0].ReadTimeStampCounter();
+	delay(10);
+	debugPrintf("10ms timestamp %u\n", devices[0].ReadTimeStampCounter() - ts1);
 	return &devices[0];
 }
 
@@ -1200,6 +1213,7 @@ void CanDevice::Disable() noexcept
 
 static void PrintErrorInfo()
 {
+#if 0
 	uint8_t rec, tec;
 	CAN_ERROR_STATE flags;
 	DRV_CANFDSPI_ErrorCountStateGet(0, &tec, &rec, &flags);
@@ -1212,6 +1226,7 @@ static void PrintErrorInfo()
 	CAN_ICODE icode;
 	DRV_CANFDSPI_ModuleEventIcodeGet(0, &icode);
 	debugPrintf("Event flags %x icode %x\n", eflags, icode);
+#endif
 }
 
 void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
@@ -1220,6 +1235,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 	if (DRV_CANFDSPI_OperationModeGet(0) != CAN_NORMAL_MODE)
 	{
 		// Bus not in operating mode
+#if 0
 		debugPrintf("T:%d Check %d Bus not in correct mode %x\n", millis(), checkNo, DRV_CANFDSPI_OperationModeGet(0));
 		PrintErrorInfo();
 		CAN_TX_FIFO_STATUS status;
@@ -1228,6 +1244,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
 			debugPrintf("chan %d status %x\n", (int)i, status);
 		}
+#endif
 		if (!ChangeMode(CAN_NORMAL_MODE))
 		{
 			Disable();
@@ -1239,7 +1256,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 		if (eflags)
 		{
 
-			debugPrintf("Clearing events %x\n", eflags);
+			//debugPrintf("Clearing events %x\n", eflags);
 			DRV_CANFDSPI_ModuleEventClear(0, eflags);
 		}
 		PrintErrorInfo();
@@ -1250,6 +1267,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 	DRV_CANFDSPI_ErrorCountStateGet(0, &tec, &rec, &flags);
 	if ((flags & CAN_TX_BUS_PASSIVE_STATE))
 	{
+#if 0
 		debugPrintf("T:%d Check %d tx errors or passive state\n", millis(), checkNo);
 		PrintErrorInfo();
 		CAN_TX_FIFO_STATUS status;
@@ -1258,15 +1276,14 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
 			debugPrintf("chan %d status %x\n", (int)i, status);
 		}
-		//Disable();
-		//Enable();
+#endif
 		CAN_MODULE_EVENT eflags;
 		DRV_CANFDSPI_ModuleEventGet(0, &eflags);
 		eflags = (CAN_MODULE_EVENT) ((uint32_t) eflags & (int32_t)(CAN_OPERATION_MODE_CHANGE_EVENT|CAN_SYSTEM_ERROR_EVENT|CAN_BUS_ERROR_EVENT|CAN_RX_INVALID_MESSAGE_EVENT));
 		if (eflags)
 		{
 
-			debugPrintf("Clearing events %x\n", eflags);
+			//debugPrintf("Clearing events %x\n", eflags);
 			DRV_CANFDSPI_ModuleEventClear(0, eflags);
 		}
 		PrintErrorInfo();
@@ -1357,34 +1374,36 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 
 bool CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
 {
-	debugPrintf("Abort message buffer %d\n", whichBuffer);
+	//debugPrintf("Abort message buffer %d\n", whichBuffer);
 	MutexLocker lock(SPIMutex);
 	CheckBusStatus(3);
 	CAN_TX_FIFO_STATUS status;
 	uint32_t txReq;
 	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
 	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
-	debugPrintf("Before cancel txReq %x status %x\n", txReq, status);
+	//debugPrintf("Before cancel txReq %x status %x\n", txReq, status);
 	if (status & CAN_TX_FIFO_NOT_FULL)
 	{
-		debugPrintf("Space now available, abort not needed\n");
+		//debugPrintf("Space now available, abort not needed\n");
 		return true;
 	}
+#if 0
 	for(size_t i = 1; i < config->numTxBuffers+2; i++)
 	{
 		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
 		debugPrintf("chan %d status %x\n", (int)i, status);
 	}
+#endif
 	DRV_CANFDSPI_TransmitChannelAbort(0, (CAN_FIFO_CHANNEL) whichBuffer);
 	uint32_t start = millis();
 	do {
 		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 	} while (!(status & (CAN_TX_FIFO_NOT_FULL|CAN_TX_FIFO_ABORTED)) && (millis() - start) < AbortTimeout);
 	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
-	debugPrintf("After abort time %d txReq %x status %x\n", millis() - start, txReq, status);
+	//debugPrintf("After abort time %d txReq %x status %x\n", millis() - start, txReq, status);
 	if (status & CAN_TX_FIFO_NOT_FULL)
 	{
-		debugPrintf("Request aborted\n");
+		//debugPrintf("Request aborted\n");
 		return true;
 	}
 	DRV_CANFDSPI_TransmitChannelReset(0, (CAN_FIFO_CHANNEL) whichBuffer);
@@ -1392,10 +1411,10 @@ bool CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
 		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 	} while (!(status & CAN_TX_FIFO_NOT_FULL) && (millis() - start) < AbortTimeout);
 	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
-	debugPrintf("After reset time %d txReq %x status %x\n", millis() - start, txReq, status);
+	//debugPrintf("After reset time %d txReq %x status %x\n", millis() - start, txReq, status);
 	if (status & CAN_TX_FIFO_NOT_FULL)
 	{
-		debugPrintf("Request reset\n");
+		//debugPrintf("Request reset\n");
 		return true;
 	}
 	debugPrintf("Unable to abort request\n");
@@ -1428,7 +1447,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 	uint32_t ret = 0;
 	if (!IsSpaceAvailable(whichBuffer, timeout))
 	{
-		debugPrintf("Buffer %d no space\n", whichBuffer);
+		//debugPrintf("Buffer %d no space\n", whichBuffer);
 		if (!AbortMessage(whichBuffer))
 		{
 			debugPrintf("Abort failed\n");
@@ -1499,7 +1518,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				debugPrintf("rx queue %d overflow status %x\n", whichBuffer, status);
 				messagesLost++;
 				DRV_CANFDSPI_ReceiveChannelEventOverflowClear(0, (CAN_FIFO_CHANNEL) whichBuffer);
-			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+				DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 				debugPrintf("rx queue %d status2 %x\n", whichBuffer, status);
 			}
 			if (status & CAN_RX_FIFO_FULL) bufFullCnt[(int)whichBuffer]++;

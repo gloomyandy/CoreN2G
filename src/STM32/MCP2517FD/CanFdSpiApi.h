@@ -5,7 +5,7 @@
     Microchip Technology Inc.
 
   File Name:
-    drv_canfdspi_api.h
+    CanSpiApi.h
 
   Summary:
     This header file provides the API function prototypes for the CAN FD SPI
@@ -53,8 +53,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include "drv_canfdspi_defines.h"
-#include "drv_canfdspi_register.h"
+#include "CanFdSpiRegisters.h"
+#include "CanFdSpiDefines.h"
+
 
 // DOM-IGNORE-BEGIN
 #ifdef __cplusplus  // Provide C++ Compatibility

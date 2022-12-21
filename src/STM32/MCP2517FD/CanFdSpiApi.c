@@ -2,10 +2,10 @@
  Title: .
 
   Company:
-    Microchip Technology Inc.
+    Microchip Technology Inc. Modified for RRF by Andy
 
   File Name:
-    drv_canfdspi_api.c
+    CanSpiApi.c
 
   Summary:
     .
@@ -44,10 +44,10 @@
 // *****************************************************************************
 // Section: Included Files
 
-#include "drv_canfdspi_api.h"
-#include "drv_canfdspi_register.h"
-#include "drv_canfdspi_defines.h"
-#include "drv_spi.h"
+#include "CanFdSpiApi.h"
+#include "CanFdSpiRegisters.h"
+#include "CanFdSpiDefines.h"
+#include "CanSpi.h"
 
 // *****************************************************************************
 // *****************************************************************************
@@ -2927,8 +2927,8 @@ int8_t DRV_CANFDSPI_BitTimeConfigureNominal40MHz(CANFDSPI_MODULE_ID index,
 
         case CAN_1000K_1M:
             ciNbtcfg.bF.BRP = 0;
-            ciNbtcfg.bF.TSEG1 = 21;
-            ciNbtcfg.bF.TSEG2 = 16;
+            ciNbtcfg.bF.TSEG1 = 22;
+            ciNbtcfg.bF.TSEG2 = 15;
             ciNbtcfg.bF.SJW = 7;
             break;
 
@@ -3010,8 +3010,8 @@ int8_t DRV_CANFDSPI_BitTimeConfigureData40MHz(CANFDSPI_MODULE_ID index,
 
         case CAN_1000K_1M:
             ciDbtcfg.bF.BRP = 0;
-            ciDbtcfg.bF.TSEG1 = 21;
-            ciDbtcfg.bF.TSEG2 = 16;
+            ciDbtcfg.bF.TSEG1 = 22;
+            ciDbtcfg.bF.TSEG2 = 15;
             ciDbtcfg.bF.SJW = 7;
             // SSP
             ciTdc.bF.TDCOffset = 22;

@@ -41,7 +41,7 @@ extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint3
 class CanMessageBuffer;
 class CanTiming;
 constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
-#include "drv_canfdspi_defines.h"
+#include "CanFdSpiDefines.h"
 #endif
 class CanDevice
 {

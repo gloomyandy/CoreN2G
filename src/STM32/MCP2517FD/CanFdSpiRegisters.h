@@ -5,7 +5,7 @@
     Microchip Technology Inc.
 
   File Name:
-    drv_canfdspi_register.h
+    CanSpiApiRegisters.h
 
   Summary:
     This header file contains SPI instruction defines, register address defines,
@@ -47,7 +47,7 @@
 // *****************************************************************************
 // Section: Included Files
 
-#include "drv_canfdspi_defines.h"
+#include "CanFdSpiDefines.h"
 
 // DOM-IGNORE-BEGIN
 #ifdef __cplusplus  // Provide C++ Compatibility
