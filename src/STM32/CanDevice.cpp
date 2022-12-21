@@ -137,6 +137,7 @@ CanDevice CanDevice::devices[NumCanDevices];
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO1_MESSAGE_LOST, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_BUS_OFF, 0);
+	HAL_FDCAN_EnableTxDelayCompensation(&dev.hw);
 	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][0]);
   	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][1]);
 
