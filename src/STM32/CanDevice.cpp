@@ -1168,10 +1168,12 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	status = DRV_CANFDSPI_OscillatorStatusGet(0, &ostat);
 	debugPrintf("SPI CAN clock status %d pll %d osc %d sclk %d\n", status, ostat.PllReady, ostat.OscReady, ostat.SclkReady);
 	devices[0].config = &p_config;
+	devices[0].busOff = false;
 	SPIMutex.Create("CanTrans");
 	uint16_t ts1 = devices[0].ReadTimeStampCounter();
 	delay(10);
 	debugPrintf("10ms timestamp %u\n", devices[0].ReadTimeStampCounter() - ts1);
+
 	return &devices[0];
 }
 
@@ -1260,7 +1262,11 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 			DRV_CANFDSPI_ModuleEventClear(0, eflags);
 		}
 		PrintErrorInfo();
-		busOffCount++;
+		if (!busOff)
+		{
+			busOffCount++;
+			busOff = true;
+		}
 	}
 	uint8_t rec, tec;
 	CAN_ERROR_STATE flags;
@@ -1287,7 +1293,11 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 			DRV_CANFDSPI_ModuleEventClear(0, eflags);
 		}
 		PrintErrorInfo();
-		busOffCount++;
+		if (!busOff)
+		{
+			busOffCount++;
+			busOff = true;
+		}
 	}
 
 }
@@ -1312,6 +1322,7 @@ void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 			id.SetReceivedId(tefObj.bF.id.EID | ((uint32_t)tefObj.bF.id.SID << 18));
 
 			p_txCallback(tefObj.bF.ctrl.SEQ, id, tefObj.bF.timeStamp);
+			busOff = false;
 		}
 		DRV_CANFDSPI_TefStatusGet(0, &status);
 	}
@@ -1325,13 +1336,10 @@ uint16_t CanDevice::ReadTimeStampCounter() noexcept
 	//debugPrintf("get timestamp\n");
 	MutexLocker lock(SPIMutex);
 	uint16_t ts;
-	int8_t status;
 	bool goodCrc;
 	do {
 		//DRV_CANFDSPI_TimeStampGet(0, &ts);
-		status = DRV_CANFDSPI_ReadByteArrayWithCRC(0, cREGADDR_CiTBC,
-			(uint8_t *)&ts, 2, false, &goodCrc);
-    
+		DRV_CANFDSPI_ReadByteArrayWithCRC(0, cREGADDR_CiTBC, (uint8_t *)&ts, 2, false, &goodCrc);
 	    if (!goodCrc) crcErrors++;
 		if ((ts & 0xff) >= 0xfe) rollovers++;
 	} while (!goodCrc || (ts & 0xff) >= 0xfe);
@@ -1536,6 +1544,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			}
 				//debugPrintf("src %d dst %d type %d len %d\n", buffer->id.Src(), buffer->id.Dst(), buffer->id.MsgType(), buffer->dataLength);
 				bufReqCnt[(int)whichBuffer]++;
+				busOff = false;
 				return true;
 			}
 		}

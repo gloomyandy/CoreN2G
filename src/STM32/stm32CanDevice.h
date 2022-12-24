@@ -255,11 +255,15 @@ private:
 	void CheckBusStatus(uint32_t checkNo) noexcept;
 #endif
 
+#if STM32H7
 	unsigned int whichCan;										// which CAN device we are
 	unsigned int whichPort;										// which CAN port number we use, 0 or 1
 	uint32_t nbtp;												//!< The NBTP register that gives the required normal bit timing
 	uint32_t dbtp;												//!< The DBTP register that gives the required bit timing when we use BRS
 	uint32_t statusMask;
+#else
+	bool busOff;
+#endif
 
 	const Config *config;										//!< Configuration parameters
 	unsigned int messagesQueuedForSending;
