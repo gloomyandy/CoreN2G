@@ -8,14 +8,14 @@ RRF_SRC_DIRS += Heating/Sensors Fans ObjectModel Endstops Hardware Hardware/Spi 
 RRF_SRC_DIRS += Display Display/Lcd Display/Lcd/Fonts Display/Lcd/ST7567 Display/Lcd/ST7920 GPIO bossa
 RRF_SRC_DIRS += CAN ClosedLoop InputMonitors
 #STM RRF Addons
-RRF_SRC_DIRS += targets/STM32 targets/common targets/STM32/FatFS targets/common/FatFS targets/common/Fans
-RRF_SRC_DIRS += targets/STM32/Hardware
+RRF_SRC_DIRS += Hardware/STM32 Hardware/STM32/Libraries/Fatfs Hardware/STM32/Fans
+RRF_SRC_DIRS += Hardware/STM32/Hardware
 
 #networking support?
 ifeq ($(NETWORK), ETHERNET)
 	$(info Ethernet is not supported on STM32F4:)
 else ifeq ($(NETWORK), WIFI) 
-	RRF_SRC_DIRS += Networking Networking/ESP8266WiFi targets/STM32/Networking/ESP8266WiFi
+	RRF_SRC_DIRS += Networking Networking/ESP8266WiFi Hardware/STM32/Networking/ESP8266WiFi
 else ifeq ($(NETWORK), SBC)
 	RRF_SRC_DIRS += Sbc
 #	RRF_SRC_DIRS += targets/common/NoNetwork
@@ -24,9 +24,9 @@ else
 endif
 
 ifeq ($(TMC22XX), true)
-	RRF_SRC_DIRS += targets/STM32/Movement/StepperDrivers targets/common/Movement/StepperDrivers
+	RRF_SRC_DIRS += Hardware/STM32/Movement/StepperDrivers
 else ifeq ($(TMC51XX), true)
-	RRF_SRC_DIRS += targets/STM32/Movement/StepperDrivers targets/common/Movement/StepperDrivers
+	RRF_SRC_DIRS += Hardware/STM32/Movement/StepperDrivers
 endif
 
 #Find the c and cpp source files
@@ -44,7 +44,6 @@ RRF_OBJS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(RRF_OBJ_SRC_C)) $(patsubst %.cpp,$(
 
 RRF_INCLUDES = $(addprefix -I, $(RRF_SRC))
 RRF_INCLUDES += -I$(RRF_SRC_BASE)/Libraries/
-RRF_INCLUDES += -I$(RRF_SRC_BASE)/targets/
 
 #If building ESP8266 WIFI we only need to add the include from DuetWifiSocketServer as it has a file needed to compile RRF 
 ifeq ($(NETWORK), WIFI)
