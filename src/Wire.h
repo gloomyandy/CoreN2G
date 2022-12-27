@@ -18,9 +18,6 @@
 #define TwoWire_h
 
 #include "CoreIO.h"
-#if LPC17xx
-#include "Wire/Wire.h"
-#else
 #if SAME70 || RP2040
 // TWI disabled for now
 #else
@@ -71,7 +68,6 @@ private:
 	uint32_t clockFrequency;			// the clock frequency we were asked for
 };
 
-#endif
 #endif
 #endif
 
