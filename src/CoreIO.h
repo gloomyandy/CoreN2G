@@ -35,7 +35,7 @@ constexpr unsigned int NumTotalPins = (4 * 32) + 6;		// SAM4E8E goes up to PE5
 constexpr unsigned int NumTotalPins = 3 * 32;			// SAM4S8C goes up to PC31
 #elif SAME70
 constexpr unsigned int NumTotalPins = (4 * 32) + 6;		// SAME70 goes up to PE5
-#elif STM32 || LPC17xx
+#elif STM32
 constexpr int NumTotalPins = P_END;
 #elif RP2040
 constexpr unsigned int NumTotalPins = 30;				// RP2040 goes up to GPIO29
@@ -47,10 +47,6 @@ constexpr unsigned int NumTotalPins = 30;				// RP2040 goes up to GPIO29
 inline uint32_t GpioPortNumber(Pin p) { return STM_PORT(p);}
 inline constexpr uint32_t GpioPinNumber(Pin p) { return STM_PIN(p); }
 inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)STM_GPIO_PIN(p); }
-#elif LPC17xx
-inline uint32_t GpioPortNumber(Pin p) { return p >> 5;}
-inline constexpr uint32_t GpioPinNumber(Pin p) { return p & 0x1f; }
-inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)1 << GpioPinNumber(p); }
 #elif RP2040
 
 inline constexpr Pin GpioPin(unsigned int n) noexcept { return n; }
@@ -66,7 +62,7 @@ inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)1 << GpioPinNumber(
 inline Pio *GpioPort(Pin p) { return (Pio*)((uint32_t)PIOA + GpioPortNumber(p) * 0x200); }
 #endif
 
-#if !STM32 && !LPC17xx
+#if !STM32
 #if !RP2040
 /**
  * @brief Return the global pin number for a Port A pin
@@ -313,7 +309,7 @@ private:
 	irqflags_t flags;
 };
 
-#if SAME5x || SAM4E || SAM4S || SAME70 || STM32 || LPC17xx		// SAMC21 doesn't support these
+#if SAME5x || SAM4E || SAM4S || SAME70 || STM32		// SAMC21 doesn't support these
 
 // Functions to change the base priority, to shut out interrupts up to a priority level
 
@@ -453,26 +449,7 @@ static inline bool fastDigitalRead(const Pin pin) noexcept
 {
 	return READ_BIT(GPIOPort[STM_PORT(pin)]->IDR, STM_GPIO_PIN(pin)) != 0;
 }
-#elif LPC17xx
-// Set a pin high with no error checking
-static inline void fastDigitalWriteHigh(const Pin pin) noexcept
-{
-    LPC_GPIO_T *LPC_GPIO_PORT = (LPC_GPIO_T*)(LPC_GPIO0_BASE + (pin & ~0x1f));
-    LPC_GPIO_PORT->SET = 1 << (pin & 0x1f); 
-}
 
-// Set a pin low with no error checking
-static inline void fastDigitalWriteLow(const Pin pin) noexcept
-{
-    LPC_GPIO_T *LPC_GPIO_PORT = (LPC_GPIO_T*)(LPC_GPIO0_BASE + (pin & ~0x1f));
-    LPC_GPIO_PORT->CLR = 1 << (pin & 0x1f);    
-}
-
-static inline bool fastDigitalRead(const Pin pin) noexcept
-{
-    LPC_GPIO_T * LPC_GPIO_PORT = (LPC_GPIO_T*)(LPC_GPIO0_BASE + ((pin) & ~0x1f));    
-    return (LPC_GPIO_PORT->PIN & (1 << (pin & 0x1f))) != 0;
-}
 #else
 /**
  * @brief Set a pin high with no error checking
@@ -535,7 +512,7 @@ inline bool fastDigitalRead(uint32_t pin) noexcept
  */
 [[noreturn]] void ResetProcessor() noexcept;
 
-#if !STM32 && !LPC17xx && !RP2040
+#if !STM32 && !RP2040
 
 /**
  * @brief TC output identifiers used in pin tables
@@ -768,20 +745,6 @@ static inline constexpr GpioPinFunction GetPeriNumber(PwmOutput pwm) noexcept
 typedef uint32_t AdcInput;
 typedef AdcInput AnalogChannelNumber;
 constexpr AnalogChannelNumber NO_ADC = (AnalogChannelNumber)0xffffffff;
-#elif LPC17xx
-enum AnalogChannelNumber : int8_t
-{
-    NO_ADC=-1,
-    ADC0=0,
-    ADC1,
-    ADC2,
-    ADC3,
-    ADC4,
-    ADC5,
-    ADC6,
-    ADC7
-};
-typedef AnalogChannelNumber AdcInput;
 #else
 /**
  * @brief ADC input identifiers, encoding both the ADC device and the ADC input number within the device.
@@ -825,7 +788,7 @@ typedef AdcInput AnalogChannelNumber;						///< for backwards compatibility
 constexpr AnalogChannelNumber NO_ADC = AdcInput::none;		///< for backwards compatibility
 #endif
 
-#if !STM32 && !LPC17xx && !RP2040
+#if !STM32 && !RP2040
 
 /**
  * @brief Get the ADC number that an ADC input is on
@@ -872,7 +835,7 @@ AnalogChannelNumber PinToSdAdcChannel(Pin p) noexcept;
 
 #endif
 
-#if !STM32 && !LPC17xx && !RP2040
+#if !STM32 && !RP2040
 
 /**
  * @brief SERCOM identifier. This encodes a SERCOM number and the peripheral that it is on.
@@ -925,7 +888,7 @@ constexpr uint32_t SerialNumberAddresses[4] = { 0x0080A00C, 0x0080A040, 0x0080A0
  * @section AppInterface Functions that must be provided by the application project
  */
 
-#if !STM32 && !LPC17xx
+#if !STM32
 /**
  * @brief Layout of an entry in the pin table. The client project may add additional fields by deriving from this.
  */
@@ -981,7 +944,7 @@ extern void AppInit() noexcept;
  */
 [[noreturn]] extern void AppMain() noexcept;
 
-#if !STM32 && !LPC17xx
+#if !STM32
 /**
  * @brief Get the frequency in MHz of the crystal connected to the MCU. Should be 12, 16 or 25.
  * @return Frequency in MHz

@@ -82,7 +82,6 @@
 # include <dwt.h>
 # define STM32				1
 # define STM32F4			1
-# define LPC17xx			0
 # define SAMC21				0
 # define SAM3XA				0
 # define SAM4E				0
@@ -95,7 +94,6 @@
 # include <dwt.h>
 # define STM32  			1
 # define STM32H7			1
-# define LPC17xx			0
 # define SAMC21				0
 # define SAM3XA				0
 # define SAM4E				0
@@ -103,12 +101,6 @@
 # define SAME5x				0
 # define SAME70				0
 # define RP2040				0
-#elif defined(__LPC17xx__)
-# include <lpc17xx.h>
-# define LPC17xx			1
-# define STM32F4			0
-# define RP2040				0
-# define STM32				0
 #elif defined __RP2040__
 extern "C" {
 # include <hardware/gpio.h>
@@ -133,9 +125,6 @@ extern "C" {
 # define STM32				0
 # define STM32H7			0
 # define STM32F4			0
-#endif
-#if !defined(LPC17xx)
-# define LPC17xx			0
 #endif
 #if RP2040
 # define CORE_USES_TINYUSB	1
@@ -178,7 +167,7 @@ static const uint32_t SystemCoreClockFreq = 120000000;	///< The processor clock 
 
 static const uint32_t SystemCoreClockFreq = 300000000;	///< The processor clock frequency after initialisation
 
-#elif STM32 || LPC17xx
+#elif STM32
 
 #define SystemCoreClockFreq SystemCoreClock
 #elif RP2040
@@ -205,10 +194,6 @@ enum PinMode
 	OUTPUT_LOW_OPEN_DRAIN,			///< pin is used in SX1509B expansion driver to put the pin in open drain output mode
 	OUTPUT_HIGH_OPEN_DRAIN,			///< pin is  used in SX1509B expansion driver to put the pin in open drain output mode
 	OUTPUT_PWM_OPEN_DRAIN,			///< pin is  used in SX1509B expansion driver to put the pin in PWM output mode
-#endif
-#if LPC17xx
-     OUTPUT_SERVO_LOW,
-     OUTPUT_SERVO_HIGH
 #endif
 };
 
@@ -296,65 +281,6 @@ static inline uint32_t GetCurrentCycles() noexcept
 static inline uint32_t GetElapsedCyclesBetween(uint32_t startCycles, uint32_t endCycles) noexcept
 {
 	return endCycles - startCycles;
-}
-
-static inline uint32_t NanosecondsToCycles(uint32_t ns) noexcept
-{
-  return (ns * (uint64_t)SystemCoreClock)/1000000000u;
-}
-
-#elif LPC17xx
-/**
- * Delay for a number of cpu cycles
- */
-
-#ifdef __cplusplus
-[[gnu::always_inline, gnu::optimize("03")]]
-#endif
-static inline void __delay_4cycles(uint32_t cy) noexcept { // +1 cycle
-__asm__ __volatile__(
-    "  .syntax unified\n\t" // is to prevent CM0,CM1 non-unified syntax
-    "1:\n\t"
-    "  subs %[cnt],#1\n\t" // 1
-    "  mov r0, r0\n\t"            // 1
-    "  bne 1b\n\t"         // 1 + (1? reload)
-    : [cnt]"+r"(cy)   // output: +r means input+output
-    :                 // input:
-    : "cc"            // clobbers:
-);
-}
-
-// Delay in cycles
-#ifdef __cplusplus
-[[gnu::always_inline, gnu::optimize("03")]]
-#endif
-
-static inline uint32_t DelayCycles(const uint32_t start, const uint32_t cycles) noexcept 
-{
-    if (cycles >> 2) __delay_4cycles(cycles >> 2);
-    return 0;
-}
-
-/**
- * @brief Get the current cycle counter, for subsequent use as the start time in a call to DelayCycles
- *
- * @return The cycle counter
- */
-static inline uint32_t GetCurrentCycles() noexcept
-{
-	return SysTick->VAL & 0x00FFFFFF;
-}
-
-/**
- * @brief Get the elapsed time in clock cycles between a start time and an end time, assuming it is below 1ms
- * @param startTime The start time, obtained by a call to GetCurrentCycles
- * @param endTime The end time, obtained by a call to GetCurrentCycles
- *
- * @return The elapsed time
- */
-static inline uint32_t GetElapsedCyclesBetween(uint32_t startCycles, uint32_t endCycles) noexcept
-{
-	return ((endCycles < startCycles) ? startCycles : startCycles + (SysTick->LOAD & 0x00FFFFFF) + 1) - endCycles;
 }
 
 static inline uint32_t NanosecondsToCycles(uint32_t ns) noexcept

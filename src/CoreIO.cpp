@@ -34,8 +34,6 @@
 #include <HybridPWM.h>
 #endif
 static IWDG_HandleTypeDef wdHandle;
-#elif LPC17xx
-#include <CoreImp.h>
 #elif RP2040
 # include <hardware/watchdog.h>
 # include <hardware/adc.h>
@@ -110,96 +108,6 @@ void DisablePullup(Pin pin) noexcept
 {
   if (pin == NC) return;
   pin_function(pin, STM_PIN_DATA(STM_MODE_INPUT, GPIO_NOPULL, 0));
-}
-
-
-#elif LPC17xx
-
-void SetPinMode(Pin pin, enum PinMode ulMode, uint32_t debounceCutoff = 0) noexcept
-{
-	if(pin == NoPin) return;
-	switch (ulMode)
-	{
-		case INPUT:
-			GPIO_PinFunction(pin,0); //configure pin as GPIO
-			GPIO_PinDirection(pin, LPC_INPUT);
-			GPIO_PinInputMode(pin, LPC_INPUT_NOPULLUP_NOPULLDOWN); //no pull up or down
-			break;
-
-		case INPUT_PULLUP:
-			GPIO_PinFunction(pin,0); //configure pin as GPIO
-			GPIO_PinDirection(pin, LPC_INPUT);
-			GPIO_PinInputMode(pin, LPC_INPUT_PULLUP); //enable Pullup
-			break;
-			
-		case INPUT_PULLDOWN:
-			GPIO_PinFunction(pin,0); //configure pin as GPIO
-			GPIO_PinDirection(pin, LPC_INPUT);
-			GPIO_PinInputMode(pin, LPC_INPUT_PULLDOWN); //enable Pulldown
-			break;
-			
-		case OUTPUT_LOW:
-			GPIO_PinFunction(pin,0); //configure pin as GPIO
-			GPIO_PinDirection(pin, LPC_OUTPUT);
-			GPIO_PinWrite(pin, 0);
-			break;
-			
-		case OUTPUT_HIGH:
-			GPIO_PinFunction(pin,0); //configure pin as GPIO
-			GPIO_PinDirection(pin, LPC_OUTPUT);
-			GPIO_PinWrite(pin, 1);
-			break;
-			
-		case OUTPUT_PWM_LOW:
-			ConfigurePinForPWM(pin, false);
-			break;
-			
-		case OUTPUT_PWM_HIGH:
-			ConfigurePinForPWM(pin, true);
-			break;
-
-		case OUTPUT_SERVO_LOW:
-			ConfigurePinForServo(pin, false);
-			break;
-			
-		case OUTPUT_SERVO_HIGH:
-			ConfigurePinForServo(pin, true);
-			break;
-
-		case AIN:
-			//analog in
-			GPIO_PinInputMode(pin, LPC_INPUT_NOPULLUP_NOPULLDOWN); //no pull up or down
-			break;
-			
-		//case SPECIAL:
-		//	break;
-			
-		default:
-			break;
-	}
-}
-
-void SetPullup(Pin pin, bool en) noexcept
-{
-  if (pin == NoPin) return;
-  if (en)
-    SetPinMode(pin, INPUT_PULLUP, 0);
-  else
-    SetPinMode(pin, INPUT, 0);
-}
-
-// Enable the pullup resistor
-void EnablePullup(Pin pin) noexcept
-{
-  if (pin == NoPin) return;
-  SetPinMode(pin, INPUT_PULLUP, 0);
-}
-
-// Disable the pullup resistor
-void DisablePullup(Pin pin) noexcept
-{
-  if (pin == NoPin) return;
-  SetPinMode(pin, INPUT, 0);
 }
 
 #else
@@ -784,15 +692,6 @@ void WatchdogInit() noexcept
 	wdHandle.Init.Reload = IWDG_RLR_RL;
     wdHandle.Init.Prescaler = IWDG_PRESCALER_16;
     HAL_IWDG_Init(&wdHandle);
-#elif LPC17xx
-    Chip_WWDT_SelClockSource(LPC_WWDT, WWDT_CLKSRC_WATCHDOG_PCLK); // Set CLK src to PCLK
-
-    const uint32_t ticksPerSecond = Chip_Clock_GetPeripheralClockRate(SYSCTL_PCLK_WDT) / 4; //WDT has a fixed /4 prescaler
-    Chip_WWDT_SetTimeOut(LPC_WWDT, ticksPerSecond);
-    Chip_WWDT_Start(LPC_WWDT); // Enables the watchdog and does the first feed
-    NVIC_ClearPendingIRQ(WDT_IRQn);
-    NVIC_SetPriority(WDT_IRQn, 0); //Highest priority
-    NVIC_EnableIRQ(WDT_IRQn);
 #elif RP2040
 	watchdog_enable(750, true);									// we reset the timer to run at 750kHz instead of 1MHz, so 1 second is 750 "milliseconds"
 #else
@@ -812,8 +711,6 @@ void WatchdogReset() noexcept
 	WDT->WDT_CR = WDT_CR_KEY_PASSWD | WDT_CR_WDRSTT;
 #elif STM32
     HAL_IWDG_Refresh(&wdHandle);
-#elif LPC17xx
-    Chip_WWDT_Feed(LPC_WWDT);
 #elif RP2040
 	watchdog_update();
 #else
@@ -835,7 +732,7 @@ void ResetProcessor() noexcept
 {
 #if SAME70 || SAM4E || SAM4S
 	rstc_start_software_reset(RSTC);
-#elif STM32 || LPC17xx
+#elif STM32
 	NVIC_SystemReset();
 #else
 	SCB->AIRCR = (0x5FA << 16) | (1u << 2);						// reset the processor
@@ -843,7 +740,7 @@ void ResetProcessor() noexcept
 	for (;;) { }
 }
 
-#if !STM32 && !LPC17xx
+#if !STM32
 #if SAME5x || SAMC21
 
 // Enable a GCLK. This function doesn't allow access to some GCLK features, e.g. the DIVSEL or OOV or RUNSTDBY bits.
@@ -962,7 +859,7 @@ void EnableTccClock(unsigned int tccNumber, unsigned int gclkNum) noexcept
 #endif
 #endif
 
-#if STM32 || LPC17xx
+#if STM32
 // Get the analog input channel that a pin uses
 AnalogChannelNumber PinToAdcChannel(Pin p) noexcept
 {

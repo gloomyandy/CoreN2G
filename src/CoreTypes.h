@@ -13,8 +13,6 @@
 # include <stm32h7.h>
 #elif defined(__STM32F4__)
 # include <stm32f4.h>
-#elif defined(__LPC17xx__)
-# include <lpc17xx.h>
 #endif
 
 // Core types used in interfaces and associated constants
@@ -23,8 +21,6 @@ typedef uint8_t DmaChannel;			///< A type that represents a DMA channel number
 typedef uint8_t DmaPriority;		///< A type that represents a DMA priority
 #if STM32
 typedef PinName Pin;                ///< A type that represents an I/O pin on the microcontroller
-#elif LPC17xx
-typedef gpioPins_et Pin;            ///< A type that represents an I/O pin on the microcontroller
 #else
 typedef uint8_t Pin;				///< A type that represents an I/O pin on the microcontroller
 #endif
@@ -37,8 +33,6 @@ typedef __fp16 float16_t;			///< A 16-bit floating point type
 
 #if STM32
 static const Pin NoPin = NC;		///< A number that represents no I/O pin
-#elif LPC17xx
-static const Pin NoPin = P_NC; 		//which =0xff
 #else
 static const Pin NoPin = 0xFF;		///< A number that represents no I/O pin
 static const Pin Nx = 0xFF;			///< A number that represents no I/O EXINT number

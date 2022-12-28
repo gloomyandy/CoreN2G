@@ -18,7 +18,7 @@ namespace AnalogOut
 	// Write a PWM value to the specified pin. 'val' will be constrained to be between 0.0 and 1.0 in this module.
 	extern void Write(Pin pin, float val, PwmFrequency freq = 500) noexcept;
 
-#if STM32 || LPC17xx
+#if STM32
 	extern void ReleasePWMPin(Pin pin) noexcept;
 #endif
 #if SAME5x || SAMC21

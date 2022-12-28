@@ -9,7 +9,7 @@
 #define SRC_HARDWARE_DMACMANAGER_H_
 
 #include <CoreIO.h>
-#if !STM32 && !LPC17xx
+#if !STM32
 #if SAME5x
 constexpr unsigned int NumDmaChannelsSupported = 15;	// max is 32
 #elif SAMC21

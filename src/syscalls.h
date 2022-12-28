@@ -13,9 +13,7 @@
 #include <cerrno>
 #include <new>
 
-#if LPC17xx
-#include <portable.h>
-#elif STM32
+#if STM32
 #include "ccmram.h"
 #endif
 
@@ -79,14 +77,7 @@ extern "C" void * _sbrk(ptrdiff_t incr) noexcept
  */
 void *CoreAllocPermanent(size_t sz, std::align_val_t align) noexcept
 {
-#if LPC17xx
-	void *ret = pvPortMallocPermanent( sz );
-	if (ret == nullptr)
-	{
-		OutOfMemoryHandler();
-	}
-	return ret;
-#elif STM32F4
+#if STM32F4
 	return CoreAllocCCMRAMPermanent(sz, align);
 #else
 	char * const newHeapLimit = reinterpret_cast<char *>(reinterpret_cast<uint32_t>(heapLimit - sz) & ~((uint32_t)align - 1));
