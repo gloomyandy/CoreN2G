@@ -1573,13 +1573,19 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   hspi->RxXferSize  = Size;
   hspi->RxXferCount = Size;
 
+  uint16_t val = 0xffff;
   /* Set the function for IT treatment */
   //__HAL_SPI_DISABLE(hspi);
   if ((Size & 1) == 0)
   //if (0)
   {
     hspi->RxISR     = SPI_2linesRxISR_16BIT;
-    hspi->TxISR     = SPI_2linesTxISR_16BIT;
+    hspi->TxISR     = SPI_2linesRxISR_16BIT;
+    if (hspi->State != HAL_SPI_STATE_BUSY_RX)
+    {
+    val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
+    val |=  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
+    }
     SET_BIT(hspi->Instance->CR1, SPI_CR1_DFF);
     hspi->TxXferCount = Size/2;
     hspi->RxXferCount = Size/2;
@@ -1587,7 +1593,11 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   else
   {
     hspi->RxISR     = SPI_2linesRxISR_8BIT;
-    hspi->TxISR     = SPI_2linesTxISR_8BIT;
+    hspi->TxISR     = SPI_2linesRxISR_8BIT;
+    if (hspi->State != HAL_SPI_STATE_BUSY_RX)
+    {
+    val =  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
+    }
     CLEAR_BIT(hspi->Instance->CR1, SPI_CR1_DFF);
   }
 if (SPI_CHECK_FLAG(hspi->Instance->SR, SPI_FLAG_OVR) != RESET) debugPrintf("Overflow set when starting\n");
@@ -1601,7 +1611,7 @@ if (SPI_CHECK_FLAG(hspi->Instance->SR, SPI_FLAG_OVR) != RESET) debugPrintf("Over
 
   /* Enable TXE, RXNE and ERR interrupt */
   //__HAL_SPI_ENABLE_IT(hspi, (SPI_IT_TXE | SPI_IT_RXNE | SPI_IT_ERR));
-  __HAL_SPI_ENABLE_IT(hspi, (SPI_IT_TXE | SPI_IT_RXNE));
+  //__HAL_SPI_ENABLE_IT(hspi, (SPI_IT_RXNE));
 
   /* Check if the SPI is already enabled */
   if ((hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE)
@@ -1609,6 +1619,14 @@ if (SPI_CHECK_FLAG(hspi->Instance->SR, SPI_FLAG_OVR) != RESET) debugPrintf("Over
     /* Enable SPI peripheral */
     __HAL_SPI_ENABLE(hspi);
   }
+  uint32_t itflag = hspi->Instance->SR;
+  if (itflag & SPI_FLAG_RXNE) 
+  {
+    debugPrintf("DR not empty on transmit\n");
+  }
+
+  hspi->Instance->DR = val;
+__HAL_SPI_ENABLE_IT(hspi, (SPI_IT_RXNE));
 
 error :
   /* Process Unlocked */
@@ -2503,107 +2521,103 @@ IntCount++;
     return;
   }
 }
+
+#if 0
 extern SPI_HandleTypeDef *SSP1hspi;
-//void HAL_SPI_IRQHandler1(SPI_HandleTypeDef *hspi)
 void SPI1_IRQHandler()
 {
-  uint32_t itsource = SSP1hspi->Instance->CR2;
-  uint32_t itflag   = SSP1hspi->Instance->SR;
-IntCount++;
-  /* SPI in mode Receiver ----------------------------------------------------*/
-  if ((SPI_CHECK_FLAG(itflag, SPI_FLAG_OVR) == RESET) &&
-      (SPI_CHECK_FLAG(itflag, SPI_FLAG_RXNE) != RESET) && (SPI_CHECK_IT_SOURCE(itsource, SPI_IT_RXNE) != RESET))
-  {
-    SSP1hspi->RxISR(SSP1hspi);
-    //return;
-  }
-
+  SPI_HandleTypeDef *hspi = SSP1hspi;
+  uint8_t io16 = (hspi->TxXferSize & 1) == 0;
+  uint32_t itflag = hspi->Instance->SR & (hspi->Instance->CR2 >> 6);
+  IntCount++;
   /* SPI in mode Transmitter -------------------------------------------------*/
-  if ((SPI_CHECK_FLAG(itflag, SPI_FLAG_TXE) != RESET) && (SPI_CHECK_IT_SOURCE(itsource, SPI_IT_TXE) != RESET))
+  /* SPI in mode Receiver ----------------------------------------------------*/
+  if ((SPI_CHECK_FLAG(itflag, SPI_FLAG_RXNE) != RESET))
   {
-    SSP1hspi->TxISR(SSP1hspi);
+    uint16_t val = hspi->Instance->DR;
+    if (io16) *(hspi->pRxBuffPtr++) = val >> 8;
+    *(hspi->pRxBuffPtr++) = val;
+    if (io16)
+        RX16Count++;
+    else
+        RX8Count++;
+    if (--hspi->RxXferCount == 0U)
+    {
+      __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE);
+      if (hspi->TxXferCount == 0U)
+      {
+        SPI_CloseRxTx_ISR(hspi);
+      }
+    }
+    else if (hspi->TxXferCount != 0)
+    {
+        __HAL_SPI_ENABLE_IT(hspi, SPI_IT_TXE);
+        itflag = hspi->Instance->SR;
+    }
     //return;
   }
+  if ((SPI_CHECK_FLAG(itflag, SPI_FLAG_TXE) != RESET))
 #if 0
-  /* SPI in Error Treatment --------------------------------------------------*/
-  if (((SPI_CHECK_FLAG(itflag, SPI_FLAG_MODF) != RESET) || (SPI_CHECK_FLAG(itflag, SPI_FLAG_OVR) != RESET) || (SPI_CHECK_FLAG(itflag, SPI_FLAG_FRE) != RESET)) && (SPI_CHECK_IT_SOURCE(itsource, SPI_IT_ERR) != RESET))
   {
-    /* SPI Overrun error interrupt occurred ----------------------------------*/
-    if (SPI_CHECK_FLAG(itflag, SPI_FLAG_OVR) != RESET)
-    {
-      if (hspi->State != HAL_SPI_STATE_BUSY_TX)
-      {
-        SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_OVR);
-        __HAL_SPI_CLEAR_OVRFLAG(hspi);
-      }
-      else
-      {
-        __HAL_SPI_CLEAR_OVRFLAG(hspi);
-        return;
-      }
-    }
-
-    /* SPI Mode Fault error interrupt occurred -------------------------------*/
-    if (SPI_CHECK_FLAG(itflag, SPI_FLAG_MODF) != RESET)
-    {
-      SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_MODF);
-      __HAL_SPI_CLEAR_MODFFLAG(hspi);
-    }
-
-    /* SPI Frame error interrupt occurred ------------------------------------*/
-    if (SPI_CHECK_FLAG(itflag, SPI_FLAG_FRE) != RESET)
-    {
-      SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_FRE);
-      __HAL_SPI_CLEAR_FREFLAG(hspi);
-    }
-
-    if (hspi->ErrorCode != HAL_SPI_ERROR_NONE)
-    {
-      /* Disable all interrupts */
-      __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE | SPI_IT_TXE | SPI_IT_ERR);
-
-      hspi->State = HAL_SPI_STATE_READY;
-      /* Disable the SPI DMA requests if enabled */
-      if ((HAL_IS_BIT_SET(itsource, SPI_CR2_TXDMAEN)) || (HAL_IS_BIT_SET(itsource, SPI_CR2_RXDMAEN)))
-      {
-        CLEAR_BIT(hspi->Instance->CR2, (SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN));
-
-        /* Abort the SPI DMA Rx channel */
-        if (hspi->hdmarx != NULL)
-        {
-          /* Set the SPI DMA Abort callback :
-          will lead to call HAL_SPI_ErrorCallback() at end of DMA abort procedure */
-          hspi->hdmarx->XferAbortCallback = SPI_DMAAbortOnError;
-          if (HAL_OK != HAL_DMA_Abort_IT(hspi->hdmarx))
-          {
-            SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_ABORT);
-          }
-        }
-        /* Abort the SPI DMA Tx channel */
-        if (hspi->hdmatx != NULL)
-        {
-          /* Set the SPI DMA Abort callback :
-          will lead to call HAL_SPI_ErrorCallback() at end of DMA abort procedure */
-          hspi->hdmatx->XferAbortCallback = SPI_DMAAbortOnError;
-          if (HAL_OK != HAL_DMA_Abort_IT(hspi->hdmatx))
-          {
-            SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_ABORT);
-          }
-        }
-      }
-      else
-      {
-        /* Call user error callback */
-#if (USE_HAL_SPI_REGISTER_CALLBACKS == 1U)
-        hspi->ErrorCallback(hspi);
+    hspi->TxISR(hspi);
+  }
 #else
-        HAL_SPI_ErrorCallback(hspi);
-#endif /* USE_HAL_SPI_REGISTER_CALLBACKS */
+  {
+    HAL_SPI_StateTypeDef state = hspi->State;
+    if (state == HAL_SPI_STATE_BUSY_TX)
+    {
+      uint16_t val = ((uint16_t)(*hspi->pTxBuffPtr++));
+      if (io16) val = (val << 8) | ((uint16_t)(*hspi->pTxBuffPtr++));
+      hspi->Instance->DR = val;
+    if (io16)
+        TX16Count++;
+    else
+        TX8Count++;
+      if (--hspi->TxXferCount == 0U)
+      {
+        __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+        SPI_CloseTx_ISR(hspi);
       }
     }
-    return;
+#if 0
+    else if (hspi->RxXferCount > hspi->TxXferCount)
+    {
+        __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+    }
+#endif
+    else
+    {
+        if (state == HAL_SPI_STATE_BUSY_RX)
+            hspi->Instance->DR = 0xffff;
+        else
+        {
+        uint16_t val = ((uint16_t)(*hspi->pTxBuffPtr++));
+        if (io16) val = (val << 8) | ((uint16_t)(*hspi->pTxBuffPtr++));
+        hspi->Instance->DR = val;
+        }
+        if (io16)
+            RXTX16Count++;
+        else
+            RXTX8Count++;
+        __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+        if (--hspi->TxXferCount == 0U)
+        {
+            __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+            if (hspi->RxXferCount == 0U)
+            {
+                SPI_CloseRxTx_ISR(hspi);
+            }
+        }
+    }
   }
 #endif
+}
+#endif
+
+void HAL_SPI_IRQHandler1(SPI_HandleTypeDef *hspi)
+{
+IntCount++;
+  hspi->TxISR(hspi);
 }
 
 /**
@@ -3223,6 +3237,11 @@ static void SPI_DMARxAbortCallback(DMA_HandleTypeDef *hdma)
 #endif /* USE_HAL_SPI_REGISTER_CALLBACKS */
 }
 
+static void SPI_Noop(struct __SPI_HandleTypeDef *hspi)
+{
+  RXTX8Count++;
+}
+
 /**
   * @brief  Rx 8-bit handler for Transmit and Receive in Interrupt mode.
   * @param  hspi pointer to a SPI_HandleTypeDef structure that contains
@@ -3233,12 +3252,12 @@ static void SPI_2linesRxISR_8BIT(struct __SPI_HandleTypeDef *hspi)
 {
   RX8Count++;
   /* Receive data in 8bit mode */
-  *hspi->pRxBuffPtr = *((__IO uint8_t *)&hspi->Instance->DR);
+  *hspi->pRxBuffPtr = (uint8_t)hspi->Instance->DR;
   hspi->pRxBuffPtr++;
-  hspi->RxXferCount--;
+  //hspi->RxXferCount--;
 
   /* Check end of the reception */
-  if (hspi->RxXferCount == 0U)
+  if (--hspi->RxXferCount == 0U)
   {
 #if (USE_SPI_CRC != 0U)
     if (hspi->Init.CRCCalculation == SPI_CRCCALCULATION_ENABLE)
@@ -3250,12 +3269,17 @@ static void SPI_2linesRxISR_8BIT(struct __SPI_HandleTypeDef *hspi)
 
     /* Disable RXNE  and ERR interrupt */
     __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_RXNE | SPI_IT_ERR));
-
-    if (hspi->TxXferCount == 0U)
-    {
-      SPI_CloseRxTx_ISR(hspi);
-    }
+    hspi->TxISR = SPI_Noop;
+    SPI_CloseRxTx_ISR(hspi);
+    return;
   }
+  if (hspi->State != HAL_SPI_STATE_BUSY_RX)
+  {
+    hspi->Instance->DR = (*hspi->pTxBuffPtr++);
+    //hspi->pTxBuffPtr++;
+  }
+  else
+    hspi->Instance->DR = 0xff;
 }
 
 #if (USE_SPI_CRC != 0U)
@@ -3297,10 +3321,11 @@ static void SPI_2linesTxISR_8BIT(struct __SPI_HandleTypeDef *hspi)
 #else
   hspi->pTxBuffPtr++;
 #endif
-  hspi->TxXferCount--;
+  //hspi->TxXferCount--;
+  __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
 
   /* Check the end of the transmission */
-  if (hspi->TxXferCount == 0U)
+  if (--hspi->TxXferCount == 0U)
   {
 #if (USE_SPI_CRC != 0U)
     if (hspi->Init.CRCCalculation == SPI_CRCCALCULATION_ENABLE)
@@ -3333,13 +3358,13 @@ static void SPI_2linesRxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
 {
   RX16Count++;
   /* Receive data in 16 Bit mode */
-  uint16_t val = *((__IO uint16_t *)&hspi->Instance->DR);
+  uint16_t val = hspi->Instance->DR;
   *(hspi->pRxBuffPtr++) = val >> 8;
   *(hspi->pRxBuffPtr++) = val;
   //*((uint16_t *)hspi->pRxBuffPtr) = (uint16_t)(hspi->Instance->DR);
   //hspi->pRxBuffPtr += sizeof(uint16_t);
-  hspi->RxXferCount--;
-  if (hspi->RxXferCount == 0U)
+  //hspi->RxXferCount--;
+  if (--hspi->RxXferCount == 0U)
   {
 #if (USE_SPI_CRC != 0U)
     if (hspi->Init.CRCCalculation == SPI_CRCCALCULATION_ENABLE)
@@ -3351,12 +3376,20 @@ static void SPI_2linesRxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
 
     /* Disable RXNE interrupt */
     __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE);
+    hspi->TxISR = SPI_Noop;
 
-    if (hspi->TxXferCount == 0U)
-    {
-      SPI_CloseRxTx_ISR(hspi);
-    }
+    SPI_CloseRxTx_ISR(hspi);
+    return;
   }
+  if (hspi->State != HAL_SPI_STATE_BUSY_RX)
+  {
+    uint16_t val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
+    val |=  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
+    hspi->Instance->DR = val;
+    //hspi->pTxBuffPtr += sizeof(uint16_t);
+  }
+  else
+    hspi->Instance->DR = 0xffff;
 }
 
 #if (USE_SPI_CRC != 0U)
@@ -3404,10 +3437,11 @@ static void SPI_2linesTxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
 hspi->Instance->DR = *((uint16_t *)hspi->pTxBuffPtr);
 hspi->pTxBuffPtr += sizeof(uint16_t);
 #endif
-  hspi->TxXferCount--;
+  //hspi->TxXferCount--;
+  __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
 
   /* Enable CRC Transmission */
-  if (hspi->TxXferCount == 0U)
+  if (--hspi->TxXferCount == 0U)
   {
 #if (USE_SPI_CRC != 0U)
     if (hspi->Init.CRCCalculation == SPI_CRCCALCULATION_ENABLE)
@@ -3421,7 +3455,7 @@ hspi->pTxBuffPtr += sizeof(uint16_t);
 #endif /* USE_SPI_CRC */
 
     /* Disable TXE interrupt */
-    __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+    //__HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
 
     if (hspi->RxXferCount == 0U)
     {
@@ -3540,12 +3574,14 @@ static void SPI_RxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
 static void SPI_TxISR_8BIT(struct __SPI_HandleTypeDef *hspi)
 {
   TX8Count++;
-  *(__IO uint8_t *)&hspi->Instance->DR = (*hspi->pTxBuffPtr);
-  hspi->pTxBuffPtr++;
-  hspi->TxXferCount--;
+  hspi->Instance->DR = (*hspi->pTxBuffPtr++);
+  //hspi->pTxBuffPtr++;
+  //hspi->TxXferCount--;
 
-  if (hspi->TxXferCount == 0U)
+  if (--hspi->TxXferCount == 0U)
   {
+     __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_TXE));
+    hspi->TxISR = SPI_Noop;
 #if (USE_SPI_CRC != 0U)
     if (hspi->Init.CRCCalculation == SPI_CRCCALCULATION_ENABLE)
     {
@@ -3569,15 +3605,17 @@ static void SPI_TxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
   /* Transmit data in 16 Bit mode */
     uint16_t val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
     val |=  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
-    *((__IO uint16_t *)&hspi->Instance->DR) = val;
-  hspi->TxXferCount--;
+    hspi->Instance->DR = val;
+  //hspi->TxXferCount--;
 #if 0
   hspi->Instance->DR = *((uint16_t *)hspi->pTxBuffPtr);
   hspi->pTxBuffPtr += sizeof(uint16_t);
   hspi->TxXferCount--;
 #endif
-  if (hspi->TxXferCount == 0U)
+  if (--hspi->TxXferCount == 0U)
   {
+     __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_TXE));
+    hspi->TxISR = SPI_Noop;
 #if (USE_SPI_CRC != 0U)
     if (hspi->Init.CRCCalculation == SPI_CRCCALCULATION_ENABLE)
     {
