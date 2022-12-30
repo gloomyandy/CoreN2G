@@ -37,7 +37,7 @@ static constexpr uint32_t MinDMALength = 4;
 
 // Create SPI devices the actual configuration is set later
 #if USE_SSP1
-HardwareSPI HardwareSPI::SSP1(SPI1);
+HardwareSPI HardwareSPI::SSP1(SPI1, SPI1_IRQn);
 #endif
 #if USE_SSP2
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
@@ -62,7 +62,8 @@ extern uint32_t _estack;
 
 // Create SPI devices the actual configuration is set later
 #if USE_SSP1
-HardwareSPI HardwareSPI::SSP1(SPI1);
+HardwareSPI HardwareSPI::SSP1(SPI1, SPI1_IRQn);
+extern "C" SPI_HandleTypeDef *SSP1hspi = &HardwareSPI::SSP1.spi.handle;
 #endif
 #if USE_SSP2
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
@@ -131,6 +132,230 @@ extern "C" void DMA1_Stream5_IRQHandler()
 {
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaTx));
 }
+uint32_t TX16Count = 0;
+uint32_t TX8Count = 0;
+uint32_t RX16Count = 0;
+uint32_t RX8Count = 0;
+uint32_t RXTX16Count = 0;
+uint32_t RXTX8Count = 0;
+uint32_t IntCount = 0;
+
+#if 0
+extern "C" void SPI_CloseRxTx_ISR(SPI_HandleTypeDef *hspi);
+extern "C" void SPI_CloseTx_ISR(SPI_HandleTypeDef *hspi);
+extern "C" void SPI1_IRQHandler() noexcept
+{
+  SPI_HandleTypeDef *hspi = &HardwareSPI::SSP1.spi.handle;
+  bool io16 = (hspi->TxXferSize & 1) == 0;
+  uint32_t itflag = hspi->Instance->SR & (hspi->Instance->CR2 >> 6);
+  IntCount++;
+  /* SPI in mode Transmitter -------------------------------------------------*/
+  /* SPI in mode Receiver ----------------------------------------------------*/
+  if ((SPI_CHECK_FLAG(itflag, SPI_FLAG_RXNE) != RESET))
+  {
+    uint16_t val = hspi->Instance->DR;
+    if (io16) *(hspi->pRxBuffPtr++) = val >> 8;
+    *(hspi->pRxBuffPtr++) = val;
+    if (io16)
+        RX16Count++;
+    else
+        RX8Count++;
+    if (--hspi->RxXferCount == 0U)
+    {
+      __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE);
+      if (hspi->TxXferCount == 0U)
+      {
+        SPI_CloseRxTx_ISR(hspi);
+      }
+    }
+    else if (hspi->TxXferCount != 0)
+    {
+        __HAL_SPI_ENABLE_IT(hspi, SPI_IT_TXE);
+        itflag = hspi->Instance->SR;
+    }
+    //return;
+  }
+  if ((SPI_CHECK_FLAG(itflag, SPI_FLAG_TXE) != RESET))
+#if 0
+  {
+    hspi->TxISR(hspi);
+  }
+#else
+  {
+    HAL_SPI_StateTypeDef state = hspi->State;
+    if (state == HAL_SPI_STATE_BUSY_TX)
+    {
+      uint16_t val = ((uint16_t)(*hspi->pTxBuffPtr++));
+      if (io16) val = (val << 8) | ((uint16_t)(*hspi->pTxBuffPtr++));
+      hspi->Instance->DR = val;
+    if (io16)
+        TX16Count++;
+    else
+        TX8Count++;
+      if (--hspi->TxXferCount == 0U)
+      {
+        __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+        SPI_CloseTx_ISR(hspi);
+      }
+    }
+#if 0
+    else if (hspi->RxXferCount > hspi->TxXferCount)
+    {
+        __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+    }
+#endif
+    else
+    {
+        if (state == HAL_SPI_STATE_BUSY_RX)
+            hspi->Instance->DR = 0xffff;
+        else
+        {
+        uint16_t val = ((uint16_t)(*hspi->pTxBuffPtr++));
+        if (io16) val = (val << 8) | ((uint16_t)(*hspi->pTxBuffPtr++));
+        hspi->Instance->DR = val;
+        }
+        if (io16)
+            RXTX16Count++;
+        else
+            RXTX8Count++;
+        __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+        if (--hspi->TxXferCount == 0U)
+        {
+            __HAL_SPI_DISABLE_IT(hspi, SPI_IT_TXE);
+            if (hspi->RxXferCount == 0U)
+            {
+                SPI_CloseRxTx_ISR(hspi);
+            }
+        }
+    }
+  }
+#endif
+}
+#else
+#if 0
+extern "C" void SPI1_IRQHandler()
+{
+  SPI_HandleTypeDef *hspi = &HardwareSPI::SSP1.spi.handle;
+  uint32_t itsource = hspi->Instance->CR2;
+  uint32_t itflag   = hspi->Instance->SR;
+IntCount++;
+  /* SPI in mode Receiver ----------------------------------------------------*/
+  if ((SPI_CHECK_FLAG(itflag, SPI_FLAG_OVR) == RESET) &&
+      (SPI_CHECK_FLAG(itflag, SPI_FLAG_RXNE) != RESET) && (SPI_CHECK_IT_SOURCE(itsource, SPI_IT_RXNE) != RESET))
+  {
+    hspi->RxISR(hspi);
+    return;
+  }
+
+  /* SPI in mode Transmitter -------------------------------------------------*/
+  if ((SPI_CHECK_FLAG(itflag, SPI_FLAG_TXE) != RESET) && (SPI_CHECK_IT_SOURCE(itsource, SPI_IT_TXE) != RESET))
+  {
+    hspi->TxISR(hspi);
+    return;
+  }
+
+  
+  /* SPI in Error Treatment --------------------------------------------------*/
+  if (((SPI_CHECK_FLAG(itflag, SPI_FLAG_MODF) != RESET) || (SPI_CHECK_FLAG(itflag, SPI_FLAG_OVR) != RESET) || (SPI_CHECK_FLAG(itflag, SPI_FLAG_FRE) != RESET)) && (SPI_CHECK_IT_SOURCE(itsource, SPI_IT_ERR) != RESET))
+  {
+#if 0
+    /* SPI Overrun error interrupt occurred ----------------------------------*/
+    if (SPI_CHECK_FLAG(itflag, SPI_FLAG_OVR) != RESET)
+    {
+      if (hspi->State != HAL_SPI_STATE_BUSY_TX)
+      {
+        SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_OVR);
+        __HAL_SPI_CLEAR_OVRFLAG(hspi);
+      }
+      else
+      {
+        __HAL_SPI_CLEAR_OVRFLAG(hspi);
+        return;
+      }
+    }
+
+    /* SPI Mode Fault error interrupt occurred -------------------------------*/
+    if (SPI_CHECK_FLAG(itflag, SPI_FLAG_MODF) != RESET)
+    {
+      SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_MODF);
+      __HAL_SPI_CLEAR_MODFFLAG(hspi);
+    }
+
+    /* SPI Frame error interrupt occurred ------------------------------------*/
+    if (SPI_CHECK_FLAG(itflag, SPI_FLAG_FRE) != RESET)
+    {
+      SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_FRE);
+      __HAL_SPI_CLEAR_FREFLAG(hspi);
+    }
+
+    if (hspi->ErrorCode != HAL_SPI_ERROR_NONE)
+    {
+      /* Disable all interrupts */
+      __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE | SPI_IT_TXE | SPI_IT_ERR);
+
+      hspi->State = HAL_SPI_STATE_READY;
+      /* Disable the SPI DMA requests if enabled */
+      if ((HAL_IS_BIT_SET(itsource, SPI_CR2_TXDMAEN)) || (HAL_IS_BIT_SET(itsource, SPI_CR2_RXDMAEN)))
+      {
+        CLEAR_BIT(hspi->Instance->CR2, (SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN));
+
+        /* Abort the SPI DMA Rx channel */
+        if (hspi->hdmarx != NULL)
+        {
+          /* Set the SPI DMA Abort callback :
+          will lead to call HAL_SPI_ErrorCallback() at end of DMA abort procedure */
+          //hspi->hdmarx->XferAbortCallback = SPI_DMAAbortOnError;
+          if (HAL_OK != HAL_DMA_Abort_IT(hspi->hdmarx))
+          {
+            SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_ABORT);
+          }
+        }
+        /* Abort the SPI DMA Tx channel */
+        if (hspi->hdmatx != NULL)
+        {
+          /* Set the SPI DMA Abort callback :
+          will lead to call HAL_SPI_ErrorCallback() at end of DMA abort procedure */
+          //hspi->hdmatx->XferAbortCallback = SPI_DMAAbortOnError;
+          if (HAL_OK != HAL_DMA_Abort_IT(hspi->hdmatx))
+          {
+            SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_ABORT);
+          }
+        }
+      }
+      else
+      {
+        /* Call user error callback */
+#if (USE_HAL_SPI_REGISTER_CALLBACKS == 1U)
+        hspi->ErrorCallback(hspi);
+#else
+        HAL_SPI_ErrorCallback(hspi);
+#endif /* USE_HAL_SPI_REGISTER_CALLBACKS */
+      }
+    }
+#endif
+    return;
+  }
+}
+#else
+#if 0
+extern "C" void HAL_SPI_IRQHandler1(SPI_HandleTypeDef *hspi);
+extern "C" void SPI1_IRQHandler()
+{
+    HAL_SPI_IRQHandler1(&(HardwareSPI::SSP1.spi.handle));
+}
+#endif
+#endif
+#endif
+
+extern "C" void SPI2_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP2.spi.handle));
+}
+
+extern "C" void SPI3_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP3.spi.handle));
+}
 
 #if STM32H7
 extern "C" void DMA1_Stream1_IRQHandler()
@@ -141,21 +366,6 @@ extern "C" void DMA1_Stream1_IRQHandler()
 extern "C" void DMA1_Stream2_IRQHandler()
 {
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP4.dmaTx));
-}
-
-extern "C" void SPI1_IRQHandler()
-{
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
-}
-
-extern "C" void SPI2_IRQHandler()
-{
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP2.spi.handle));
-}
-
-extern "C" void SPI3_IRQHandler()
-{
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP3.spi.handle));
 }
 
 extern "C" void SPI4_IRQHandler()
@@ -242,6 +452,8 @@ void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, NvicPriority priority) n
     {
         initDma(priority);   
     }
+    NVIC_SetPriority(spiIrq, priority);
+    NVIC_EnableIRQ(spiIrq);
     initComplete = false;
 }
 
@@ -278,10 +490,6 @@ void HardwareSPI::initDma(NvicPriority priority) noexcept
     NVIC_SetPriority(txIrq, priority);
     NVIC_EnableIRQ(txIrq);      
     __HAL_LINKDMA(&(spi.handle), hdmatx, dmaTx);
-#if STM32H7
-    NVIC_SetPriority(spiIrq, priority);
-    NVIC_EnableIRQ(spiIrq);
-#endif
 }
 
 void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t clockMode, uint32_t bitRate, Pin cs) noexcept
@@ -321,7 +529,7 @@ HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDe
     curBits = 0xffffffff;
 }
 
-HardwareSPI::HardwareSPI(SPI_TypeDef *spi) noexcept : dev(spi), initComplete(false), transferActive(false), usingDma(false)
+HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo) noexcept : dev(spi), spiIrq(spiIrqNo), initComplete(false), transferActive(false), usingDma(false)
 {
     curBitRate = 0xffffffff;
     curClockMode = 0xffffffff;
@@ -374,6 +582,35 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
         debugPrintf("SPI Error %d\n", (int)status);
 }
 
+void HardwareSPI::startTransferIT(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept
+{
+    // FIXME consider setting dma burst size to 4 for WiFi and SBC transfers
+    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(&(spi.handle));
+    if (transferActive) debugPrintf("Warning attempt to start a transfer when one already active\n");
+    if (state != HAL_SPI_STATE_READY)
+    {
+        debugPrintf("SPI not ready %x\n", state);
+        delay(100);
+    }
+    HAL_StatusTypeDef status;    
+    callback = ioComplete;
+    transferActive = true;
+    if (rx_data == nullptr)
+    {
+        status = HAL_SPI_Transmit_IT(&(spi.handle), (uint8_t *)tx_data, len);
+    }
+    else if (tx_data == nullptr)
+    {
+        status = HAL_SPI_Receive_IT(&(spi.handle), rx_data, len);
+    }
+    else
+    {
+        status = HAL_SPI_TransmitReceive_IT(&(spi.handle), (uint8_t *)tx_data, rx_data, len);
+    }
+    if (status != HAL_OK)
+        debugPrintf("SPI Error %d\n", (int)status);
+}
+
 void HardwareSPI::stopTransfer() noexcept
 {
     // Stop a DMA transfer.
@@ -416,13 +653,15 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
 {
     spi_status_t ret = SPI_OK;
     if (cs != NoPin) fastDigitalWriteLow(cs);
-    if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
     {
 #ifdef RTOS
 if (waitingTask != 0) debugPrintf("SPI busy\n");
         waitingTask = TaskBase::GetCallerTaskHandle();
         csPin = cs;
-        startTransfer(tx_data, rx_data, len, transferComplete);
+        if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
+            startTransfer(tx_data, rx_data, len, transferComplete);
+        else
+            startTransferIT(tx_data, rx_data, len, transferComplete);
         uint32_t start = millis();
         int32_t timeout = SPITimeoutMillis;
         do {
@@ -439,7 +678,10 @@ if (waitingTask != 0) debugPrintf("SPI busy\n");
         waitingTask = 0;
         csPin = NoPin;
 #else
-        startTransfer(tx_data, rx_data, len, nullptr);
+        if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
+            startTransfer(tx_data, rx_data, len, transferComplete);
+        else
+            startTransferIT(tx_data, rx_data, len, transferComplete);
         uint32_t start = millis();
         while(transferActive && millis() - start < SPITimeoutMillis)
         {
@@ -452,10 +694,6 @@ if (waitingTask != 0) debugPrintf("SPI busy\n");
         }
 #endif
         if (rx_data != nullptr) Cache::InvalidateAfterDMAReceive(rx_data, len);
-    }
-    else
-    {
-        startTransferAndWait(tx_data, rx_data, len);
     }
     if (cs != NoPin) fastDigitalWriteHigh(cs);
     return ret;
