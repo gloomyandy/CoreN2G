@@ -63,7 +63,6 @@ extern uint32_t _estack;
 // Create SPI devices the actual configuration is set later
 #if USE_SSP1
 HardwareSPI HardwareSPI::SSP1(SPI1, SPI1_IRQn);
-extern "C" SPI_HandleTypeDef *SSP1hspi = &HardwareSPI::SSP1.spi.handle;
 #endif
 #if USE_SSP2
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_CHANNEL_0, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_CHANNEL_0, DMA1_Stream4_IRQn);
@@ -140,12 +139,18 @@ uint32_t RXTX16Count = 0;
 uint32_t RXTX8Count = 0;
 uint32_t IntCount = 0;
 
-
-extern "C" void HAL_SPI_IRQHandler1(SPI_HandleTypeDef *hspi);
+#if STM32F4
+extern "C" void HAL_SPI_IT_IRQHandler(SPI_HandleTypeDef *hspi);
 extern "C" void SPI1_IRQHandler()
 {
-    HAL_SPI_IRQHandler1(&(HardwareSPI::SSP1.spi.handle));
+    HAL_SPI_IT_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
 }
+#else
+extern "C" void SPI1_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+}
+#endif
 
 extern "C" void SPI2_IRQHandler()
 {
