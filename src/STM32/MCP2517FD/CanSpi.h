@@ -30,6 +30,11 @@ extern "C" {
 
 bool DRV_SPI_Initialize(void);
 
+void DRV_SPI_Select(void);
+
+void DRV_SPI_Deselect(void);
+
+
 //! SPI Read/Write Transfer
 
 int8_t DRV_SPI_TransferData(uint32_t index, uint8_t *SpiTxData, uint8_t *SpiRxData, size_t spiTransferSize);

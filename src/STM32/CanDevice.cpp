@@ -1005,13 +1005,22 @@ extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf
 #include "CanFdSpiApi.h"
 #include "CanSpi.h"
 
+class SPILocker
+{
+public:
+	SPILocker() noexcept { DRV_SPI_Select(); }
+	~SPILocker() { DRV_SPI_Deselect();}
+	SPILocker(const SPILocker&) = delete;
+	SPILocker(SPILocker&&) = delete;
+	SPILocker& operator=(const SPILocker&) = delete;
+};
+
 CanDevice CanDevice::devices[NumCanDevices];
-static Mutex SPIMutex;
 constexpr uint32_t AbortTimeout = 100U;
 
 bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 {
-	MutexLocker lock(SPIMutex);
+	SPILocker lock;
 	DRV_CANFDSPI_OperationModeSelect(0, newMode);
 	uint32_t start = millis();
 	while(millis() - start < 500)
@@ -1037,6 +1046,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		debugPrintf("Unable to initialise CAN SPI interface, CAN will be disabled\n");
 		return nullptr;
 	}
+	SPILocker lock;
 	DRV_CANFDSPI_Reset(0);
 	// Hardware should be in configuration mode after a reset
 	if (DRV_CANFDSPI_OperationModeGet(0) != CAN_CONFIGURATION_MODE)
@@ -1169,7 +1179,6 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	debugPrintf("SPI CAN clock status %d pll %d osc %d sclk %d\n", status, ostat.PllReady, ostat.OscReady, ostat.SclkReady);
 	devices[0].config = &p_config;
 	devices[0].busOff = false;
-	SPIMutex.Create("CanTrans");
 	uint16_t ts1 = devices[0].ReadTimeStampCounter();
 	delay(10);
 	debugPrintf("10ms timestamp %u\n", devices[0].ReadTimeStampCounter() - ts1);
@@ -1306,7 +1315,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 {
 	//debugPrintf("Poll events\n");
-	MutexLocker lock(SPIMutex);
+	SPILocker lock;
 	//CheckBusStatus(1);
 	CAN_TEF_FIFO_STATUS status;
 	DRV_CANFDSPI_TefStatusGet(0, &status);
@@ -1334,7 +1343,7 @@ uint32_t rollovers = 0;
 uint16_t CanDevice::ReadTimeStampCounter() noexcept
 {
 	//debugPrintf("get timestamp\n");
-	MutexLocker lock(SPIMutex);
+	SPILocker lock;
 	uint16_t ts;
 	bool goodCrc;
 	do {
@@ -1363,7 +1372,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 	do
 	{
 		{
-			MutexLocker lock(SPIMutex);
+			SPILocker lock;
 			//CheckBusStatus(2);
 			CAN_TX_FIFO_STATUS status;
 			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
@@ -1383,7 +1392,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 bool CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
 {
 	//debugPrintf("Abort message buffer %d\n", whichBuffer);
-	MutexLocker lock(SPIMutex);
+	SPILocker lock;
 	CheckBusStatus(3);
 	CAN_TX_FIFO_STATUS status;
 	uint32_t txReq;
@@ -1465,7 +1474,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		ret = 1;
 	}
 	{
-		MutexLocker lock(SPIMutex);
+		SPILocker lock;
 		//CheckBusStatus(4);
 		//CAN_TX_FIFO_STATUS status;
 		//DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
@@ -1516,7 +1525,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 	do
 	{
 		{
-			MutexLocker lock(SPIMutex);
+			SPILocker lock;
 			//CheckBusStatus(5);
 			CAN_RX_FIFO_STATUS status;
 			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
@@ -1585,7 +1594,7 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 	if (index < config->numExtendedFilterElements)
 	{
 		debugPrintf("Add filter index %d buffer %d id %x mask %x\n", index, whichBuffer, id, mask);
-		MutexLocker lock(SPIMutex);
+		SPILocker lock;
 		DRV_CANFDSPI_FilterDisable(0, (CAN_FILTER) index);
 		CAN_FILTEROBJ_ID idObj;
 		idObj.EID = id;
@@ -1618,7 +1627,7 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept
 {
 	{
-		MutexLocker lock(SPIMutex);
+		SPILocker lock;
 		for(size_t i = (size_t)TxBufferNumber::fifo; i <= (size_t)TxBufferNumber::buffer4; i++)
 		{
 			CAN_TX_FIFO_STATUS status;
