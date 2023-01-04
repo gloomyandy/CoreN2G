@@ -25,6 +25,22 @@ setup is relatively large). It is probably worth testing the interrupt based ver
 point.
 
 Andy - 6/8/2020
+
+Some notes on SPI I/O operation
+The STM32 supports 3 forms of SPI I/O: polled, interrupt and dma. We make use of all three in different situations:
+polled: can use any memory address (as the cpu does the memory read/write operation), but has high cpu usage especially
+on large long operations. All devices support polled operations and we use them as a fall back case if we are not able
+to access the memory region.
+
+interrupt: Can access all memory areas, has lower cpu usage for large, slow operations, but may have higher cpu usage
+for fast/large operations. The use of interrupts at the end of the operation makes it easier to ensure that there
+is a minimal gap between the end of the operation and cs being released (this is important on the MCP151xFD SPI CAN device,
+due to errors in the chip). At the moment we only support this mode on SPI1 on the F4 (as an alternative to dma operation).
+On the F4 we use a modified HAL and a custom interrupt handler.
+
+dma: This mode may not be able to access all memory areas, but it has the lowest cpu overhead for large operations.
+It is the prefered operating mode when available.
+
 */
 #if USE_SSP1 || USE_SSP2 || USE_SSP3 || USE_SSP4 || USE_SSP5 || USE_SSP6
 // Create SPI devices the actual configuration is set later
@@ -37,7 +53,7 @@ static constexpr uint32_t MinDMALength = 4;
 
 // Create SPI devices the actual configuration is set later
 #if USE_SSP1
-HardwareSPI HardwareSPI::SSP1(SPI1, SPI1_IRQn);
+HardwareSPI HardwareSPI::SSP1(SPI1);
 #endif
 #if USE_SSP2
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
@@ -131,13 +147,6 @@ extern "C" void DMA1_Stream5_IRQHandler()
 {
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaTx));
 }
-uint32_t TX16Count = 0;
-uint32_t TX8Count = 0;
-uint32_t RX16Count = 0;
-uint32_t RX8Count = 0;
-uint32_t RXTX16Count = 0;
-uint32_t RXTX8Count = 0;
-uint32_t IntCount = 0;
 
 #if STM32F4
 extern "C" void HAL_SPI_IT_IRQHandler(SPI_HandleTypeDef *hspi);
@@ -217,7 +226,7 @@ void HardwareSPI::disable() noexcept
 {
     if (initComplete)
     {
-        if (usingDma)
+        if (ioType == SpiIoType::dma)
             HAL_SPI_DMAStop(&(spi.handle));
         flushRxFifo(&spi.handle);
         spi_deinit(&spi);
@@ -233,17 +242,12 @@ bool HardwareSPI::waitForTxEmpty() noexcept
 }
 
 #ifdef RTOS
-uint32_t SpiNoTask = 0;
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
 {
     if (spiDevice->csPin != NoPin) fastDigitalWriteHigh(spiDevice->csPin);
     if (spiDevice->waitingTask != nullptr)
         spiDevice->waitingTask->GiveFromISR();
-    else
-    {
-        SpiNoTask++;
-    }
 }
 #endif
 
@@ -253,12 +257,15 @@ void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, NvicPriority priority) n
     spi.pin_miso = miso;
     spi.pin_mosi = mosi;
     csPin = NoPin;
-    if (usingDma)
+    if (ioType == SpiIoType::dma)
     {
         initDma(priority);   
     }
-    NVIC_SetPriority(spiIrq, priority);
-    NVIC_EnableIRQ(spiIrq);
+    if (ioType != SpiIoType::polled)
+    {
+        NVIC_SetPriority(spiIrq, priority);
+        NVIC_EnableIRQ(spiIrq);
+    }
     initComplete = false;
 }
 
@@ -303,7 +310,7 @@ void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t c
     {
         if (initComplete)
         {
-            if (usingDma)
+            if (ioType == SpiIoType::dma)
                 HAL_SPI_DMAStop(&(spi.handle));
             spi_deinit(&spi);
         }
@@ -324,7 +331,7 @@ void HardwareSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bi
 }
 
 HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrqNo,
-                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrqNo) noexcept : dev(spi), spiIrq(spiIrqNo), rxIrq(rxIrqNo), txIrq(txIrqNo), initComplete(false), transferActive(false), usingDma(true)
+                            DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrqNo) noexcept : dev(spi), spiIrq(spiIrqNo), rxIrq(rxIrqNo), txIrq(txIrqNo), initComplete(false), transferActive(false), ioType(SpiIoType::dma)
 {
     configureDmaStream(dmaRx, rxStream, rxChan, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
     dmaRx.Init.Priority = DMA_PRIORITY_HIGH;
@@ -334,30 +341,36 @@ HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDe
     curBits = 0xffffffff;
 }
 
-HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo) noexcept : dev(spi), spiIrq(spiIrqNo), initComplete(false), transferActive(false), usingDma(false)
+HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo) noexcept : dev(spi), spiIrq(spiIrqNo), initComplete(false), transferActive(false), ioType(SpiIoType::interrupt)
 {
     curBitRate = 0xffffffff;
     curClockMode = 0xffffffff;
     curBits = 0xffffffff;
 }
 
-void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept
+HardwareSPI::HardwareSPI(SPI_TypeDef *spi) noexcept : dev(spi), initComplete(false), transferActive(false), ioType(SpiIoType::polled)
+{
+    curBitRate = 0xffffffff;
+    curClockMode = 0xffffffff;
+    curBits = 0xffffffff;
+}
+
+static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
     // FIXME consider setting dma burst size to 4 for WiFi and SBC transfers
-    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(&(spi.handle));
-    if (transferActive) debugPrintf("Warning attempt to start a DMA transfer when one already active\n");
+    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(hspi);
     if (state != HAL_SPI_STATE_READY)
     {
         debugPrintf("SPI not ready %x\n", state);
         delay(100);
     }
-    HAL_DMA_StateTypeDef dmaState = HAL_DMA_GetState(spi.handle.hdmarx);
+    HAL_DMA_StateTypeDef dmaState = HAL_DMA_GetState(hspi->hdmarx);
     if (dmaState != HAL_DMA_STATE_READY)
     {
         debugPrintf("RX DMA not ready %x\n", dmaState);
         delay(100);
     }
-    dmaState = HAL_DMA_GetState(spi.handle.hdmatx);
+    dmaState = HAL_DMA_GetState(hspi->hdmatx);
     if (dmaState != HAL_DMA_STATE_READY)
     {
         debugPrintf("TX DMA not ready %x\n", dmaState);
@@ -365,52 +378,85 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
     }
 
     HAL_StatusTypeDef status;    
-    callback = ioComplete;
-    transferActive = true;
     if (rx_data == nullptr)
     {
         Cache::FlushBeforeDMASend(tx_data, len);
-        status = HAL_SPI_Transmit_DMA(&(spi.handle), (uint8_t *)tx_data, len);
+        status = HAL_SPI_Transmit_DMA(hspi, (uint8_t *)tx_data, len);
     }
     else if (tx_data == nullptr)
     {
         Cache::FlushBeforeDMAReceive(rx_data, len);
-        status = HAL_SPI_Receive_DMA(&(spi.handle), rx_data, len);
+        status = HAL_SPI_Receive_DMA(hspi, rx_data, len);
     }
     else
     {
         Cache::FlushBeforeDMASend(tx_data, len);
         Cache::FlushBeforeDMAReceive(rx_data, len);
-        status = HAL_SPI_TransmitReceive_DMA(&(spi.handle), (uint8_t *)tx_data, rx_data, len);
+        status = HAL_SPI_TransmitReceive_DMA(hspi, (uint8_t *)tx_data, rx_data, len);
     }
-    if (status != HAL_OK)
-        debugPrintf("SPI Error %d\n", (int)status);
+    return status;
 }
 
-void HardwareSPI::startTransferIT(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept
+static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
-    // FIXME consider setting dma burst size to 4 for WiFi and SBC transfers
-    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(&(spi.handle));
-    if (transferActive) debugPrintf("Warning attempt to start a transfer when one already active\n");
+    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(hspi);
     if (state != HAL_SPI_STATE_READY)
     {
-        debugPrintf("SPI not ready %x\n", state);
+        debugPrintf("SPI IT not ready %x\n", state);
         delay(100);
     }
     HAL_StatusTypeDef status;    
-    callback = ioComplete;
-    transferActive = true;
     if (rx_data == nullptr)
     {
-        status = HAL_SPI_Transmit_IT(&(spi.handle), (uint8_t *)tx_data, len);
+        status = HAL_SPI_Transmit_IT(hspi, (uint8_t *)tx_data, len);
     }
     else if (tx_data == nullptr)
     {
-        status = HAL_SPI_Receive_IT(&(spi.handle), rx_data, len);
+        status = HAL_SPI_Receive_IT(hspi, rx_data, len);
     }
     else
     {
-        status = HAL_SPI_TransmitReceive_IT(&(spi.handle), (uint8_t *)tx_data, rx_data, len);
+        status = HAL_SPI_TransmitReceive_IT(hspi, (uint8_t *)tx_data, rx_data, len);
+    }
+    return status;
+}
+
+static HAL_StatusTypeDef startTransferPolled(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
+{
+    HAL_StatusTypeDef status;
+    if (rx_data == nullptr)
+        status = HAL_SPI_Transmit(hspi, (uint8_t *)tx_data, len, SPITimeoutMillis);
+    else if (tx_data == nullptr)
+        status = HAL_SPI_Receive(hspi, rx_data, len, SPITimeoutMillis);
+    else
+        status = HAL_SPI_TransmitReceive(hspi, (uint8_t *)tx_data, rx_data, len, SPITimeoutMillis);
+    // Simulate I/O complete interrupt
+    if (status == HAL_OK)
+        HAL_SPI_RxCpltCallback(hspi);
+    return status;
+}
+
+void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept
+{
+    callback = ioComplete;
+    transferActive = true;
+    HAL_StatusTypeDef status = HAL_OK;
+
+    switch (ioType)
+    {
+    case SpiIoType::dma:
+        if (CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
+        {
+            status = startTransferDMA(&(spi.handle), tx_data, rx_data, len);
+            break;
+        }
+        // fall through!
+    case SpiIoType::polled:
+        status = startTransferPolled(&(spi.handle), tx_data, rx_data, len);
+        break;
+    case SpiIoType::interrupt:
+        status = startTransferIT(&(spi.handle), tx_data, rx_data, len);
+        break;
     }
     if (status != HAL_OK)
         debugPrintf("SPI Error %d\n", (int)status);
@@ -439,67 +485,43 @@ void HardwareSPI::stopTransfer() noexcept
     }
 }
 
-void HardwareSPI::startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
-{
-    HAL_StatusTypeDef status;
-    transferActive = true;
-    if (rx_data == nullptr)
-        status = HAL_SPI_Transmit(&(spi.handle), (uint8_t *)tx_data, len, SPITimeoutMillis);
-    else if (tx_data == nullptr)
-        status = HAL_SPI_Receive(&(spi.handle), rx_data, len, SPITimeoutMillis);
-    else
-        status = HAL_SPI_TransmitReceive(&(spi.handle), (uint8_t *)tx_data, rx_data, len, SPITimeoutMillis);
-    transferActive = false;
-    if (status != HAL_OK)
-        debugPrintf("SPI Error %d\n", (int)status);
-}
-
 spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs) noexcept
 {
     spi_status_t ret = SPI_OK;
     if (cs != NoPin) fastDigitalWriteLow(cs);
-    {
+    csPin = cs;
 #ifdef RTOS
-if (waitingTask != 0) debugPrintf("SPI busy\n");
-        waitingTask = TaskBase::GetCallerTaskHandle();
-        csPin = cs;
-        if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
-            startTransfer(tx_data, rx_data, len, transferComplete);
-        else
-            startTransferIT(tx_data, rx_data, len, transferComplete);
-        uint32_t start = millis();
-        int32_t timeout = SPITimeoutMillis;
-        do {
-            TaskBase::Take(timeout);
-            if (!transferActive) break;
-            timeout = timeout - (millis() - start);
-        } while (timeout > 0);
-        if(transferActive) // timed out
-        {
-            ret = SPI_TIMEOUT;
-            debugPrintf("SPI timeout delay %d actual %d active %d\n", SPITimeoutMillis, (int)(millis()-start), transferActive);
-            stopTransfer();
-        }
-        waitingTask = 0;
-        csPin = NoPin;
-#else
-        if (usingDma && len > MinDMALength && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
-            startTransfer(tx_data, rx_data, len, transferComplete);
-        else
-            startTransferIT(tx_data, rx_data, len, transferComplete);
-        uint32_t start = millis();
-        while(transferActive && millis() - start < SPITimeoutMillis)
-        {
-        }
-        if (transferActive)
-        {
-            ret = SPI_TIMEOUT;
-            debugPrintf("SPI timeout\n");
-            stopTransfer();
-        }
-#endif
-        if (rx_data != nullptr) Cache::InvalidateAfterDMAReceive(rx_data, len);
+    waitingTask = TaskBase::GetCallerTaskHandle();
+    startTransfer(tx_data, rx_data, len, transferComplete);
+    uint32_t start = millis();
+    int32_t timeout = SPITimeoutMillis;
+    while (transferActive && timeout > 0)
+    {
+        TaskBase::Take(timeout);
+        timeout = timeout - (millis() - start);
     }
+    if(transferActive) // timed out
+    {
+        ret = SPI_TIMEOUT;
+        debugPrintf("SPI timeout: delay %d actual %d active %d\n", SPITimeoutMillis, (int)(millis()-start), transferActive);
+        stopTransfer();
+    }
+    waitingTask = 0;
+#else
+    startTransfer(tx_data, rx_data, len, transferComplete);
+    uint32_t start = millis();
+    while(transferActive && millis() - start < SPITimeoutMillis)
+    {
+    }
+    if (transferActive)
+    {
+        ret = SPI_TIMEOUT;
+        debugPrintf("SPI timeout\n");
+        stopTransfer();
+    }
+#endif
+    if (ioType == SpiIoType::dma && rx_data != nullptr) Cache::InvalidateAfterDMAReceive(rx_data, len);
+    csPin = NoPin;
     if (cs != NoPin) fastDigitalWriteHigh(cs);
     return ret;
 }

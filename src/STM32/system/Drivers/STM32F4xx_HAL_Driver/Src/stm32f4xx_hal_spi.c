@@ -2561,18 +2561,9 @@ void HAL_SPI_IRQHandler(SPI_HandleTypeDef *hspi)
 }
 
 #if HAL_RRF
-extern uint32_t TX16Count;
-extern uint32_t TX8Count;
-extern uint32_t RX16Count;
-extern uint32_t RX8Count;
-extern uint32_t RXTX16Count;
-extern uint32_t RXTX8Count;
-extern uint32_t IntCount;
-
 void HAL_SPI_IT_IRQHandler(SPI_HandleTypeDef *hspi)
 {
   // This is an optimised interrupt handler used for RRF when operating in "IT" mode
-IntCount++;
   hspi->TxISR(hspi);
 }
 #endif
@@ -3200,7 +3191,6 @@ static void SPI_DMARxAbortCallback(DMA_HandleTypeDef *hdma)
 // function
 static void SPI_Noop(struct __SPI_HandleTypeDef *hspi)
 {
-  RXTX8Count++;
 }
 #endif
 
@@ -3214,7 +3204,6 @@ static void SPI_2linesRxISR_8BIT(struct __SPI_HandleTypeDef *hspi)
 {
 #if HAL_RRF
   // Optimised function for RRF, we use this to perform both read and write operations
-  RX8Count++;
   /* Receive data in 8bit mode */
   *hspi->pRxBuffPtr = (uint8_t)hspi->Instance->DR;
   hspi->pRxBuffPtr++;
@@ -3332,7 +3321,6 @@ static void SPI_2linesRxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
 {
 #if HAL_RRF
   // Optimised function for RRF, we use this to perform both read and write operations
-  RX16Count++;
   /* Receive data in 16 Bit mode */
   uint16_t val = hspi->Instance->DR;
   // we need to swap the byte order
@@ -3551,7 +3539,6 @@ static void SPI_RxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
 static void SPI_TxISR_8BIT(struct __SPI_HandleTypeDef *hspi)
 {
 #if HAL_RRF
-  TX8Count++;
   hspi->Instance->DR = (*hspi->pTxBuffPtr++);
 
   if (--hspi->TxXferCount == 0U)
@@ -3588,7 +3575,6 @@ static void SPI_TxISR_8BIT(struct __SPI_HandleTypeDef *hspi)
 static void SPI_TxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
 {
 #if HAL_RRF
-  TX16Count++;
   /* Transmit data in 16 Bit mode */
     uint16_t val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
     val |=  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;

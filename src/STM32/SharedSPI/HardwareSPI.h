@@ -27,11 +27,19 @@ extern "C" void SPI5_IRQHandler() noexcept;
 extern "C" void SPI6_IRQHandler() noexcept;
 #endif
 
+enum class SpiIoType : uint8_t
+{
+	polled = 0,
+    interrupt,
+    dma
+};
+
 class HardwareSPI;
 typedef void (*SPICallbackFunction)(HardwareSPI *spiDevice) noexcept;
 class HardwareSPI: public SPI
 {
 public:
+    HardwareSPI(SPI_TypeDef *spi) noexcept;
     HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo) noexcept;
     HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrqNo,
                             DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrqNo) noexcept;
@@ -43,7 +51,6 @@ public:
     void disable() noexcept;
     void flushRx() noexcept;
     void startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept;
-    void startTransferIT(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept;
     void stopTransfer() noexcept;
     static HardwareSPI SSP1;
     static HardwareSPI SSP2;
@@ -72,9 +79,8 @@ private:
 #endif
     bool initComplete;
     bool transferActive;
-    bool usingDma;
+    SpiIoType ioType;
     void configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, uint32_t dir, uint32_t minc) noexcept;
-    void startTransferAndWait(const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept;
     void initDma(NvicPriority priority) noexcept;
 
 #if SPI1DMA
