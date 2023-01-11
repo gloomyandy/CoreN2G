@@ -116,7 +116,7 @@ extern "C" void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
     if (s->callback) s->callback(s);
 }    
 
-#if SPI1DMA
+#if SPI1DMA && USE_SSP1
 extern "C" void DMA2_Stream2_IRQHandler()
 {
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaRx));
@@ -128,6 +128,7 @@ extern "C" void DMA2_Stream3_IRQHandler()
 }
 #endif
 
+#if USE_SSP2
 extern "C" void DMA1_Stream3_IRQHandler()
 {
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaRx));
@@ -138,6 +139,13 @@ extern "C" void DMA1_Stream4_IRQHandler()
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP2.dmaTx));
 }
 
+extern "C" void SPI2_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP2.spi.handle));
+}
+#endif
+
+#if USE_SSP3
 extern "C" void DMA1_Stream0_IRQHandler()
 {
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaRx));
@@ -148,6 +156,13 @@ extern "C" void DMA1_Stream5_IRQHandler()
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP3.dmaTx));
 }
 
+extern "C" void SPI3_IRQHandler()
+{
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP3.spi.handle));
+}
+#endif
+
+#if USE_SSP1
 #if STM32F4
 extern "C" void HAL_SPI_IT_IRQHandler(SPI_HandleTypeDef *hspi);
 extern "C" void SPI1_IRQHandler()
@@ -160,18 +175,11 @@ extern "C" void SPI1_IRQHandler()
     HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
 }
 #endif
+#endif
 
-extern "C" void SPI2_IRQHandler()
-{
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP2.spi.handle));
-}
-
-extern "C" void SPI3_IRQHandler()
-{
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP3.spi.handle));
-}
 
 #if STM32H7
+#if USE_SSP4
 extern "C" void DMA1_Stream1_IRQHandler()
 {
     HAL_DMA_IRQHandler(&(HardwareSPI::SSP4.dmaRx));
@@ -186,16 +194,21 @@ extern "C" void SPI4_IRQHandler()
 {
     HAL_SPI_IRQHandler(&(HardwareSPI::SSP4.spi.handle));
 }
+#endif
 
+#if USE_SSP5
 extern "C" void SPI5_IRQHandler()
 {
     HAL_SPI_IRQHandler(&(HardwareSPI::SSP5.spi.handle));
 }
+#endif
 
+#if USE_SSP6
 extern "C" void SPI6_IRQHandler()
 {
     HAL_SPI_IRQHandler(&(HardwareSPI::SSP6.spi.handle));
 }
+#endif
 #endif
 
 static inline void flushTxFifo(SPI_HandleTypeDef *sspDevice) noexcept
@@ -241,15 +254,15 @@ bool HardwareSPI::waitForTxEmpty() noexcept
     return false;
 }
 
-#ifdef RTOS
 // Called on completion of a blocking transfer
 void transferComplete(HardwareSPI *spiDevice) noexcept
 {
     if (spiDevice->csPin != NoPin) fastDigitalWriteHigh(spiDevice->csPin);
+#ifdef RTOS
     if (spiDevice->waitingTask != nullptr)
         spiDevice->waitingTask->GiveFromISR();
-}
 #endif
+}
 
 void HardwareSPI::initPins(Pin clk, Pin miso, Pin mosi, NvicPriority priority) noexcept
 {
