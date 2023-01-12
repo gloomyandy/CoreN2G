@@ -426,3 +426,16 @@ usb_init(void)
     OTG->GCCFG |= USB_OTG_GCCFG_PWRDWN;
     OTGD->DCTL = 0;
 }
+
+// Initialize the usb controller
+void
+usb_deinit(void)
+{
+    OTG->GCCFG &= ~USB_OTG_GCCFG_PWRDWN;
+    // Disable USB clock
+#if STM32H7
+    CLEAR_BIT(RCC->AHB1ENR, USBOTGEN);
+#else
+    RCC->AHB2ENR &= ~RCC_AHB2ENR_OTGFSEN;
+#endif
+}

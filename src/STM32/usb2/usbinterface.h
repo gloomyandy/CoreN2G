@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 void usb_init(void);
+void usb_deinit(void);
 uint32_t usb_write(const uint8_t *buf, uint32_t cnt);
 uint32_t usb_available_for_write();
 uint32_t usb_read(uint8_t *buf, uint32_t cnt);

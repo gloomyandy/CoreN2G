@@ -46,7 +46,7 @@ void USBSerial::begin(uint32_t /* baud_count */, uint8_t /* config */) noexcept
 
 void USBSerial::end() noexcept
 {
-  //CDC_deInit();
+  usb_deinit();
 }
 
 int USBSerial::availableForWrite() noexcept

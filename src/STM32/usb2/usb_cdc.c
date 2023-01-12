@@ -110,7 +110,7 @@ usb_is_write_empty()
 /****************************************************************
  * Message block reading
  ****************************************************************/
-
+static uint8_t line_control_state;
 static uint8_t receive_buf[256];
 static volatile uint32_t receive_wpos = 0, receive_rpos = 0;
 uint32_t USBReadOverrun = 0;
@@ -118,21 +118,23 @@ uint32_t USBReadOverrun = 0;
 void
 usb_notify_bulk_out(void)
 {
-    // Read data, notr that if we have no space in buffer we should not have any actual data to
+    // Read data, note that if we have no space in buffer we should not have any actual data to
     // read as we should not have a started a read that could create this situation. However
     // we may still need to process the FIFO to discard control messages.
     uint32_t wpos = receive_wpos;
     while (true) {
-        uint32_t space = sizeof(receive_buf) - wpos;
+        int32_t space = sizeof(receive_buf) - wpos;
+        if (space < USB_CDC_EP_BULK_OUT_SIZE)
+        {
+            USBReadOverrun++;
+            wpos = sizeof(receive_buf) - USB_CDC_EP_BULK_OUT_SIZE;
+        }
         int_fast8_t ret = usb_read_bulk_out(&receive_buf[wpos], USB_CDC_EP_BULK_OUT_SIZE);
         if (ret < 0)
             break;
-        if (space == 0)
-        {
-            USBReadOverrun++;
-        }
-        else
-            wpos += ret;
+            // If we have received data we must be connected!
+        line_control_state = 1;
+        wpos += ret;
     }
     receive_wpos = wpos;
     if (wpos + USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf))
@@ -488,7 +490,6 @@ usb_req_set_configuration(struct usb_ctrlrequest *req)
 }
 
 static struct usb_cdc_line_coding line_coding;
-static uint8_t line_control_state;
 
 bool
 usb_is_connected()
