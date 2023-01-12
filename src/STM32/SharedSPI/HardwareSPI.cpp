@@ -48,7 +48,6 @@ It is the prefered operating mode when available.
 // On the H7 we need to make sure that and dma address is within a none cached memory area
 extern uint32_t _nocache_ram_start;
 extern uint32_t _nocache_ram_end;
-static constexpr uint32_t MinDMALength = 4;
 #define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_nocache_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache_ram_end)))
 
 // Create SPI devices the actual configuration is set later
@@ -71,10 +70,9 @@ HardwareSPI HardwareSPI::SSP5(SPI5);
 HardwareSPI HardwareSPI::SSP6(SPI6);
 #endif
 #else
-static constexpr uint32_t MinDMALength = 0;
-extern uint32_t _sdata;
-extern uint32_t _estack;
-#define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_sdata) && ((const char *)(ptr) + (len) < (const char *)&_estack)))
+extern uint8_t _sccmram;
+extern uint8_t _ccmramend;
+#define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || !(ptr >= &_sccmram && ptr <= &_ccmramend))
 
 // Create SPI devices the actual configuration is set later
 #if USE_SSP1
@@ -410,6 +408,7 @@ static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t
     return status;
 }
 
+#if USE_SSP1
 static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
     HAL_SPI_StateTypeDef state = HAL_SPI_GetState(hspi);
@@ -433,6 +432,7 @@ static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t 
     }
     return status;
 }
+#endif
 
 static HAL_StatusTypeDef startTransferPolled(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
@@ -454,7 +454,6 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
     callback = ioComplete;
     transferActive = true;
     HAL_StatusTypeDef status = HAL_OK;
-
     switch (ioType)
     {
     case SpiIoType::dma:
@@ -467,9 +466,13 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
     case SpiIoType::polled:
         status = startTransferPolled(&(spi.handle), tx_data, rx_data, len);
         break;
+#if USE_SSP1
     case SpiIoType::interrupt:
         status = startTransferIT(&(spi.handle), tx_data, rx_data, len);
         break;
+#endif
+    default:
+        debugPrintf("Warning invalid SPI I/O type %d used\n", (int)ioType);
     }
     if (status != HAL_OK)
         debugPrintf("SPI Error %d\n", (int)status);
