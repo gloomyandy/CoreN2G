@@ -1091,7 +1091,6 @@ int8_t DRV_CANFDSPI_FilterObjectConfigure(CANFDSPI_MODULE_ID index,
     // Setup
     fObj.word = 0;
     fObj.bF = *id;
-    debugPrintf("sid %x eid %x exid %x sid11 %x\n", fObj.bF.SID, fObj.bF.EID, fObj.bF.EXIDE, fObj.bF.SID11);
     a = cREGADDR_CiFLTOBJ + (filter * CiFILTER_OFFSET);
 
     spiTransferError = DRV_CANFDSPI_WriteWord(index, a, fObj.word);
