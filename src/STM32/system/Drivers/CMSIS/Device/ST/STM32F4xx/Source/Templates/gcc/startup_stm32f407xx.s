@@ -59,7 +59,7 @@ defined in linker script */
   .weak  Reset_Handler
   .type  Reset_Handler, %function
 Reset_Handler:
-#ifdef FORCE_ESTACK
+#if FORCE_ESTACK
   /* Some bootloaders mess with our estack setting, so ignore the value in flash and load it here */
   ldr   r0, =_estack
   msr   msp, r0
