@@ -134,11 +134,7 @@ Infinite_Loop:
 
 
 g_pfnVectors:
-#if 0
   .word  _estack
-#else
-  .word  0x20000430
-#endif
   .word  Reset_Handler
   .word  NMI_Handler
   .word  HardFault_Handler
