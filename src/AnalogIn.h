@@ -15,7 +15,14 @@
 #define TEMPSENSOR_CAL1_DEF 931
 #define TEMPSENSOR_CAL2_DEF 1197
 #define VREFINT_CAL_DEF 1500
+// I'm not totally sure what is going on here H743 seems to store the values scaled by 16, but H723 does not
+#if STM32H723xx
+#define GET_ADC_CAL(CAL, DEF) (*CAL == 0xffff ? DEF : *CAL)
+#elif STM32H743xx
 #define GET_ADC_CAL(CAL, DEF) (*CAL == 0xffff ? DEF : ((*CAL)>>4))
+#else
+#error "Undefined mcu, check calibration data scaling"
+#endif
 #elif STM32F4
 #include "stm32f4xx_ll_adc.h"
 // ADC VREF and MCU Temperature calibration values

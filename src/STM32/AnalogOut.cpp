@@ -36,8 +36,10 @@ void AnalogOut::Write(Pin pin, float ulValue, PwmFrequency freq) noexcept
 	HybridPWMPin* hp = HybridPWMPin::find(pin);
 	if (hp == nullptr)
 	{
-		debugPrintf("Trying set set analog value for unallocated pin %x\n", static_cast<int>(pin));
-		return;
+		// RRF relies on doing a write to allocate a PWM channel, so we do that here
+		hp = HybridPWMPin::allocate(pin, ulValue);
+		if (hp == nullptr)
+			return;
 	}
 	hp->set(ulValue, freq);
 }
