@@ -8,7 +8,8 @@
 
 #if STM32
 #include <stm32CanDevice.h>
-#else
+#elif RP2040
+#include <CanDeviceRP2040.h>
 #ifndef SRC_CANDEVICE_H_
 #define SRC_CANDEVICE_H_
 
