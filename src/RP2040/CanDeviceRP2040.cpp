@@ -8,7 +8,7 @@
 #include "CanDevice.h"
 
 #if SUPPORT_CAN
-#if 1
+#if USE_SPICAN
 // On devices without a built in CAN-FD module we use an external SPI based device based on the MCP251XFD
 
 // Note that this implementation is very basic and provides just enough functionality to support RRF.
@@ -19,12 +19,22 @@
 #include <CanMessageBuffer.h>
 #include <General/Bitmap.h>
 #include <cstring>
-//#include <HardwareTimer.h>
+#undef from
+#define PICO_MUTEX_ENABLE_SDK120_COMPATIBILITY	0	// used by mutex.h which is included by multicore.h
+#include <pico/multicore.h>
+#include <hardware/irq.h>
 
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 #include "CanFdSpiApi.h"
 #include "CanSpi.h"
 #define MCP_DEBUG 1
+
+
+static RxFifo rxFifos[NumCanRxFifos];
+static TxFifo txFifo;
+static bool core1Initialised = false;
+extern "C" void CAN_Handler() noexcept;
+extern "C" void Core1Entry() noexcept;
 
 class SPILocker
 {
@@ -36,8 +46,14 @@ public:
 	SPILocker& operator=(const SPILocker&) = delete;
 };
 
-CanDevice CanDevice::devices[NumCanDevices];
+static CanDevice devices[NumCanDevices];
 constexpr uint32_t AbortTimeout = 100U;
+
+
+#if MCP_DEBUG
+uint32_t bufReqCnt[20];
+uint32_t bufFullCnt[20];
+#endif
 
 bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 {
@@ -51,7 +67,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 			debugPrintf("Changed mode to %d\n", newMode);
 			return true;
 		}
-		delay(1);
+		//delay(1);
 	}
 	debugPrintf("Failed to change to mode %d\n", newMode);
 	return false;
@@ -96,7 +112,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	CAN_CONFIG config;
 	DRV_CANFDSPI_ConfigureObjectReset(&config);
     config.IsoCrcEnable = 1;
-    config.StoreInTEF = 1;
+    config.StoreInTEF = 0;
     config.TXQEnable = 0;
 	config.TxBandWidthSharing = 1;
 	config.RestrictReTxAttempts = 1;
@@ -114,17 +130,6 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		return nullptr;
 	}
 
-	CAN_TEF_CONFIG tef;
-	DRV_CANFDSPI_TefConfigureObjectReset(&tef);
-    //tef.FifoSize = p_config.txEventFifoSize;
-	tef.FifoSize = 8 - 1;
-    tef.TimeStampEnable = 1;
-	status = DRV_CANFDSPI_TefConfigure(0, &tef);
-	if (status != 0)
-	{
-		debugPrintf("SPI CAN Failed to set tef config\n");
-		return nullptr;
-	}
 	CAN_TX_FIFO_CONFIG txf;
 	DRV_CANFDSPI_TransmitChannelConfigureObjectReset(&txf);
 	txf.FifoSize = 8 - 1;
@@ -138,31 +143,12 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		return nullptr;
 	}
 #if MCP_DEBUG
-	debugPrintf("Configuring %d tx buffers starting at fifo %d\n", p_config.numTxBuffers, CAN_FIFO_CH2);
-#endif
-	// We use one tx fifo of size 1 for each "buffer/channel"
-	for(size_t i = 0; i < p_config.numTxBuffers; i++)
-	{
-		CAN_TX_FIFO_CONFIG txc;
-		DRV_CANFDSPI_TransmitChannelConfigureObjectReset(&txc);
-    	txc.FifoSize = 1 - 1;
-    	txc.PayLoadSize = CAN_PLSIZE_64;
-		txc.TxAttempts = 3;
-		txc.TxPriority = p_config.numTxBuffers - i;
-		status = DRV_CANFDSPI_TransmitChannelConfigure(0, (CAN_FIFO_CHANNEL)((size_t)TxBufferNumber::buffer0 + i), &txc);
-		if (status != 0)
-		{
-			debugPrintf("SPI CAN Failed to set txc chan %d config\n", i);
-			return nullptr;
-		}
-	}
-#if MCP_DEBUG
 	debugPrintf("Configuring rx fifos starting at %d\n", RxBufferNumber::fifo0);
 #endif
 	// RX fifos
 	CAN_RX_FIFO_CONFIG rxc;
 	DRV_CANFDSPI_ReceiveChannelConfigureObjectReset(&rxc);
-	rxc.FifoSize = 8 - 1;
+	rxc.FifoSize = 12 - 1;
 	rxc.PayLoadSize = CAN_PLSIZE_64;
     rxc.RxTimeStampEnable = 1;
  	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(RxBufferNumber::fifo0), &rxc);
@@ -171,7 +157,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		debugPrintf("SPI CAN Failed to set rxc chan 0 config\n");
 		return nullptr;
 	}
-	rxc.FifoSize = 5 - 1;
+	rxc.FifoSize = 1 - 1;
  	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(RxBufferNumber::fifo1), &rxc);
 	if (status != 0)
 	{
@@ -202,12 +188,15 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	status = DRV_CANFDSPI_OscillatorStatusGet(0, &ostat);
 	devices[0].config = &p_config;
 	devices[0].busOff = false;
-#if MCP_DEBUG
-	uint16_t ts1 = devices[0].ReadTimeStampCounter();
-	delay(10);
-	debugPrintf("10ms timestamp %u\n", devices[0].ReadTimeStampCounter() - ts1);
-#endif
 
+	memset(memStart, 0, p_config.GetMemorySize()*sizeof(uint32_t));						// clear out filters, transmit pending flags etc.
+
+	devices[0].rx0Fifo = memStart;
+	memStart += (p_config.rxFifo0Size + 1) * p_config.GetRxBufferSize();
+	devices[0].rx1Fifo = memStart;
+	memStart += (p_config.rxFifo1Size + 1) * p_config.GetRxBufferSize();
+	devices[0].txBuffers = memStart;
+	devices[0].DoHardwareInit();
 	return &devices[0];
 }
 
@@ -220,7 +209,39 @@ static inline uint32_t Bits2to15(const volatile void *addr) noexcept
 // Do the low level hardware initialisation
 void CanDevice::DoHardwareInit() noexcept
 {
+debugPrintf("Init hardware\n");
+	run = false;
+	abortTx = false;
+	latestTimeStamp = 0;
+	rxFifos[0].size = config->rxFifo0Size + 1;								// number of entries
+	rxFifos[0].buffers = reinterpret_cast<volatile CanRxBuffer*>(rx0Fifo);	// address
+	rxFifos[1].size = config->rxFifo1Size + 1;								// number of entries
+	rxFifos[1].buffers = reinterpret_cast<volatile CanRxBuffer*>(rx1Fifo);	// address
+	txFifo.size = config->txFifoSize + 1;									// number of entries
+	txFifo.buffers = reinterpret_cast<volatile CanTxBuffer*>(txBuffers);				// address of transmit fifo - we have no dedicated Tx buffers
+debugPrintf("RxSize %d TxSize %d mem size %d rx0 %x rx1 %x tx %x\n", config->GetRxBufferSize(), config->GetTxBufferSize(), config->GetMemorySize(), rx0Fifo, rx1Fifo, txBuffers);
+debugPrintf("Starting mcu1\n");
+delay(100);
+	if (!core1Initialised)
+	{
+		multicore_launch_core1(Core1Entry);
+		core1Initialised = true;
+	}
 
+	//multicore_fifo_drain();
+
+//#ifdef RTOS
+#if 0
+	const IRQn_Type irqn = SIO_IRQ_PROC0_IRQn;
+	NVIC_DisableIRQ(irqn);
+	NVIC_ClearPendingIRQ(irqn);
+	irq_set_exclusive_handler(irqn, CAN_Handler);
+	NVIC_SetPriority(irqn, 3);
+	//NVIC_EnableIRQ(irqn);
+#endif
+delay(100);
+debugPrintf("After start\n");
+	// Leave the device disabled. Client must call Enable() to enable it after setting up the receive filters.
 }
 
 // Set the extended ID mask. May only be used while the interface is disabled.
@@ -238,12 +259,16 @@ void CanDevice::Enable() noexcept
 {
 	debugPrintf("Enable CAN\n");
 	ChangeMode(CAN_NORMAL_MODE);
+	run = true;
+	debugPrintf("running...\n");
 }
 
 // Disable this device
 void CanDevice::Disable() noexcept
 {
 	debugPrintf("Disable CAN\n");
+	run = false;
+	delay(10);
 	ChangeMode(CAN_CONFIGURATION_MODE);
 }
 
@@ -283,8 +308,8 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 #endif
 		if (!ChangeMode(CAN_NORMAL_MODE))
 		{
-			Disable();
-			Enable();
+			ChangeMode(CAN_CONFIGURATION_MODE);
+			ChangeMode(CAN_NORMAL_MODE);
 		}
 		CAN_MODULE_EVENT eflags;
 		DRV_CANFDSPI_ModuleEventGet(0, &eflags);
@@ -362,29 +387,17 @@ void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 	}
 }
 
-#if MCP_DEBUG
-uint32_t crcErrors = 0;
-uint32_t rollovers = 0;
-#endif
 uint16_t CanDevice::ReadTimeStampCounter() noexcept
 {
-	//debugPrintf("get timestamp\n");
-	SPILocker lock;
-	uint16_t ts;
-	bool goodCrc;
-	// The timestamp can sometimes be invalid if it is about to roll over when we read it,
-	// or if it has a value that ends in 0x7f or 0x80. We detect these values and read it again
-	// See the product errata and othe device drivers.
-	do {
-		//DRV_CANFDSPI_TimeStampGet(0, &ts);
-		DRV_CANFDSPI_ReadByteArrayWithCRC(0, cREGADDR_CiTBC, (uint8_t *)&ts, 2, false, &goodCrc);
-#if MCP_DEBUG
-	    if (!goodCrc) crcErrors++;
-		if (((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80)) rollovers++;
-#endif
-	} while (!goodCrc || ((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80));
-
-	return ts & 0xffff;
+	//debugPrintf("read tsc\n");
+	//delay(1000);
+	latestTimeStamp = 0xffffffff;
+	while (latestTimeStamp == 0xffffffff)
+	{
+	}
+	//debugPrintf("end tsc %x\n", latestTimeStamp);
+	//delay(1000);
+	return latestTimeStamp & 0xffff;
 }
 
 uint32_t CanDevice::GetErrorRegister() const noexcept
@@ -392,97 +405,29 @@ uint32_t CanDevice::GetErrorRegister() const noexcept
 	return 0;
 }
 
-#if MCP_DEBUG
-uint32_t bufReqCnt[20];
-uint32_t bufFullCnt[20];
-#endif
 // Return true if space is available to send using this buffer or FIFO
 bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) noexcept
 {
-#if MCP_DEBUG
-	bufReqCnt[(int)whichBuffer]++;
-#endif
+	//debugPrintf("check space\n");
+	//delay(1000);
 	uint32_t start = millis();
+	const unsigned int bufferIndex = txFifo.putIndex;
+	unsigned int nextTxFifoPutIndex = bufferIndex + 1;
+	if (nextTxFifoPutIndex == txFifo.size)
+	{
+		nextTxFifoPutIndex = 0;
+	}
 	do
 	{
+		if (nextTxFifoPutIndex != txFifo.getIndex)
 		{
-			SPILocker lock;
-			//CheckBusStatus(2);
-			CAN_TX_FIFO_STATUS status;
-			DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
-			//debugPrintf("send message buffer %d dst %d typ %d status %x\n", whichBuffer, buffer->id.Dst(), buffer->id.MsgType(), status);
-			if (status & CAN_TX_FIFO_NOT_FULL)
-				return true;
-#if MCP_DEBUG
-			bufFullCnt[(int)whichBuffer]++;
-#endif
-			CheckBusStatus(2);
-debugPrintf("wait space message buffer %d status %x\n", whichBuffer, status);
+			//debugPrintf("available %d %d\n", nextTxFifoPutIndex, txFifo.getIndex);
+			return true;
 		}
 		delay(1);
 	} while (millis() - start <= timeout);
-
-	return false;
-}
-
-bool CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
-{
-	debugPrintf("Abort message buffer %d\n", whichBuffer);
-	SPILocker lock;
-	CheckBusStatus(3);
-	CAN_TX_FIFO_STATUS status;
-	uint32_t txReq;
-	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
-	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
-	//debugPrintf("Before cancel txReq %x status %x\n", txReq, status);
-	if (status & CAN_TX_FIFO_NOT_FULL)
-	{
-		//debugPrintf("Space now available, abort not needed\n");
-		return true;
-	}
-#if 0
-	for(size_t i = 1; i < config->numTxBuffers+2; i++)
-	{
-		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
-		debugPrintf("chan %d status %x\n", (int)i, status);
-	}
-#endif
-	DRV_CANFDSPI_TransmitChannelAbort(0, (CAN_FIFO_CHANNEL) whichBuffer);
-	uint32_t start = millis();
-	do {
-		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
-	} while (!(status & (CAN_TX_FIFO_NOT_FULL|CAN_TX_FIFO_ABORTED)) && (millis() - start) < AbortTimeout);
-	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
-	//debugPrintf("After abort time %d txReq %x status %x\n", millis() - start, txReq, status);
-	if (status & CAN_TX_FIFO_NOT_FULL)
-	{
-		//debugPrintf("Request aborted\n");
-		return true;
-	}
-	DRV_CANFDSPI_TransmitChannelReset(0, (CAN_FIFO_CHANNEL) whichBuffer);
-	do {
-		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
-	} while (!(status & CAN_TX_FIFO_NOT_FULL) && (millis() - start) < AbortTimeout);
-	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
-	//debugPrintf("After reset time %d txReq %x status %x\n", millis() - start, txReq, status);
-	if (status & CAN_TX_FIFO_NOT_FULL)
-	{
-		//debugPrintf("Request reset\n");
-		return true;
-	}
-	debugPrintf("Unable to abort request\n");
-	for(size_t i = 1; i < config->numTxBuffers+2; i++)
-	{
-		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
-		debugPrintf("chan %d status %x\n", (int)i, status);
-	}
-	CheckBusStatus(4);
-	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
-	if (status & CAN_TX_FIFO_NOT_FULL)
-	{
-		debugPrintf("Request aborted after bus check\n");
-		return true;
-	}
+debugPrintf("get space timeout\n");
+//delay(1000);
 	return false;
 }
 
@@ -498,17 +443,35 @@ static const uint8_t BytesToDLC[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 10, 
 uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
 	//debugPrintf("Send message\n");
-	uint32_t ret = 0;
+	//delay(1000);
+	uint32_t cancelledId = 0;
+	const unsigned int bufferIndex = txFifo.putIndex;
+	unsigned int nextTxFifoPutIndex = bufferIndex + 1;
+	if (nextTxFifoPutIndex == txFifo.size)
+	{
+		nextTxFifoPutIndex = 0;
+	}
 	if (!IsSpaceAvailable(whichBuffer, timeout))
 	{
-		debugPrintf("Buffer %d no space\n", whichBuffer);
-		if (!AbortMessage(whichBuffer))
+		// Retrieve details of the packet we are about to cancel
+		unsigned int cancelledIndex = nextTxFifoPutIndex + 1;
+		if (cancelledIndex == txFifo.size)
 		{
-			debugPrintf("Abort failed\n");
-			txBufferFull++;
-			return 0xffffffff;
+			cancelledIndex = 0;
 		}
-		ret = 1;
+		cancelledId = txFifo.buffers->txObj.bF.id.EID | (txFifo.buffers->txObj.bF.id.SID << 18);
+debugPrintf("Abort message %d %d\n", nextTxFifoPutIndex, txFifo.getIndex);
+//delay(100);
+		// Cancel transmission of the oldest packet
+		abortTx = true;
+		do
+		{
+			delay(1);
+		}
+		while (nextTxFifoPutIndex == txFifo.getIndex);
+debugPrintf("After abort %d %d\n", nextTxFifoPutIndex, txFifo.getIndex);
+//delay(1000);
+		txBufferFull++;
 	}
 	{
 		SPILocker lock;
@@ -516,7 +479,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		//CAN_TX_FIFO_STATUS status;
 		//DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 		//debugPrintf("send message buffer %d dst %d typ %d status %x\n", whichBuffer, buffer->id.Dst(), buffer->id.MsgType(), status);
-		CAN_TX_MSGOBJ txObj;
+		volatile CAN_TX_MSGOBJ& txObj = txFifo.buffers[bufferIndex].txObj;
 		txObj.word[0] = 0;
 		txObj.word[1] = 0;
 		txObj.bF.id.EID = buffer->id.GetWholeId();
@@ -537,11 +500,12 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		{
 			buffer->msg.raw[dataLen++] = 0;				// zero fill up to the CANFD buffer length
 		}
-
-		DRV_CANFDSPI_TransmitChannelLoad(0, (CAN_FIFO_CHANNEL) whichBuffer, &txObj, buffer->msg.raw, dlcLen, true);
+		memcpy((void *)(txFifo.buffers[bufferIndex].data), buffer->msg.raw, dlcLen);
+		txFifo.putIndex = nextTxFifoPutIndex;
 		messagesQueuedForSending++;
+//debugPrintf("end send\n");
 	}
-	return ret;
+	return cancelledId;
 }
 
 void CanDevice::CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcept
@@ -558,49 +522,60 @@ void CanDevice::CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcep
 // Receive a message in a buffer or fifo, with timeout. Returns true if successful, false if no message available even after the timeout period.
 bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
-	uint32_t start = millis();
-	do
+	const uint32_t start = millis();
+
+//debugPrintf("start rec %d t/o %d\n", whichBuffer, timeout);
+//delay(1000);
+	if (((uint32_t)whichBuffer - (uint32_t)RxBufferNumber::fifo0) < NumCanRxFifos)
 	{
+//debugPrintf("start rec2\n");
+//delay(1000);
+		// Check for a received message and wait if necessary
+		RxFifo& fifo = rxFifos[(uint32_t)whichBuffer - (uint32_t)RxBufferNumber::fifo0];
+		unsigned int getIndex = fifo.getIndex;
+#if 0
+		if (getIndex == fifo.putIndex)
 		{
-			SPILocker lock;
-			//CheckBusStatus(5);
-			CAN_RX_FIFO_STATUS status;
-			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
-			//debugPrintf("Recv message %d status %x op mode %d\n", whichBuffer, status, DRV_CANFDSPI_OperationModeGet(0));
-			if (status & CAN_RX_FIFO_OVERFLOW)
+			if (timeout == 0)
 			{
-				DRV_CANFDSPI_ReceiveChannelEventOverflowClear(0, (CAN_FIFO_CHANNEL) whichBuffer);
-				CAN_RX_FIFO_STATUS status2;
-				DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status2);
-				// We sometimes get a false overflow status, check if we are actually full
-				if (status2 & CAN_RX_FIFO_FULL)
-					messagesLost++;
-#if MCP_DEBUG
-				debugPrintf("rx queue %d overflow status %x status2 %x\n", whichBuffer, status, status2);
-#endif
+				return false;
 			}
-#if MCP_DEBUG
-			if (status & CAN_RX_FIFO_FULL) bufFullCnt[(int)whichBuffer]++;
-#endif
-			if (status & CAN_RX_FIFO_NOT_EMPTY)
+			TaskBase::ClearCurrentTaskNotifyCount();
+			const unsigned int waitingIndex = (unsigned int)whichBuffer;
+			rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
+			const bool success = (getIndex != fifo.putIndex) || (TaskBase::Take(timeout), getIndex != fifo.putIndex);
+			rxTaskWaiting[waitingIndex] = nullptr;
+			if (!success)
 			{
-				//debugPrintf("Recv message %d status %x op mode %d\n", whichBuffer, status, DRV_CANFDSPI_OperationModeGet(0));
-				CAN_RX_MSGOBJ rxObj;
-				DRV_CANFDSPI_ReceiveMessageGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &rxObj, buffer->msg.raw, sizeof(buffer->msg.raw));
-				CopyHeader(buffer, &rxObj);
-				//debugPrintf("src %d dst %d type %d len %d\n", buffer->id.Src(), buffer->id.Dst(), buffer->id.MsgType(), buffer->dataLength);
-#if MCP_DEBUG
-				bufReqCnt[(int)whichBuffer]++;
-#endif
-				busOff = false;
-				return true;
+				return false;
 			}
 		}
-		delay(1);
-	} while (millis() - start <= timeout);
-
-
-	return false;
+#else
+		while (getIndex == fifo.putIndex)
+		{
+			if (millis() - start >= timeout)
+			{
+				debugPrintf("recv timeout\n");
+				return false;
+			}
+			delay(1);
+		}
+#endif
+		// Process the received message into the buffer
+		volatile CAN_RX_MSGOBJ& rxObj = fifo.buffers[fifo.getIndex].rxObj;
+		memcpy(buffer->msg.raw, (const void *) fifo.buffers[fifo.getIndex].data, DLCtoBytes[rxObj.bF.ctrl.DLC]);
+		CopyHeader(buffer, (CAN_RX_MSGOBJ *)&rxObj);
+		// Tell the hardware that we have taken the message
+		++getIndex;
+		if (getIndex == fifo.size)
+		{
+			getIndex = 0;
+		}
+		fifo.getIndex = getIndex;
+//		debugPrintf("end rec\n");
+		return true;
+	}
+	return false;	
 }
 
 bool CanDevice::IsMessageAvailable(RxBufferNumber whichBuffer) noexcept
@@ -705,6 +680,264 @@ void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsign
 	rBusOffCount = busOffCount;
 	messagesQueuedForSending = messagesReceived = messagesLost = busOffCount = 0;
 }
+
+#ifdef RTOS
+
+void CanDevice::Interrupt() noexcept
+{
+#if 0
+	while ((sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS) != 0)
+	{
+		const uint32_t ir = sio_hw->fifo_rd;
+
+		// Test whether messages have been received into fifo 0
+		constexpr unsigned int rxFifo0WaitingIndex = (unsigned int)RxBufferNumber::fifo0;
+		if (ir & VirtualCanRegisters::recdFifo0)
+		{
+			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo0WaitingIndex]);
+		}
+
+		// Test whether messages have been received into fifo 1
+		constexpr unsigned int rxFifo1WaitingIndex = (unsigned int)RxBufferNumber::fifo1;
+		if (ir & VirtualCanRegisters::recdFifo1)
+		{
+			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo1WaitingIndex]);
+		}
+
+		// Test whether any messages have been transmitted
+		if (ir & VirtualCanRegisters::txFifoNotFull)
+		{
+			TaskBase::GiveFromISR(txTaskWaiting[(unsigned int)TxBufferNumber::fifo]);
+		}
+	}
+#endif
+}
+
+// Interrupt handlers
+
+void CAN_Handler() noexcept
+{
+	devices[0].Interrupt();
+}
+
+#endif	// RTOS
+
+bool CanDevice::DoReceiveMessage(RxBufferNumber whichBuffer, volatile CanRxBuffer *buffer) noexcept
+{
+		{
+		//SPILocker lock;
+		//CheckBusStatus(5);
+		CAN_RX_FIFO_STATUS status;
+		DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+		//debugPrintf("Recv message %d status %x op mode %d\n", whichBuffer, status, DRV_CANFDSPI_OperationModeGet(0));
+		if (status & CAN_RX_FIFO_OVERFLOW)
+		{
+			DRV_CANFDSPI_ReceiveChannelEventOverflowClear(0, (CAN_FIFO_CHANNEL) whichBuffer);
+			CAN_RX_FIFO_STATUS status2;
+			DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status2);
+			// We sometimes get a false overflow status, check if we are actually full
+			if (status2 & CAN_RX_FIFO_FULL)
+				messagesLost++;
+#if MCP_DEBUG
+			//ebugPrintf("rx queue %d overflow status %x status2 %x\n", whichBuffer, status, status2);
+#endif
+		}
+#if MCP_DEBUG
+		if (status & CAN_RX_FIFO_FULL) bufFullCnt[(int)whichBuffer]++;
+#endif
+		if (status & CAN_RX_FIFO_NOT_EMPTY)
+		{
+			//debugPrintf("Recv message %d status %x op mode %d\n", whichBuffer, status, DRV_CANFDSPI_OperationModeGet(0));
+			CAN_RX_MSGOBJ rxObj;
+			DRV_CANFDSPI_ReceiveMessageGet(0, (CAN_FIFO_CHANNEL) whichBuffer, (CAN_RX_MSGOBJ *)&buffer->rxObj, (uint8_t *)buffer->data, sizeof(buffer->data));
+			//debugPrintf("src %d dst %d type %d len %d\n", buffer->id.Src(), buffer->id.Dst(), buffer->id.MsgType(), buffer->dataLength);
+#if MCP_DEBUG
+			bufReqCnt[(int)whichBuffer]++;
+#endif
+			busOff = false;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool CanDevice::DoSendMessage(TxBufferNumber whichBuffer, volatile CanTxBuffer *buffer) noexcept
+{
+	//debugPrintf("Send message\n");
+#if MCP_DEBUG
+	bufReqCnt[(int)whichBuffer]++;
+#endif
+	{
+		//SPILocker lock;
+		//CheckBusStatus(2);
+		CAN_TX_FIFO_STATUS status;
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+		//debugPrintf("send message buffer %d dst %d typ %d status %x\n", whichBuffer, buffer->id.Dst(), buffer->id.MsgType(), status);
+		if (!(status & CAN_TX_FIFO_NOT_FULL))
+		{
+#if MCP_DEBUG
+			bufFullCnt[(int)whichBuffer]++;
+#endif
+			CheckBusStatus(2);
+//debugPrintf("wait space message buffer %d status %x\n", whichBuffer, status);
+			return false;
+		}
+	}
+	{
+		//SPILocker lock;
+		//CheckBusStatus(4);
+		//CAN_TX_FIFO_STATUS status;
+		//DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+		//debugPrintf("send message buffer %d dst %d typ %d status %x\n", whichBuffer, buffer->id.Dst(), buffer->id.MsgType(), status);
+		uint32_t dlcLen = DLCtoBytes[buffer->txObj.bF.ctrl.DLC];
+		DRV_CANFDSPI_TransmitChannelLoad(0, (CAN_FIFO_CHANNEL) whichBuffer, (CAN_TX_MSGOBJ *)&buffer->txObj, (uint8_t *)buffer->data, dlcLen, true);
+		messagesQueuedForSending++;
+	}
+	return true;
+}
+
+bool CanDevice::DoAbortMessage(TxBufferNumber whichBuffer) noexcept
+{
+	//debugPrintf("Abort message buffer %d\n", whichBuffer);
+	//SPILocker lock;
+	CheckBusStatus(3);
+	CAN_TX_FIFO_STATUS status;
+	uint32_t txReq;
+	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
+	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	//debugPrintf("Before cancel txReq %x status %x\n", txReq, status);
+	if (status & CAN_TX_FIFO_NOT_FULL)
+	{
+		//debugPrintf("Space now available, abort not needed\n");
+		return true;
+	}
+#if 0
+	for(size_t i = 1; i < config->numTxBuffers+2; i++)
+	{
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
+		debugPrintf("chan %d status %x\n", (int)i, status);
+	}
+#endif
+	DRV_CANFDSPI_TransmitChannelAbort(0, (CAN_FIFO_CHANNEL) whichBuffer);
+	uint32_t start = millis();
+	do {
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	} while (!(status & (CAN_TX_FIFO_NOT_FULL|CAN_TX_FIFO_ABORTED)) && (millis() - start) < AbortTimeout);
+	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
+	//debugPrintf("After abort time %d txReq %x status %x\n", millis() - start, txReq, status);
+	if (status & CAN_TX_FIFO_NOT_FULL)
+	{
+		//debugPrintf("Request aborted\n");
+		return true;
+	}
+	DRV_CANFDSPI_TransmitChannelReset(0, (CAN_FIFO_CHANNEL) whichBuffer);
+	do {
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	} while (!(status & CAN_TX_FIFO_NOT_FULL) && (millis() - start) < AbortTimeout);
+	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
+	//debugPrintf("After reset time %d txReq %x status %x\n", millis() - start, txReq, status);
+	if (status & CAN_TX_FIFO_NOT_FULL)
+	{
+		//debugPrintf("Request reset\n");
+		return true;
+	}
+	//debugPrintf("Unable to abort request\n");
+	for(size_t i = 1; i < config->numTxBuffers+2; i++)
+	{
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
+		debugPrintf("chan %d status %x\n", (int)i, status);
+	}
+	CheckBusStatus(4);
+	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	if (status & CAN_TX_FIFO_NOT_FULL)
+	{
+		//debugPrintf("Request aborted after bus check\n");
+		return true;
+	}
+	return false;
+}
+
+#if MCP_DEBUG
+uint32_t crcErrors = 0;
+uint32_t rollovers = 0;
+#endif
+uint32_t CanDevice::DoReadTimeStampCounter() noexcept
+{
+	//debugPrintf("get timestamp\n");
+	//SPILocker lock;
+	uint16_t ts;
+	bool goodCrc;
+	// The timestamp can sometimes be invalid if it is about to roll over when we read it,
+	// or if it has a value that ends in 0x7f or 0x80. We detect these values and read it again
+	// See the product errata and othe device drivers.
+	do {
+		//DRV_CANFDSPI_TimeStampGet(0, &ts);
+		DRV_CANFDSPI_ReadByteArrayWithCRC(0, cREGADDR_CiTBC, (uint8_t *)&ts, 2, false, &goodCrc);
+#if MCP_DEBUG
+	    if (!goodCrc) crcErrors++;
+		if (((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80)) rollovers++;
+#endif
+	} while (!goodCrc || ((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80));
+
+	return ts & 0xffff;
+}
+#include <stdio.h>
+
+[[noreturn]] void CanDevice::CanIO() noexcept
+{
+    //__enable_irq();
+	//debugPrintf("CanIO running....\n");
+	//printf("CanIO running\n");
+	for(;;)
+	{
+		if (run)
+		{
+			// Check for incomming data
+			for(size_t rx = 0; rx < NumCanRxFifos; rx++)
+			{
+				RxFifo& fifo = rxFifos[rx];
+				const uint32_t putIndex = fifo.putIndex;
+				uint32_t nextPutIndex = putIndex + 1;
+				if (nextPutIndex == fifo.size)
+				{
+					nextPutIndex = 0;
+				}
+				if (nextPutIndex != fifo.getIndex && DoReceiveMessage((RxBufferNumber)(rx + (uint32_t)RxBufferNumber::fifo0), &fifo.buffers[putIndex]))
+				{
+					fifo.putIndex = nextPutIndex;
+				}
+			}
+			if (abortTx)
+			{
+				DoAbortMessage(TxBufferNumber::fifo);
+				abortTx = false;
+			}
+			{
+				TxFifo& fifo = txFifo;
+				uint32_t getIndex = fifo.getIndex;
+				if (getIndex != fifo.putIndex && DoSendMessage(TxBufferNumber::fifo, &fifo.buffers[getIndex]))
+				{
+					getIndex = getIndex + 1;
+					if (getIndex == fifo.size)
+					{
+						getIndex = 0;
+					}
+					fifo.getIndex = getIndex;
+				}
+			}
+			if (latestTimeStamp == 0xffffffff)
+			{
+				latestTimeStamp = DoReadTimeStampCounter();
+			}
+		}
+	}
+}
+
+extern "C" [[noreturn]]void Core1Entry() noexcept
+{
+	devices[0].CanIO();
+}
+
 #else
 #include <Cache.h>
 #include <CanSettings.h>

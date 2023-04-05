@@ -10,7 +10,7 @@
 
 #include <CoreIO.h>
 
-#if SUPPORT_CAN
+#if SUPPORT_CAN && USE_SPICAN 
 
 # include <CanId.h>
 # include <General/Bitmap.h>
@@ -25,60 +25,67 @@ constexpr unsigned int MaxRxBuffers = 4;			// maximum number of dedicated receiv
 static_assert(MaxTxBuffers <= 31);					// the hardware allows up to 32 if there is no transmit FIFO but our code only supports up to 31 + a FIFO
 static_assert(MaxRxBuffers <= 30);					// the hardware allows up to 64 but our code only supports up to 30 + the FIFOs
 
-#if STM32H7
-typedef FDCAN_HandleTypeDef Can;
-constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
-
-class CanMessageBuffer;
-class CanTiming;
-extern "C" void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEventFifoITs);
-extern "C" void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t transmitDone);
-extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs);
-extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs);
-extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan);
-extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorStatusITs);
-#else
 class CanMessageBuffer;
 class CanTiming;
 constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
 #include "CanFdSpiDefines.h"
-#endif
+extern "C" [[noreturn]] void Core1Entry() noexcept;
+
+// Queues used to communicate between the two cores.
+struct CanRxBuffer
+{
+	CAN_RX_MSGOBJ rxObj;
+	uint8_t data[64];
+};
+
+struct CanTxBuffer
+{
+	CAN_TX_MSGOBJ txObj;
+	uint8_t data[64];
+};
+
+static constexpr size_t NumCanRxFifos = 2;
+
+struct RxFifo
+{
+	uint32_t size;									// written be proc 0, during setup only
+	volatile CanRxBuffer *buffers;							// written be proc 0, during setup only
+	volatile uint32_t getIndex;						// only written by proc 0
+	volatile uint32_t putIndex;						// initialised by proc0 then only written by CAN
+
+	void Clear() noexcept { getIndex = 0; putIndex = 0; }
+};
+
+struct TxFifo
+{
+	uint32_t size;									// written be proc 0, during setup only
+	volatile CanTxBuffer *buffers;							// written be proc 0, during setup only
+	volatile uint32_t getIndex;						// initialised by proc0 then only written by CAN
+	volatile uint32_t putIndex;						// only written by proc 0
+
+	void Clear() noexcept { getIndex = 0; putIndex = 0; }
+};
+
 class CanDevice
 {
 public:
-#if STM32H7
 	enum class RxBufferNumber : uint32_t
 	{
-		fifo0 = 0, fifo1,
-		buffer0, buffer1, buffer2, buffer3,
+		fifo0 = 2, fifo1,
 		none = 0xFFFF
 	};
 
 	enum class TxBufferNumber : uint32_t
 	{
-		fifo = 0,
-		buffer0, buffer1, buffer2, buffer3, buffer4,
-	};
-#else
-	enum class RxBufferNumber : uint32_t
-	{
-		fifo0 = 8, fifo1,
-		buffer0, buffer1, buffer2, buffer3,
-		none = 0xFFFF
+		fifo = 1
 	};
 
-	enum class TxBufferNumber : uint32_t
-	{
-		fifo = 1,
-		buffer0, buffer1, buffer2, buffer3, buffer4,
-	};
-#endif
 
 	// Struct used to pass configuration constants, with default values
 	struct Config
 	{
 		unsigned int dataSize = 64;											// must be one of: 8, 12, 16, 20, 24, 32, 48, 64
-		unsigned int numTxBuffers = 2;
+		unsigned int numTxBuffers = 0;
 		unsigned int txFifoSize = 4;
 		unsigned int numRxBuffers = 0;
 		unsigned int rxFifo0Size = 16;
@@ -112,44 +119,41 @@ public:
 		// We round this up to the next multiple of 8 bytes to reduce the chance of the Tx and Rx buffers crossing cache lines
 		constexpr size_t GetStandardFiltersMemSize() const noexcept
 		{
-			constexpr size_t StandardFilterElementSize = 1;					// one word each
-			return ((numShortFilterElements * StandardFilterElementSize) + 1u) & (~1u);
+			return 0;
 		}
 
 		// Return the number of words of memory occupied by the 29-bit filters
 		constexpr size_t GetExtendedFiltersMemSize() const noexcept
 		{
-			constexpr size_t ExtendedFilterElementSize = 2;					// two words
-			return numExtendedFilterElements * ExtendedFilterElementSize;
+			return 0;
 		}
 
 		// Return the number of words of memory occupied by each transmit buffer
 		constexpr size_t GetTxBufferSize() const noexcept
 		{
-			return (dataSize >> 2) + 2;										// each receive buffer has a 2-word header
+			return (dataSize >> 2) + ((sizeof(CAN_TX_MSGOBJ) + 3) >> 2);
 		}
 
 		// Return the number of words of memory occupied by each receive buffer
 		constexpr size_t GetRxBufferSize() const noexcept
 		{
-			return (dataSize >> 2) + 2;										// each transmit buffer has a 2-word header
+			return (dataSize >> 2) + ((sizeof(CAN_RX_MSGOBJ) + 3) >> 2);
 		}
 
 		// Return the number of words of memory occupied by the transmit event FIFO
 		constexpr size_t GetTxEventFifoMemSize() const noexcept
 		{
-			constexpr size_t TxEventEntrySize = 2;							// each transmit event entry is 2 words
-			return txEventFifoSize * TxEventEntrySize;
+			return 0;
 		}
 
 		// Return the total amount of buffer memory needed in 32-bit words. Must be constexpr so we can allocate memory statically in the correct segment.
 		constexpr size_t GetMemorySize() const noexcept
 		{
-			return (numTxBuffers + txFifoSize) * GetTxBufferSize()
-				+ (numRxBuffers + rxFifo0Size + rxFifo1Size) * GetRxBufferSize()
-				+ GetStandardFiltersMemSize()
-				+ GetExtendedFiltersMemSize()
-				+ GetTxEventFifoMemSize();
+			return
+				// The RP2040 implementation wastes one slot in each FIFO and has no dedicated buffers
+				  (txFifoSize + 1) * GetTxBufferSize()
+				+ (rxFifo0Size + rxFifo1Size + 2) * GetRxBufferSize();
+
 		}
 	};
 
@@ -211,21 +215,12 @@ public:
 
 	void GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept;
 
-	uint16_t ReadTimeStampCounter() noexcept
-#if STM32H7
-	{
-		return HAL_FDCAN_GetTimestampCounter(&hw);
-	}
-#else
-	;
-#endif
+	uint16_t ReadTimeStampCounter() noexcept;
 
-#if !SAME70
 	uint16_t GetTimeStampPeriod() noexcept
 	{
 		return bitPeriod;
 	}
-#endif
 
 	void PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept;
 
@@ -239,31 +234,18 @@ public:
 	static constexpr size_t Can0DataSize = 64;
 
 private:
-	static CanDevice devices[NumCanDevices];
-
-	CanDevice() noexcept { }
 	void DoHardwareInit() noexcept;
 	void UpdateLocalCanTiming(const CanTiming& timing) noexcept;
-#if STM32H7
-	void CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr) noexcept;
-
-	Can hw;														// HAL structure for the can device
-#else
 	void CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcept;
-	bool AbortMessage(TxBufferNumber whichBuffer) noexcept;
 	bool ChangeMode(CAN_OPERATION_MODE newMode) noexcept;
 	void CheckBusStatus(uint32_t checkNo) noexcept;
-#endif
-
-#if STM32H7
-	unsigned int whichCan;										// which CAN device we are
-	unsigned int whichPort;										// which CAN port number we use, 0 or 1
-	uint32_t nbtp;												//!< The NBTP register that gives the required normal bit timing
-	uint32_t dbtp;												//!< The DBTP register that gives the required bit timing when we use BRS
-	uint32_t statusMask;
-#else
+	[[noreturn]] void CanIO() noexcept;
+	bool DoSendMessage(TxBufferNumber whichBuffer, volatile CanTxBuffer *buffer) noexcept;
+	bool DoReceiveMessage(RxBufferNumber whichBuffer, volatile CanRxBuffer *buffer) noexcept;
+	bool DoAbortMessage(TxBufferNumber whichBuffer) noexcept;
+	uint32_t DoReadTimeStampCounter() noexcept;
+	
 	bool busOff;
-#endif
 
 	const Config *config;										//!< Configuration parameters
 	unsigned int messagesQueuedForSending;
@@ -272,29 +254,17 @@ private:
 	unsigned int txBufferFull;									// count of times TX FIFO was full
 	unsigned int busOffCount;									// count of the number of times we have reset due to bus off
 
-	TxEventCallbackFunction txCallback;							// function that gets called by the ISR when a transmit event for a message with a nonzero marker occurs
-
-# ifdef RTOS
-	// The following are all declared volatile because we care about when they are written
-	volatile TaskHandle txTaskWaiting[MaxTxBuffers + 1];		// tasks waiting for each Tx buffer to become free, first entry is for the Tx FIFO
-	volatile TaskHandle rxTaskWaiting[MaxRxBuffers + 2];		// tasks waiting for each Rx buffer to receive a message, first 2 entries are for the fifos
-	std::atomic<uint32_t> rxBuffersWaiting;						// which buffers tasks are waiting on
-# endif
-
-#if !SAME70
 	uint16_t bitPeriod;											// how many clocks in a CAN normal bit
-#endif
 
 	bool useFDMode;
+	volatile uint32_t *rx0Fifo;									//!< Receive message fifo start
+	volatile uint32_t *rx1Fifo;									//!< Receive message fifo start
+	volatile uint32_t *txBuffers;								//!< Transmit direct buffers start (the Tx fifo buffers follow them)
+	volatile uint32_t latestTimeStamp;
+	volatile bool run;											// Process can messages on mcu1
+	volatile bool abortTx;										// Abort the current Tx message
 
-#if STM32H7
-	friend void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEventFifoITs);
-	friend void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t transmitDone);
-	friend void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs);
-	friend void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs);
-	friend void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan);
-	friend void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorStatusITs);
-#endif
+	friend void Core1Entry() noexcept;
 
 };
 
