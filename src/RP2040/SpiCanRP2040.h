@@ -3,10 +3,11 @@
  *
  *  Created on: 2 Sep 2020
  *      Author: David
+ * 		Modified for SpiCan on RP2040 by Andy 10 Apr 2023
  */
 
-#ifndef SRC_CANDEVICE_H_
-#define SRC_CANDEVICE_H_
+#ifndef SRC_SPICANRP2040_H_
+#define SRC_SPICANRP2040_H_
 
 #include <CoreIO.h>
 

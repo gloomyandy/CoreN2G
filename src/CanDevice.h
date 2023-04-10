@@ -9,7 +9,7 @@
 #if STM32
 #include <stm32CanDevice.h>
 #elif RP2040 && USE_SPICAN
-#include <CanDeviceRP2040.h>
+#include <SpiCanRP2040.h>
 #else
 #ifndef SRC_CANDEVICE_H_
 #define SRC_CANDEVICE_H_
