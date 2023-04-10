@@ -52,6 +52,9 @@ struct RxFifo
 	volatile CanRxBuffer *buffers;							// written be proc 0, during setup only
 	volatile uint32_t getIndex;						// only written by proc 0
 	volatile uint32_t putIndex;						// initialised by proc0 then only written by CAN
+#if RTOS
+	volatile TaskHandle waitingTask;
+#endif
 
 	void Clear() noexcept { getIndex = 0; putIndex = 0; }
 };
@@ -62,6 +65,9 @@ struct TxFifo
 	volatile CanTxBuffer *buffers;							// written be proc 0, during setup only
 	volatile uint32_t getIndex;						// initialised by proc0 then only written by CAN
 	volatile uint32_t putIndex;						// only written by proc 0
+#if RTOS
+	volatile TaskHandle waitingTask;
+#endif
 
 	void Clear() noexcept { getIndex = 0; putIndex = 0; }
 };
@@ -260,9 +266,19 @@ private:
 	volatile uint32_t *rx0Fifo;									//!< Receive message fifo start
 	volatile uint32_t *rx1Fifo;									//!< Receive message fifo start
 	volatile uint32_t *txBuffers;								//!< Transmit direct buffers start (the Tx fifo buffers follow them)
+
+	// Following are used to communicate between the two cores
+#if RTOS
+	static constexpr uint32_t txFifoNotFull = 0x80000000;
+	static constexpr uint32_t rxFifo0NotEmpty = 0x1;
+	static constexpr uint32_t rxFifo1NotEmpty = 0x2;
+#endif
+	RxFifo rxFifos[NumCanRxFifos];
+	TxFifo txFifo;
 	volatile uint32_t latestTimeStamp;
 	volatile bool run;											// Process can messages on mcu1
 	volatile bool abortTx;										// Abort the current Tx message
+	volatile bool txFifoNotFullInterruptEnabled;
 
 	friend void Core1Entry() noexcept;
 

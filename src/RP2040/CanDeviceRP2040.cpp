@@ -29,9 +29,6 @@ extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf
 #include "CanSpi.h"
 #define MCP_DEBUG 1
 
-
-static RxFifo rxFifos[NumCanRxFifos];
-static TxFifo txFifo;
 static bool core1Initialised = false;
 extern "C" void CAN_Handler() noexcept;
 extern "C" void Core1Entry() noexcept;
@@ -64,7 +61,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	{
 		if (DRV_CANFDSPI_OperationModeGet(0) == newMode)
 		{
-			debugPrintf("Changed mode to %d\n", newMode);
+			//debugPrintf("Changed mode to %d\n", newMode);
 			return true;
 		}
 		//delay(1);
@@ -206,6 +203,7 @@ static inline uint32_t Bits2to15(const volatile void *addr) noexcept
 	return reinterpret_cast<uint32_t>(addr) & 0x0000FFFC;
 }
 
+int otherCore = -1;
 // Do the low level hardware initialisation
 void CanDevice::DoHardwareInit() noexcept
 {
@@ -220,27 +218,30 @@ debugPrintf("Init hardware\n");
 	txFifo.size = config->txFifoSize + 1;									// number of entries
 	txFifo.buffers = reinterpret_cast<volatile CanTxBuffer*>(txBuffers);				// address of transmit fifo - we have no dedicated Tx buffers
 debugPrintf("RxSize %d TxSize %d mem size %d rx0 %x rx1 %x tx %x\n", config->GetRxBufferSize(), config->GetTxBufferSize(), config->GetMemorySize(), rx0Fifo, rx1Fifo, txBuffers);
-debugPrintf("Starting mcu1\n");
-delay(100);
 	if (!core1Initialised)
 	{
+debugPrintf("Starting mcu1 %d %d\n", get_core_num(), otherCore);
+delay(100);
+		multicore_reset_core1();
+		delay(100);
 		multicore_launch_core1(Core1Entry);
 		core1Initialised = true;
 	}
+	else
+		debugPrintf("mcu1 already started\n");
 
-	//multicore_fifo_drain();
+	multicore_fifo_drain();
 
-//#ifdef RTOS
-#if 0
+#ifdef RTOS
 	const IRQn_Type irqn = SIO_IRQ_PROC0_IRQn;
 	NVIC_DisableIRQ(irqn);
 	NVIC_ClearPendingIRQ(irqn);
 	irq_set_exclusive_handler(irqn, CAN_Handler);
 	NVIC_SetPriority(irqn, 3);
-	//NVIC_EnableIRQ(irqn);
+	NVIC_EnableIRQ(irqn);
 #endif
-delay(100);
-debugPrintf("After start\n");
+delay(1000);
+debugPrintf("After start %d\n", otherCore);
 	// Leave the device disabled. Client must call Enable() to enable it after setting up the receive filters.
 }
 
@@ -296,6 +297,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 	if (DRV_CANFDSPI_OperationModeGet(0) != CAN_NORMAL_MODE)
 	{
 		// Bus not in operating mode
+debugPrintf("Bus not in operating mode %x\n", DRV_CANFDSPI_OperationModeGet(0));
 #if 0
 		debugPrintf("T:%d Check %d Bus not in correct mode %x\n", millis(), checkNo, DRV_CANFDSPI_OperationModeGet(0));
 		PrintErrorInfo();
@@ -308,8 +310,11 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 #endif
 		if (!ChangeMode(CAN_NORMAL_MODE))
 		{
+			debugPrintf("Change mode 1 failed, try config mode\n");
 			ChangeMode(CAN_CONFIGURATION_MODE);
 			ChangeMode(CAN_NORMAL_MODE);
+			debugPrintf("Bus mode %x\n", DRV_CANFDSPI_OperationModeGet(0));
+
 		}
 		CAN_MODULE_EVENT eflags;
 		DRV_CANFDSPI_ModuleEventGet(0, &eflags);
@@ -317,12 +322,13 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 		if (eflags)
 		{
 
-			//debugPrintf("Clearing events %x\n", eflags);
+			debugPrintf("Clearing events %x\n", eflags);
 			DRV_CANFDSPI_ModuleEventClear(0, eflags);
 		}
 		PrintErrorInfo();
 		if (!busOff)
 		{
+			debugPrintf("Buss off 1\n");
 			busOffCount++;
 			busOff = true;
 		}
@@ -332,6 +338,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 	DRV_CANFDSPI_ErrorCountStateGet(0, &tec, &rec, &flags);
 	if ((flags & CAN_TX_BUS_PASSIVE_STATE))
 	{
+		//debugPrintf("Bus in passive state\n");
 #if 0
 		debugPrintf("T:%d Check %d tx errors or passive state\n", millis(), checkNo);
 		PrintErrorInfo();
@@ -354,6 +361,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 		PrintErrorInfo();
 		if (!busOff)
 		{
+			debugPrintf("Bus off 2\n");
 			busOffCount++;
 			busOff = true;
 		}
@@ -417,18 +425,36 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 	{
 		nextTxFifoPutIndex = 0;
 	}
+	bool bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
+
+#ifdef RTOS
+	if (!bufferFree && timeout != 0)
+	{
+		txFifo.waitingTask = TaskBase::GetCallerTaskHandle();
+		txFifoNotFullInterruptEnabled = true;
+		bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
+		while (!bufferFree && timeout > 0)
+		{
+			TaskBase::Take(timeout);
+			// We may get woken up by other tasks, keep waiting if we need to
+			if (timeout != TaskBase::TimeoutUnlimited)
+			{
+				uint32_t timeSoFar = millis() - start;
+				timeout = (timeSoFar >= timeout ? 0 : timeout - timeSoFar);
+			}
+			bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
+		}
+		txFifo.waitingTask = nullptr;
+		txFifoNotFullInterruptEnabled = false;
+	}
+#else
 	do
 	{
-		if (nextTxFifoPutIndex != txFifo.getIndex)
-		{
-			//debugPrintf("available %d %d\n", nextTxFifoPutIndex, txFifo.getIndex);
-			return true;
-		}
-		delay(1);
-	} while (millis() - start <= timeout);
-debugPrintf("get space timeout\n");
-//delay(1000);
-	return false;
+		bufferFree = nextTxFifoPutIndex != txFifoGetIndex;
+	} while (!bufferFree && millis() - start < timeout);
+#endif
+	return bufferFree;
+
 }
 
 
@@ -533,7 +559,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 		// Check for a received message and wait if necessary
 		RxFifo& fifo = rxFifos[(uint32_t)whichBuffer - (uint32_t)RxBufferNumber::fifo0];
 		unsigned int getIndex = fifo.getIndex;
-#if 0
+#if RTOS
 		if (getIndex == fifo.putIndex)
 		{
 			if (timeout == 0)
@@ -541,12 +567,21 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				return false;
 			}
 			TaskBase::ClearCurrentTaskNotifyCount();
-			const unsigned int waitingIndex = (unsigned int)whichBuffer;
-			rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
-			const bool success = (getIndex != fifo.putIndex) || (TaskBase::Take(timeout), getIndex != fifo.putIndex);
-			rxTaskWaiting[waitingIndex] = nullptr;
-			if (!success)
+			fifo.waitingTask = TaskBase::GetCallerTaskHandle();
+			while (getIndex == fifo.putIndex && timeout > 0)
 			{
+				TaskBase::Take(timeout);
+				// We may get woken up by other tasks, keep waiting if we need to
+				if (timeout != TaskBase::TimeoutUnlimited)
+				{
+					uint32_t timeSoFar = millis() - start;
+					timeout = (timeSoFar >= timeout ? 0 : timeout - timeSoFar);
+				}
+			}
+			fifo.waitingTask = nullptr;
+			if (getIndex == fifo.putIndex)
+			{
+				debugPrintf("recv timeout %d\n", timeout);
 				return false;
 			}
 		}
@@ -685,32 +720,28 @@ void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsign
 
 void CanDevice::Interrupt() noexcept
 {
-#if 0
 	while ((sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS) != 0)
 	{
 		const uint32_t ir = sio_hw->fifo_rd;
 
 		// Test whether messages have been received into fifo 0
 		constexpr unsigned int rxFifo0WaitingIndex = (unsigned int)RxBufferNumber::fifo0;
-		if (ir & VirtualCanRegisters::recdFifo0)
+		if (ir & rxFifo0NotEmpty)
 		{
-			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo0WaitingIndex]);
+			TaskBase::GiveFromISR(rxFifos[0].waitingTask);
 		}
-
-		// Test whether messages have been received into fifo 1
-		constexpr unsigned int rxFifo1WaitingIndex = (unsigned int)RxBufferNumber::fifo1;
-		if (ir & VirtualCanRegisters::recdFifo1)
+		// and in fifo1
+		if (ir & rxFifo1NotEmpty)
 		{
-			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo1WaitingIndex]);
+			TaskBase::GiveFromISR(rxFifos[1].waitingTask);
 		}
 
 		// Test whether any messages have been transmitted
-		if (ir & VirtualCanRegisters::txFifoNotFull)
+		if (ir & txFifoNotFull)
 		{
-			TaskBase::GiveFromISR(txTaskWaiting[(unsigned int)TxBufferNumber::fifo]);
+			TaskBase::GiveFromISR(txFifo.waitingTask);
 		}
 	}
-#endif
 }
 
 // Interrupt handlers
@@ -778,8 +809,8 @@ bool CanDevice::DoSendMessage(TxBufferNumber whichBuffer, volatile CanTxBuffer *
 #if MCP_DEBUG
 			bufFullCnt[(int)whichBuffer]++;
 #endif
+debugPrintf("Send message no space status %x\n", status);
 			CheckBusStatus(2);
-//debugPrintf("wait space message buffer %d status %x\n", whichBuffer, status);
 			return false;
 		}
 	}
@@ -798,36 +829,52 @@ bool CanDevice::DoSendMessage(TxBufferNumber whichBuffer, volatile CanTxBuffer *
 
 bool CanDevice::DoAbortMessage(TxBufferNumber whichBuffer) noexcept
 {
-	//debugPrintf("Abort message buffer %d\n", whichBuffer);
+	debugPrintf("Abort message buffer %d\n", whichBuffer);
 	//SPILocker lock;
 	CheckBusStatus(3);
 	CAN_TX_FIFO_STATUS status;
 	uint32_t txReq;
 	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
 	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
-	//debugPrintf("Before cancel txReq %x status %x\n", txReq, status);
+	debugPrintf("Before cancel txReq %x status %x\n", txReq, status);
 	if (status & CAN_TX_FIFO_NOT_FULL)
 	{
 		//debugPrintf("Space now available, abort not needed\n");
 		return true;
 	}
 #if 0
-	for(size_t i = 1; i < config->numTxBuffers+2; i++)
+	// Try disabling retransmission attempts to see if that allows the current message to go....
+	DRV_CANFDSPI_TransmitChannelSetTxAttempts(0, (CAN_FIFO_CHANNEL) whichBuffer, 0);
+	CheckBusStatus(3);
+	txReq = 2;
+	DRV_CANFDSPI_TransmitRequestSet(0, (CAN_TXREQ_CHANNEL)txReq);
+	uint32_t start = millis();
+	do {
+		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	} while (!(status & CAN_TX_FIFO_NOT_FULL) && (millis() - start) < AbortTimeout);
+	// reset the number of attempts to be unlimitted
+	DRV_CANFDSPI_TransmitChannelSetTxAttempts(0, (CAN_FIFO_CHANNEL) whichBuffer, 3);
+	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
+	debugPrintf("After abort time %d txReq %x status %x\n", millis() - start, txReq, status);
+	if (status & CAN_TX_FIFO_NOT_FULL)
 	{
-		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
-		debugPrintf("chan %d status %x\n", (int)i, status);
+		debugPrintf("Request dropped\n");
+		return true;
 	}
 #endif
 	DRV_CANFDSPI_TransmitChannelAbort(0, (CAN_FIFO_CHANNEL) whichBuffer);
+	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
+	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
+	debugPrintf("ater abort req txReq %x status %x\n", txReq, status);
 	uint32_t start = millis();
 	do {
 		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 	} while (!(status & (CAN_TX_FIFO_NOT_FULL|CAN_TX_FIFO_ABORTED)) && (millis() - start) < AbortTimeout);
 	DRV_CANFDSPI_TransmitRequestGet(0, &txReq);
-	//debugPrintf("After abort time %d txReq %x status %x\n", millis() - start, txReq, status);
+	debugPrintf("After abort time %d txReq %x status %x\n", millis() - start, txReq, status);
 	if (status & CAN_TX_FIFO_NOT_FULL)
 	{
-		//debugPrintf("Request aborted\n");
+		debugPrintf("Request aborted\n");
 		return true;
 	}
 	DRV_CANFDSPI_TransmitChannelReset(0, (CAN_FIFO_CHANNEL) whichBuffer);
@@ -838,22 +885,23 @@ bool CanDevice::DoAbortMessage(TxBufferNumber whichBuffer) noexcept
 	//debugPrintf("After reset time %d txReq %x status %x\n", millis() - start, txReq, status);
 	if (status & CAN_TX_FIFO_NOT_FULL)
 	{
-		//debugPrintf("Request reset\n");
+		debugPrintf("Request reset\n");
 		return true;
 	}
-	//debugPrintf("Unable to abort request\n");
+	debugPrintf("Unable to abort request\n");
 	for(size_t i = 1; i < config->numTxBuffers+2; i++)
 	{
 		DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) i, &status);
-		debugPrintf("chan %d status %x\n", (int)i, status);
+		//debugPrintf("chan %d status %x\n", (int)i, status);
 	}
 	CheckBusStatus(4);
 	DRV_CANFDSPI_TransmitChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status);
 	if (status & CAN_TX_FIFO_NOT_FULL)
 	{
-		//debugPrintf("Request aborted after bus check\n");
+		debugPrintf("Request aborted after bus check\n");
 		return true;
 	}
+	debugPrintf("Abort failed\n");
 	return false;
 }
 
@@ -886,8 +934,9 @@ uint32_t CanDevice::DoReadTimeStampCounter() noexcept
 [[noreturn]] void CanDevice::CanIO() noexcept
 {
     //__enable_irq();
-	//debugPrintf("CanIO running....\n");
-	//printf("CanIO running\n");
+	debugPrintf("CanIO running....\n");
+	otherCore = get_core_num();
+	uint32_t pendingInterrupts = 0;
 	for(;;)
 	{
 		if (run)
@@ -905,11 +954,13 @@ uint32_t CanDevice::DoReadTimeStampCounter() noexcept
 				if (nextPutIndex != fifo.getIndex && DoReceiveMessage((RxBufferNumber)(rx + (uint32_t)RxBufferNumber::fifo0), &fifo.buffers[putIndex]))
 				{
 					fifo.putIndex = nextPutIndex;
+					pendingInterrupts |= (1 << rx);
 				}
 			}
 			if (abortTx)
 			{
 				DoAbortMessage(TxBufferNumber::fifo);
+debugPrintf("After abort\n");
 				abortTx = false;
 			}
 			{
@@ -923,11 +974,24 @@ uint32_t CanDevice::DoReadTimeStampCounter() noexcept
 						getIndex = 0;
 					}
 					fifo.getIndex = getIndex;
+					if (txFifoNotFullInterruptEnabled)
+					{
+						pendingInterrupts |= txFifoNotFull;
+					}
 				}
 			}
 			if (latestTimeStamp == 0xffffffff)
 			{
 				latestTimeStamp = DoReadTimeStampCounter();
+			}
+			if (pendingInterrupts)
+			{
+				if ((sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS) != 0)
+				{
+						sio_hw->fifo_wr = pendingInterrupts;
+						pendingInterrupts = 0;
+						__sev();
+				}
 			}
 		}
 	}
