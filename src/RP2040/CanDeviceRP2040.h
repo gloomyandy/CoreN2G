@@ -19,8 +19,9 @@
 #  include <RTOSIface/RTOSIface.h>
 # endif
 
-constexpr unsigned int MaxTxBuffers = 6;			// maximum number of dedicated transmit buffers supported by this driver
-constexpr unsigned int MaxRxBuffers = 4;			// maximum number of dedicated receive buffers supported by this driver
+// We only use fifos
+constexpr unsigned int MaxTxBuffers = 0;			// maximum number of dedicated transmit buffers supported by this driver
+constexpr unsigned int MaxRxBuffers = 0;			// maximum number of dedicated receive buffers supported by this driver
 
 static_assert(MaxTxBuffers <= 31);					// the hardware allows up to 32 if there is no transmit FIFO but our code only supports up to 31 + a FIFO
 static_assert(MaxRxBuffers <= 30);					// the hardware allows up to 64 but our code only supports up to 30 + the FIFOs
@@ -187,6 +188,7 @@ public:
 #if 0	// not currently used
 	// Return the number of messages waiting to be sent in the transmit FIFO
 	unsigned int NumTxMessagesPending(TxBufferNumber whichBuffer) noexcept;
+	void PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept;
 #endif
 
 	// Queue a message for sending via a buffer or FIFO. If the buffer isn't free, cancel the previous message (or oldest message in the fifo) and send it anyway.
@@ -228,8 +230,6 @@ public:
 		return bitPeriod;
 	}
 
-	void PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept;
-
 	uint32_t GetErrorRegister() const noexcept;
 
 #ifdef RTOS
@@ -244,7 +244,7 @@ private:
 	void UpdateLocalCanTiming(const CanTiming& timing) noexcept;
 	void CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcept;
 	bool ChangeMode(CAN_OPERATION_MODE newMode) noexcept;
-	void CheckBusStatus(uint32_t checkNo) noexcept;
+	void CheckBusStatus() noexcept;
 	[[noreturn]] void CanIO() noexcept;
 	bool DoSendMessage(TxBufferNumber whichBuffer, volatile CanTxBuffer *buffer) noexcept;
 	bool DoReceiveMessage(RxBufferNumber whichBuffer, volatile CanRxBuffer *buffer) noexcept;
