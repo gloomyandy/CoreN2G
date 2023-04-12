@@ -98,7 +98,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		debugPrintf("SPI CAN Failed to set can config\n");
 		return nullptr;
 	}
-
+	// TODO use configuration timing values
 	status = DRV_CANFDSPI_BitTimeConfigure(0, CAN_1000K_1M, CAN_SSP_MODE_AUTO, CAN_SYSCLK_40M);
 	if (status != 0)
 	{
@@ -560,6 +560,13 @@ void CAN_Handler() noexcept
 
 // The following operations all run on core 1
 
+// To allow flash write operations we need to ensure that we do not execute code from flash
+// We place the key functions in RAM and disable CAN during this process
+#define CRITICAL_CODE(_name)			__attribute__((section(".time_critical." #_name))) _name
+#define CRITICAL_MEMBER(_class, _name)	__attribute__((section(".time_critical." #_class "_" #_name))) _class::_name
+#define CRITICAL_DATA_RO(_name)			__attribute__((section(".time_critical." #_name))) _name
+#define CRITICAL_DATA_RW(_name)			__attribute__((section(".time_critical." #_name))) _name
+
 void CanDevice::CheckBusStatus() noexcept
 {
 	// Note SPIMutex must be held when calling this method
@@ -704,9 +711,9 @@ uint32_t CanDevice::DoReadTimeStampCounter() noexcept
 
 	return ts & 0xffff;
 }
-#include <stdio.h>
 
-[[noreturn]] void CanDevice::CanIO() noexcept
+
+[[noreturn]] void CRITICAL_MEMBER(CanDevice, CanIO)() noexcept
 {
 	debugPrintf("CanIO core 1 running....\n");
 	uint32_t pendingInterrupts = 0;
@@ -773,4 +780,15 @@ extern "C" [[noreturn]]void Core1Entry() noexcept
 {
 	devices[0].CanIO();
 }
+
+void DisableCanCore1Processing() noexcept
+{
+	devices[0].Disable();
+}
+
+void EnableCanCore1Processing() noexcept
+{
+	devices[0].Enable();
+}
+
 #endif

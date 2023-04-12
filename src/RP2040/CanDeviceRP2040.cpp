@@ -628,6 +628,16 @@ void CAN_Handler() noexcept
 
 #endif	// RTOS
 
+void DisableCanCore1Processing() noexcept
+{
+	devices[0].Disable();
+}
+
+void EnableCanCore1Processing() noexcept
+{
+	devices[0].Enable();
+}
+
 #endif	// SUPPORT_CAN
 
 // End
