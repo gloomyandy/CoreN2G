@@ -734,6 +734,8 @@ void ResetProcessor() noexcept
 	rstc_start_software_reset(RSTC);
 #elif STM32
 	NVIC_SystemReset();
+#elif RP2040
+	watchdog_reboot(0, 0, 0);
 #else
 	SCB->AIRCR = (0x5FA << 16) | (1u << 2);						// reset the processor
 #endif
