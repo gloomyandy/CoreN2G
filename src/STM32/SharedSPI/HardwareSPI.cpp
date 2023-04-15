@@ -87,6 +87,7 @@ HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_CHANNEL_0, DMA1
 #endif
 #endif
 
+extern bool checkSem();
 //#define SSPI_DEBUG
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
@@ -510,17 +511,17 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
 #ifdef RTOS
     waitingTask = TaskBase::GetCallerTaskHandle();
     startTransfer(tx_data, rx_data, len, transferComplete);
-    uint32_t start = millis();
-    int32_t timeout = SPITimeoutMillis;
-    while (transferActive && timeout > 0)
+    while (transferActive)
     {
-        TaskBase::Take(timeout);
-        timeout = timeout - (millis() - start);
+        if (!TaskBase::Take(SPITimeoutMillis))
+        {
+            break;
+        }
     }
     if(transferActive) // timed out
     {
         ret = SPI_TIMEOUT;
-        debugPrintf("SPI timeout: delay %d actual %d active %d\n", SPITimeoutMillis, (int)(millis()-start), transferActive);
+        debugPrintf("SPI timeout\n");
         stopTransfer();
     }
     waitingTask = 0;
