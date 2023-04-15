@@ -277,7 +277,6 @@ uint32_t CanDevice::GetErrorRegister() const noexcept
 // Return true if space is available to send using this buffer or FIFO
 bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) noexcept
 {
-	uint32_t start = millis();
 	const unsigned int bufferIndex = txFifo.putIndex;
 	unsigned int nextTxFifoPutIndex = bufferIndex + 1;
 	if (nextTxFifoPutIndex == txFifo.size)
@@ -291,22 +290,20 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 	{
 		txFifo.waitingTask = TaskBase::GetCallerTaskHandle();
 		txFifoNotFullInterruptEnabled = true;
-		bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
-		while (!bufferFree && timeout > 0)
+		// We may get woken up by other tasks, keep waiting if we need to
+		while (nextTxFifoPutIndex != txFifo.getIndex)
 		{
-			TaskBase::Take(timeout);
-			// We may get woken up by other tasks, keep waiting if we need to
-			if (timeout != TaskBase::TimeoutUnlimited)
+			if (!TaskBase::Take(timeout))
 			{
-				uint32_t timeSoFar = millis() - start;
-				timeout = (timeSoFar >= timeout ? 0 : timeout - timeSoFar);
+				break;
 			}
-			bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
 		}
+		bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
 		txFifo.waitingTask = nullptr;
 		txFifoNotFullInterruptEnabled = false;
 	}
 #else
+	uint32_t start = millis();
 	do
 	{
 		bufferFree = nextTxFifoPutIndex != txFifoGetIndex;
@@ -395,8 +392,6 @@ void CanDevice::CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcep
 // Receive a message in a buffer or fifo, with timeout. Returns true if successful, false if no message available even after the timeout period.
 bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
-	const uint32_t start = millis();
-
 	if (((uint32_t)whichBuffer - (uint32_t)RxBufferNumber::fifo0) < NumCanRxFifos)
 	{
 		// Check for a received message and wait if necessary
@@ -411,14 +406,12 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			}
 			TaskBase::ClearCurrentTaskNotifyCount();
 			fifo.waitingTask = TaskBase::GetCallerTaskHandle();
-			while (getIndex == fifo.putIndex && timeout > 0)
+			// We may get woken up by other tasks, keep waiting if we need to
+			while (getIndex == fifo.putIndex)
 			{
-				TaskBase::Take(timeout);
-				// We may get woken up by other tasks, keep waiting if we need to
-				if (timeout != TaskBase::TimeoutUnlimited)
+				if (!TaskBase::Take(timeout))
 				{
-					uint32_t timeSoFar = millis() - start;
-					timeout = (timeSoFar >= timeout ? 0 : timeout - timeSoFar);
+					break;
 				}
 			}
 			fifo.waitingTask = nullptr;
@@ -428,13 +421,13 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			}
 		}
 #else
+		const uint32_t start = millis();
 		while (getIndex == fifo.putIndex)
 		{
 			if (millis() - start >= timeout)
 			{
 				return false;
 			}
-			delay(1);
 		}
 #endif
 		// Process the received message into the buffer
