@@ -55,8 +55,10 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 /*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
 {
 	int8_t status;
+	devices[0].runState = RunState::uninitialised;
 	if (!DRV_SPI_Initialize())
 	{
+		devices[0].runState = RunState::unavailable;
 		debugPrintf("Unable to initialise CAN SPI interface, CAN will be disabled\n");
 		return nullptr;
 	}
@@ -176,7 +178,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 // Do the low level hardware initialisation
 void CanDevice::DoHardwareInit() noexcept
 {
-	run = false;
+	runState = RunState::disabled;
 	abortTx = false;
 	latestTimeStamp = 0;
 	rxFifos[0].size = config->rxFifo0Size + 1;								// number of entries
@@ -216,23 +218,34 @@ void CanDevice::SetExtendedIdMask(uint32_t mask) noexcept
 // Stop and free this device and the CAN port it uses
 void CanDevice::DeInit() noexcept
 {
+	if (runState != RunState::unavailable)
+	{
+		Disable();
+		runState = RunState::uninitialised;
+	}
 }
 
 // Enable this device
 void CanDevice::Enable() noexcept
 {
-	ChangeMode(CAN_NORMAL_MODE);
-    // Tell Core 1 it can now use SPI
-	run = true;
+	if (runState == RunState::disabled)
+	{
+		ChangeMode(CAN_NORMAL_MODE);
+	    // Tell Core 1 it can now use SPI
+		runState = RunState::enabled;
+	}
 }
 
 // Disable this device
 void CanDevice::Disable() noexcept
 {
-    // Disable Core 1 operations
-	run = false;
-	delay(10);
-	ChangeMode(CAN_CONFIGURATION_MODE);
+	if (runState == RunState::enabled)
+	{
+		// Disable Core 1 operations
+		runState = RunState::disabled;
+		delay(10);
+		ChangeMode(CAN_CONFIGURATION_MODE);
+	}
 }
 
 #if 0
@@ -712,7 +725,7 @@ uint32_t CanDevice::DoReadTimeStampCounter() noexcept
 	uint32_t pendingInterrupts = 0;
 	for(;;)
 	{
-		if (run)
+		if (runState == RunState::enabled)
 		{
 			// Check for incomming data
 			for(size_t rx = 0; rx < NumCanRxFifos; rx++)

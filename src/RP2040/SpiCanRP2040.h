@@ -241,6 +241,13 @@ public:
 	static constexpr size_t Can0DataSize = 64;
 
 private:
+	enum class RunState : uint8_t
+	{
+		uninitialised,
+		unavailable,
+		disabled,
+		enabled
+	};
 	void DoHardwareInit() noexcept;
 	void UpdateLocalCanTiming(const CanTiming& timing) noexcept;
 	void CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcept;
@@ -277,8 +284,8 @@ private:
 	RxFifo rxFifos[NumCanRxFifos];
 	TxFifo txFifo;
 	volatile uint32_t latestTimeStamp;
-	volatile bool run;											// Process can messages on mcu1
-	volatile bool abortTx;										// Abort the current Tx message
+	volatile RunState runState;
+	volatile bool abortTx;
 	volatile bool txFifoNotFullInterruptEnabled;
 
 	friend void Core1Entry() noexcept;
