@@ -411,7 +411,7 @@ void HardwareTimer::setCount(uint32_t counter, TimerFormat_t format)
   */
 void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, uint32_t pin)
 {
-  setMode(channel, mode, pin);
+  setMode(channel, mode, (PinName)pin);
 }
 
 /**
@@ -632,7 +632,7 @@ uint32_t HardwareTimer::getCaptureCompare(uint32_t channel,  TimerCompareFormat_
   */
 void HardwareTimer::setPWM(uint32_t channel, uint32_t pin, uint32_t frequency, uint32_t dutycycle, void (*PeriodCallback)(HardwareTimer *), void (*CompareCallback)(HardwareTimer *))
 {
-  setPWM(channel, pin, frequency, dutycycle, PeriodCallback, CompareCallback);
+  setPWM(channel, (PinName)pin, frequency, dutycycle, PeriodCallback, CompareCallback);
 }
 
 /**
