@@ -133,7 +133,9 @@ void CanDevice::DeInit() noexcept
 {
 	if (inUse)
 	{
+		multicore_reset_core1();
 		Disable();
+		delay(100);
 #ifdef RTOS
 		NVIC_DisableIRQ(SIO_IRQ_PROC0_IRQn);
 #endif
