@@ -668,7 +668,6 @@ void CanFD2040::Entry(VirtualCanRegisters *p_regs) noexcept
 
     	// Wait for the signal to enable CAN
     	while (!regs->canEnabled) { }
-
     	// Clear all pending interrupts
     	for (volatile bool& irq : rxInterruptPending)
     	{
@@ -1237,7 +1236,7 @@ void CRITICAL_MEMBER(CanFD2040, report_note_crc_start)() noexcept
         report_state = (ReportState)(ReportState::RS_IN_MSG | ReportState::RS_IS_TX);
         pio_match_check(pio_match_calc_key((expectedData << 9) | 0x00ff, crcend_bitpos + 10));
     }
-    else if (rxFifoNumber < NumCanRxFifos)
+    else
     {
 		// Inject ack
 		report_state = ReportState::RS_IN_MSG;
@@ -1259,11 +1258,6 @@ void CRITICAL_MEMBER(CanFD2040, report_note_crc_start)() noexcept
 			// Setup for future rx eof "matched" signal
 			report_eof_key = pio_match_calc_key((expectedData << 8) | 0x7f, crcend_bitpos + 9);
 		}
-    }
-    else
-    {
-		// We are not acking this message because it isn't meant for us. Setup for future rx eof "matched" signal, assuming that an ack bit is seen.
-		report_eof_key = pio_match_calc_key((expectedData << 8) | 0x7f, crcend_bitpos + 9);
     }
 }
 
