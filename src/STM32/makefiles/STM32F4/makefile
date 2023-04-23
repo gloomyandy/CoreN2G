@@ -25,14 +25,14 @@ $(info Building RepRapFirmware for STM32F4 based boards:)
 BASE_OUTPUT_NAME=firmware-stm32f4
 
 ## Cross-compilation commands 
-CC      = arm-none-eabi-gcc
-CXX     = arm-none-eabi-g++
-LD      = arm-none-eabi-gcc
-AR      = arm-none-eabi-ar
-AS      = arm-none-eabi-as
-OBJCOPY = arm-none-eabi-objcopy
-OBJDUMP = arm-none-eabi-objdump
-SIZE    = arm-none-eabi-size
+CC      = $(GCC_PATH)arm-none-eabi-gcc
+CXX     = $(GCC_PATH)arm-none-eabi-g++
+LD      = $(GCC_PATH)arm-none-eabi-gcc
+AR      = $(GCC_PATH)arm-none-eabi-ar
+AS      = $(GCC_PATH)arm-none-eabi-as
+OBJCOPY = $(GCC_PATH)arm-none-eabi-objcopy
+OBJDUMP = $(GCC_PATH)arm-none-eabi-objdump
+SIZE    = $(GCC_PATH)arm-none-eabi-size
 
 MKDIR = mkdir -p
 
