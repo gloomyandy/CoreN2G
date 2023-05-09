@@ -115,7 +115,9 @@ void syncAll()
 static void disable(int chan)
 {
     States[chan].enabled = false;
+#ifdef PWM_DEBUG
     debugPrintf("disable %d\n", chan);
+#endif
     updateActive();
 }
 
