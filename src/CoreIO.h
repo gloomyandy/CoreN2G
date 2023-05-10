@@ -423,7 +423,7 @@ static inline uint32_t random(uint32_t howsmall, uint32_t howbig) noexcept
 #if STM32
 // Set a pin high with no error checking
 #ifdef __cplusplus
-[[gnu::always_inline, gnu::optimize("O3")]] static inline void fastDigitalWriteHigh(const Pin pin) noexcept
+[[gnu::always_inline, gnu::optimize("O3")]] static inline void fastDigitalWriteHigh(const uint32_t pin) noexcept
 #else
 static inline void fastDigitalWriteHigh(const Pin pin) noexcept
 #endif
@@ -433,7 +433,7 @@ static inline void fastDigitalWriteHigh(const Pin pin) noexcept
 
 // Set a pin low with no error checking
 #ifdef __cplusplus
-[[gnu::always_inline, gnu::optimize("O3")]] static inline void fastDigitalWriteLow(const Pin pin) noexcept
+[[gnu::always_inline, gnu::optimize("O3")]] static inline void fastDigitalWriteLow(const uint32_t pin) noexcept
 #else
 static inline void fastDigitalWriteLow(const Pin pin) noexcept
 #endif
@@ -443,7 +443,7 @@ static inline void fastDigitalWriteLow(const Pin pin) noexcept
 
 // Read a pin with no error checking
 #ifdef __cplusplus
-[[gnu::always_inline, gnu::optimize("O3")]] static inline int fastDigitalRead(const Pin pin) noexcept
+[[gnu::always_inline, gnu::optimize("O3")]] static inline int fastDigitalRead(const uint32_t pin) noexcept
 #else
 static inline bool fastDigitalRead(const Pin pin) noexcept
 #endif

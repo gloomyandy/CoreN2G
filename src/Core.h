@@ -171,9 +171,14 @@ static const uint32_t SystemCoreClockFreq = 120000000;	///< The processor clock 
 
 static const uint32_t SystemCoreClockFreq = 300000000;	///< The processor clock frequency after initialisation
 
-#elif STM32
+#elif STM32F4
 
-#define SystemCoreClockFreq SystemCoreClock
+static const uint32_t SystemCoreClockFreq = 168000000;	///< The processor clock frequency after initialisation
+
+#elif STM32H7
+
+static const uint32_t SystemCoreClockFreq = 480000000;	///< The processor clock frequency after initialisation
+
 #elif RP2040
 
 static const uint32_t SystemCoreClockFreq = 125000000;	///< The processor clock frequency after initialisation
@@ -287,9 +292,13 @@ static inline uint32_t GetElapsedCyclesBetween(uint32_t startCycles, uint32_t en
 	return endCycles - startCycles;
 }
 
+#ifdef __cplusplus
+static inline constexpr uint32_t NanosecondsToCycles(uint32_t ns) noexcept
+#else
 static inline uint32_t NanosecondsToCycles(uint32_t ns) noexcept
+#endif
 {
-  return (ns * (uint64_t)SystemCoreClock)/1000000000u;
+  return (ns * (uint64_t)SystemCoreClockFreq)/1000000000u;
 }
 
 #else
