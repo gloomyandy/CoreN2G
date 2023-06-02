@@ -112,7 +112,11 @@ void DisablePullup(Pin pin) noexcept
 
 #else
 // Delay for a specified number of CPU clock cycles from the starting time. Return the time at which we actually stopped waiting.
+#if RP2040
+extern "C" [[gnu::optimize("03")]] uint32_t __attribute__((section(".time_critical"))) DelayCycles(uint32_t start, uint32_t cycles) noexcept
+#else
 extern "C" uint32_t DelayCycles(uint32_t start, uint32_t cycles) noexcept
+#endif
 {
 	const uint32_t reload = (SysTick->LOAD & 0x00FFFFFF) + 1;
 	uint32_t now = start;
