@@ -78,6 +78,7 @@ void SerialCDC::flush() noexcept
 	{
 		return;
 	}
+
 	tud_cdc_write_flush();
 }
 
@@ -87,6 +88,7 @@ size_t SerialCDC::canWrite() noexcept
 	{
 		return 0;
 	}
+
 	return tud_cdc_write_available();
 }
 
@@ -103,6 +105,7 @@ size_t SerialCDC::write(const uint8_t *buf, size_t length) noexcept
 	{
 		return 0;
 	}
+
 #if RP2040
 	// Hack to allow debug output from core1
 	if (get_core_num() != 0)
@@ -124,6 +127,7 @@ size_t SerialCDC::write(const uint8_t *buf, size_t length) noexcept
 		return cnt;
 	}
 #endif
+
 	static uint64_t last_avail_time;
 	int written = 0;
 	if (tud_cdc_connected())
