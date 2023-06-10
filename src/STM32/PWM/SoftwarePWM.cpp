@@ -3,6 +3,7 @@
 #include <CoreImp.h>
 #include "HybridPWM.h"
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
+// NOTE: The debug error calculations assume a Step Timer running at 1MHz
 //#define PWM_DEBUG
 # if STM32H7
 # define SYNC_GPIO() __DSB()
@@ -27,8 +28,8 @@ typedef struct {
 static PWMState States[MaxPWMChannels];
 static int32_t startActive = -1;
 static int32_t endActive = -1;
-static uint32_t baseTime;
-static uint32_t baseDelta;
+static uint32_t baseTime = 0;
+static uint32_t baseDelta = 1;
 static bool timerReady = false;
 static TIM_HandleTypeDef *timerHandle;
 
@@ -74,43 +75,26 @@ static void updateActive()
         // If timer not currently running restart it
         if (!timerRunning)
         {
-#if PWM_DEBUG
+#ifdef PWM_DEBUG
             pwmStartTicks = StepTimer::GetTimerTicks();
             //debugPrintf("Resume timer\n");
+            if (__HAL_TIM_GET_COUNTER(timerHandle) > baseDelta)
+            {
+                debugPrintf("Current time > base delta\n");
+                __HAL_TIM_SET_COUNTER(timerHandle, baseDelta);
+            }
 #endif
-            SPWMTimer.resume();
+            __HAL_TIM_SET_AUTORELOAD(timerHandle, baseDelta);
         }
     }
     else
     {
-        SPWMTimer.pause();
+        __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
         endActive = -1;
         startActive = -1;
         //debugPrintf("Pause timer\n");
     }
 }
-
-void syncAll()
-{
-    // briefy pause and then restart all active channels so that they are in sync.
-    // this minimises the number of interrupts we need, to service the channels.
-#ifdef PWM_DEBUG
-    pwmSync++;
-#endif
-    // set all active channels so that on the next event they will all move to state 0
-    for(uint32_t i = 0; i < MaxPWMChannels; i++)
-        if (States[i].enabled)
-        {
-            States[i].state = 1;
-            States[i].nextEvent = MinimumInterruptDeltaUS;
-        }
-    baseTime = 0;
-    baseDelta = MinimumInterruptDeltaUS;
-    SPWMTimer.setOverflow(baseDelta, TICK_FORMAT);
-    SPWMTimer.setCount(1);
-    endActive = -1;
-    updateActive();
-} 
 
 static void disable(int chan)
 {
@@ -124,27 +108,70 @@ static void disable(int chan)
 static int enable(Pin pin, uint32_t onTime, uint32_t offTime)
 {
     // find a free slot
-    for(uint32_t i = 0; i < MaxPWMChannels; i++)
-        if (!States[i].enabled)
-        {
+    uint32_t newSlot = 0;
+    while(newSlot < MaxPWMChannels && States[newSlot].enabled)
+    {
+        newSlot++;
+    }
+    if (newSlot >= MaxPWMChannels)
+    {
 #ifdef PWM_DEBUG
-            debugPrintf("Enable chan %d\n", (int)i);
-            pwmLastSync = i;
+        debugPrintf("PWM no free slot\n");
 #endif
-            PWMState& s = States[i];
-            s.pin = pin;
-            s.onOffTimes[0][0] = onTime;
-            s.onOffTimes[0][1] = offTime;
-            s.onOffBuffer = 0;
-            s.state = 0;
-            fastDigitalWriteHigh(pin);
-            s.newTimes = false;
-            SPWMTimer.pause();  //Stop the timer while we sort things out
-            s.enabled = true;
-            syncAll();        
-            return i;
+        return -1;
+    }
+#ifdef PWM_DEBUG
+    debugPrintf("enable slot %d\n", (int)newSlot);
+#endif
+    // set up the new slot
+    PWMState& s = States[newSlot];
+    s.pin = pin;
+    s.onOffTimes[0][0] = onTime;
+    s.onOffTimes[0][1] = offTime;
+    s.onOffBuffer = 0;
+    s.state = 1;
+    s.newTimes = false;
+    //Stop the timer while we complete the setup.
+    __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
+    // see if we can find an existing channel that shares the same frequency
+    uint32_t cycleTime = onTime + offTime;
+    int32_t syncSlot = -1;
+    for(int32_t i = startActive; i < endActive; i++)
+    {
+        if (States[i].enabled && (States[i].onOffTimes[States[i].onOffBuffer][0] + States[i].onOffTimes[States[i].onOffBuffer][1]) == cycleTime)
+        {
+            syncSlot = i;
+            break;
         }
-    return -1;
+    }
+#ifdef PWM_DEBUG
+    debugPrintf("found sync slot %d\n", (int)syncSlot);
+#endif
+
+    if (syncSlot >= 0)
+    {
+        PWMState& sync = States[syncSlot];
+        // we have something to sync with, set our event to match
+        s.nextEvent = sync.nextEvent + (sync.state == 1 ? 0 : sync.onOffTimes[sync.onOffBuffer][1]);
+        // we don't need to adjust the timer
+    }
+    else
+    {
+        uint32_t curDelta = __HAL_TIM_GET_COUNTER(timerHandle);
+        // avoid setting reload time to 0 - this should never happen!
+        if (curDelta == 0)
+        {
+            debugPrintf("curDelta is zero\n");
+            curDelta++;
+        }
+        s.nextEvent = baseTime + curDelta;
+        baseDelta = curDelta;
+    }
+    s.enabled = true;
+    // Force a timer restart
+    endActive = -1;
+    updateActive();
+    return newSlot;
 }
 
 static void adjustOnOffTime(int chan, uint32_t onTime, uint32_t offTime)
@@ -261,7 +288,8 @@ void TIM7_IRQHandler(void) noexcept
     // Stop the counter
     __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
     // Clear any pending interrupt
-    __HAL_TIM_CLEAR_IT(timerHandle, TIM_IT_UPDATE); 
+    __HAL_TIM_CLEAR_IT(timerHandle, TIM_IT_UPDATE);
+    // time expires when it ticks past reload value, so add 1 to adjust 
     uint16_t curTick = __HAL_TIM_GET_COUNTER(timerHandle) + 1;
 #ifdef PWM_DEBUG
     if (curTick == 0)
@@ -298,9 +326,10 @@ static void initTimer() noexcept
     SPWMTimer.attachInterrupt(SPWM_Handler);
     // init hardware and interrupts
     timerHandle = &(HardwareTimer_Handle[get_timer_index(SPWM_TIMER)]->handle);
-    SPWMTimer.setCount(1);
+    __HAL_TIM_SET_COUNTER(timerHandle, 1);
     SPWMTimer.resume();
-    SPWMTimer.pause();
+    // stop the counter for now
+    __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
     timerReady = true;
 }
 
