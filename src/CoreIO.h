@@ -764,6 +764,7 @@ enum class AdcInput : uint8_t
 #if SAMC21
 	adc0_10, adc0_11,
 	sdadc_0 = 0x10, sdadc_1,
+	ldc1612 = 0x20,
 #endif
 #if SAM4E || SAM4S
 	adc0_10, adc0_11, adc0_12, adc0_13, adc0_14,
@@ -978,6 +979,17 @@ extern const PinDescriptionBase *AppGetPinDescription(Pin p) noexcept;
 extern uint32_t AppGetSdhcClockSpeed() noexcept;
 
 #endif
+#endif
+
+#if RP2040
+/**
+ * @brief On the RP2040 when using flash operations we need to ensure that the core 1 is not executing code from flash
+ */
+extern void DisableCore1Processing() noexcept;
+/**
+ * @brief Enable normal operation on Core 1
+ */
+extern void EnableCore1Processing() noexcept;
 #endif
 
 #if RP2040
