@@ -32,7 +32,7 @@
 #define GET_ADC_CAL(CAL, DEF) (*CAL == 0xffff ? DEF : *CAL)
 #endif
 
-typedef void (*AnalogInCallbackFunction)(CallbackParameter p, uint16_t reading) noexcept;
+typedef void (*AnalogInCallbackFunction)(CallbackParameter p, uint32_t reading) noexcept;
 
 namespace AnalogIn
 {
@@ -53,7 +53,11 @@ namespace AnalogIn
 	void Init(
 #if SAME5x
 				NvicPriority interruptPriority
-#elif SAMC21 || RP2040
+#elif SAMC21
+				DmaChannel dmaChan,
+				DmaPriority rxPriority,
+				bool extRef
+#elif RP2040
 				DmaChannel dmaChan,
 				DmaPriority rxPriority
 #endif
