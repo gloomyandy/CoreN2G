@@ -38,6 +38,12 @@ static bool core1Initialised = false;
 extern "C" void CAN_Handler() noexcept;
 extern "C" void Core1Entry() noexcept;
 
+// Clear statistics
+void CanDevice::CanStats::Clear() noexcept
+{
+	messagesQueuedForSending = messagesReceived = messagesLost = protocolErrors = busOffCount = 0;
+}
+
 // Initialise a CAN device and return a pointer to it
 /*static*/ CanDevice* CanDevice::Init(Pin p_txPin, Pin p_rxPin, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
 {
@@ -67,7 +73,7 @@ extern "C" void Core1Entry() noexcept;
 	memStart += p_config.GetTxEventFifoMemSize();
 	dev.txBuffers = memStart;
 
-	dev.messagesQueuedForSending = dev.messagesReceived = dev.messagesLost = dev.busOffCount = 0;
+	dev.stats.Clear();
 
 	for (unsigned int i = 0; i < p_config.numShortFilterElements; ++i)
 	{
@@ -282,7 +288,7 @@ void CanDevice::CopyMessageForTransmit(CanMessageBuffer *buffer, volatile CanTxB
 	f->T1.bit.FDF = buffer->fdMode;
 	f->T1.bit.BRS = buffer->useBrs;
 
-	++messagesQueuedForSending;
+	++stats.messagesQueuedForSending;
 }
 
 // Queue a message for sending via a buffer or FIFO. If the buffer isn't free, cancel the previous message (or oldest message in the fifo) and send it anyway.
@@ -390,7 +396,7 @@ void CanDevice::CopyReceivedMessage(CanMessageBuffer *null buffer, const volatil
 //		delay(100);
 	}
 
-	++messagesReceived;
+	++stats.messagesReceived;
 }
 
 // Receive a message in a buffer or fifo, with timeout. Returns true if successful, false if no message available even after the timeout period.
@@ -574,15 +580,11 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 }
 #endif
 
-void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept
+void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
 {
 	AtomicCriticalSectionLocker lock;
-
-	rMessagesQueuedForSending = messagesQueuedForSending;
-	rMessagesReceived = messagesReceived;
-	rMessagesLost = messagesLost;
-	rBusOffCount = busOffCount;
-	messagesQueuedForSending = messagesReceived = messagesLost = busOffCount = 0;
+	dst = stats;
+	stats.Clear();
 }
 
 void CanDevice::GetAndClearErrorCounts(CanErrorCounts& errs) noexcept

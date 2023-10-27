@@ -165,6 +165,18 @@ public:
 		}
 	};
 
+	// Struct to represent CAN statistics
+	struct CanStats
+	{
+		unsigned int messagesQueuedForSending;
+		unsigned int messagesReceived;
+		unsigned int messagesLost;									// count of received messages lost because the receive FIFO was full
+		unsigned int protocolErrors;
+		unsigned int busOffCount;									// count of the number of times we have reset due to bus off
+
+		void Clear() noexcept;
+	};
+
 	// Type of the callback function called when a transmi event with a nonzero message marker occurs
 	typedef void (*TxEventCallbackFunction)(uint8_t marker, CanId id, uint16_t timeStamp) noexcept;
 
@@ -222,7 +234,7 @@ public:
 
 	void SetLocalCanTiming(const CanTiming& timing) noexcept;
 
-	void GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept;
+	void GetAndClearStats(CanDevice::CanStats& dst) noexcept;
 
 	uint16_t ReadTimeStampCounter() noexcept;
 
@@ -262,11 +274,9 @@ private:
 	bool busOff;
 
 	const Config *config;										//!< Configuration parameters
-	unsigned int messagesQueuedForSending;
-	unsigned int messagesReceived;
-	unsigned int messagesLost;									// count of received messages lost because the receive FIFO was full
 	unsigned int txBufferFull;									// count of times TX FIFO was full
-	unsigned int busOffCount;									// count of the number of times we have reset due to bus off
+
+	CanStats stats;												//!< Statistics gathered
 
 	uint16_t bitPeriod;											// how many clocks in a CAN normal bit
 

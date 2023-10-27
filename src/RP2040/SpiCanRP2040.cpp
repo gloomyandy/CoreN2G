@@ -51,6 +51,12 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	return false;
 }
 
+// Clear statistics
+void CanDevice::CanStats::Clear() noexcept
+{
+	messagesQueuedForSending = messagesReceived = messagesLost = protocolErrors = busOffCount = 0;
+}
+
 // Initialise a CAN device and return a pointer to it
 /*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
 {
@@ -152,6 +158,8 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		debugPrintf("SPI CAN Failed to init ram\n");
 		return nullptr;
 	}
+
+	devices[0].stats.Clear();
 
 	// Setup timestamps
 	devices[0].bitPeriod = 48; // Duet code assumes 48MHz base clock
@@ -386,7 +394,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		}
 		memcpy((void *)(txFifo.buffers[bufferIndex].data), buffer->msg.raw, dlcLen);
 		txFifo.putIndex = nextTxFifoPutIndex;
-		messagesQueuedForSending++;
+		stats.messagesQueuedForSending++;
 	}
 	return cancelledId;
 }
@@ -398,7 +406,7 @@ void CanDevice::CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcep
 	buffer->remote = hdr->bF.ctrl.RTR;
 	buffer->timeStamp = hdr->bF.timeStamp;
 	buffer->dataLength = DLCtoBytes[hdr->bF.ctrl.DLC];
-	++messagesReceived;
+	++stats.messagesReceived;
 }
 
 
@@ -516,15 +524,11 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 
 }
 
-void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept
+void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
 {
 	AtomicCriticalSectionLocker lock;
-
-	rMessagesQueuedForSending = messagesQueuedForSending;
-	rMessagesReceived = messagesReceived;
-	rMessagesLost = messagesLost;
-	rBusOffCount = busOffCount;
-	messagesQueuedForSending = messagesReceived = messagesLost = busOffCount = 0;
+	dst = stats;
+	stats.Clear();
 }
 
 #ifdef RTOS
@@ -593,7 +597,7 @@ void CanDevice::CheckBusStatus() noexcept
 		}
 		if (!busOff)
 		{
-			busOffCount++;
+			stats.busOffCount++;
 			busOff = true;
 		}
 	}
@@ -611,7 +615,7 @@ void CanDevice::CheckBusStatus() noexcept
 		}
 		if (!busOff)
 		{
-			busOffCount++;
+			stats.busOffCount++;
 			busOff = true;
 		}
 	}
@@ -631,7 +635,7 @@ bool CanDevice::DoReceiveMessage(RxBufferNumber whichBuffer, volatile CanRxBuffe
 		DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status2);
 		// We sometimes get a false overflow status, check if we are actually full
 		if (status2 & CAN_RX_FIFO_FULL)
-			messagesLost++;
+			stats.messagesLost++;
 	}
 	if (status & CAN_RX_FIFO_NOT_EMPTY)
 	{
@@ -655,7 +659,7 @@ bool CanDevice::DoSendMessage(TxBufferNumber whichBuffer, volatile CanTxBuffer *
 
 	uint32_t dlcLen = DLCtoBytes[buffer->txObj.bF.ctrl.DLC];
 	DRV_CANFDSPI_TransmitChannelLoad(0, (CAN_FIFO_CHANNEL) whichBuffer, (CAN_TX_MSGOBJ *)&buffer->txObj, (uint8_t *)buffer->data, dlcLen, true);
-	messagesQueuedForSending++;
+	stats.messagesQueuedForSending++;
 
 	return true;
 }

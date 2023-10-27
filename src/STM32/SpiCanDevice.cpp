@@ -38,6 +38,12 @@ public:
 CanDevice CanDevice::devices[NumCanDevices];
 constexpr uint32_t AbortTimeout = 100U;
 
+// Clear statistics
+void CanDevice::CanStats::Clear() noexcept
+{
+	messagesQueuedForSending = messagesReceived = messagesLost = protocolErrors = busOffCount = 0;
+}
+
 bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 {
 	SPILocker lock;
@@ -190,6 +196,8 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		return nullptr;
 	}
 
+	devices[0].stats.Clear();
+
 	// Setup timestamps
 	devices[0].bitPeriod = 48; // Duet code assumes 48MHz base clock
 	DRV_CANFDSPI_TimeStampPrescalerSet(0, 39);
@@ -296,7 +304,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 		PrintErrorInfo();
 		if (!busOff)
 		{
-			busOffCount++;
+			stats.busOffCount++;
 			busOff = true;
 		}
 	}
@@ -327,7 +335,7 @@ void CanDevice::CheckBusStatus(uint32_t checkNo) noexcept
 		PrintErrorInfo();
 		if (!busOff)
 		{
-			busOffCount++;
+			stats.busOffCount++;
 			busOff = true;
 		}
 	}
@@ -536,7 +544,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		}
 
 		DRV_CANFDSPI_TransmitChannelLoad(0, (CAN_FIFO_CHANNEL) whichBuffer, &txObj, buffer->msg.raw, dlcLen, true);
-		messagesQueuedForSending++;
+		stats.messagesQueuedForSending++;
 	}
 	return ret;
 }
@@ -548,7 +556,7 @@ void CanDevice::CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcep
 	buffer->remote = hdr->bF.ctrl.RTR;
 	buffer->timeStamp = hdr->bF.timeStamp;
 	buffer->dataLength = DLCtoBytes[hdr->bF.ctrl.DLC];
-	++messagesReceived;
+	++stats.messagesReceived;
 }
 
 
@@ -571,7 +579,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				DRV_CANFDSPI_ReceiveChannelStatusGet(0, (CAN_FIFO_CHANNEL) whichBuffer, &status2);
 				// We sometimes get a false overflow status, check if we are actually full
 				if (status2 & CAN_RX_FIFO_FULL)
-					messagesLost++;
+					stats.messagesLost++;
 #if MCP_DEBUG
 				debugPrintf("rx queue %d overflow status %x status2 %x\n", whichBuffer, status, status2);
 #endif
@@ -660,7 +668,7 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 
 }
 
-void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept
+void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
 {
 #if MCP_DEBUG
 	{
@@ -694,11 +702,7 @@ void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsign
 	}
 #endif
 	AtomicCriticalSectionLocker lock;
-
-	rMessagesQueuedForSending = messagesQueuedForSending;
-	rMessagesReceived = messagesReceived;
-	rMessagesLost = messagesLost;
-	rBusOffCount = busOffCount;
-	messagesQueuedForSending = messagesReceived = messagesLost = busOffCount = 0;
+	dst = stats;
+	stats.Clear();
 }
 #endif

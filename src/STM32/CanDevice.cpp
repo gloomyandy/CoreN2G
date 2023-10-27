@@ -25,6 +25,12 @@ static CanDevice *devicesByPort[2] = { nullptr, nullptr };
 static Can *hwByPort[2] = {nullptr, nullptr};
 CanDevice CanDevice::devices[NumCanDevices];
 
+// Clear statistics
+void CanDevice::CanStats::Clear() noexcept
+{
+	messagesQueuedForSending = messagesReceived = messagesLost = protocolErrors = busOffCount = 0;
+}
+
 // Initialise a CAN device and return a pointer to it
 /*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
 {
@@ -82,6 +88,8 @@ CanDevice CanDevice::devices[NumCanDevices];
 	Init.TxFifoQueueElmtsNbr = p_config.txFifoSize;
 	Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
 	Init.TxElmtSize = dataSize;
+
+	dev.stats.Clear();
 
 	// setup the hardware
 	__HAL_RCC_FDCAN_CLK_ENABLE();
@@ -396,7 +404,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 			debugPrintf("Failed to send CAN message %x %x\n", status, (unsigned)hw.ErrorCode);
 		}
 		else
-			++messagesQueuedForSending;
+			++stats.messagesQueuedForSending;
 		__DSB();								// this is needed on the SAME70, otherwise incorrect data sometimes gets transmitted
 	}
 	return cancelledId;
@@ -410,7 +418,7 @@ void CanDevice::CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr)
 	buffer->remote = (hdr->RxFrameType == FDCAN_REMOTE_FRAME ? 1 : 0);
 	buffer->timeStamp = hdr->RxTimestamp;
 	buffer->dataLength = DLCtoBytes[hdr->DataLength >> 16];
-	++messagesReceived;
+	++stats.messagesReceived;
 }
 
 
@@ -766,15 +774,11 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 	Init.DataTimeSeg2 = tseg2;
 }
 
-void CanDevice::GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept
+void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
 {
 	AtomicCriticalSectionLocker lock;
-
-	rMessagesQueuedForSending = messagesQueuedForSending;
-	rMessagesReceived = messagesReceived;
-	rMessagesLost = messagesLost;
-	rBusOffCount = busOffCount;
-	messagesQueuedForSending = messagesReceived = messagesLost = busOffCount = 0;
+	dst = stats;
+	stats.Clear();
 }
 
 #ifdef RTOS
@@ -850,7 +854,7 @@ void CanDevice::Interrupt() noexcept
 
 		if (ir & (CAN_(IR_RF0L) | CAN_(IR_RF1L)))
 		{
-			++messagesLost;
+			++stats.messagesLost;
 		}
 
 		if (ir & CAN_(IR_TEFN))
@@ -950,7 +954,7 @@ extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 	}
 	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_MESSAGE_LOST) != 0)
 	{
-		dev->messagesLost++;
+		dev->stats.messagesLost++;
 	}
 }
 
@@ -963,7 +967,7 @@ extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 	}
 	if ((RxFifo1ITs & FDCAN_IT_RX_FIFO1_MESSAGE_LOST) != 0)
 	{
-		dev->messagesLost++;
+		dev->stats.messagesLost++;
 	}
 }
 
@@ -988,7 +992,7 @@ extern "C" void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint3
 	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
 	if ((ErrorStatusITs & FDCAN_IT_BUS_OFF) != 0)
 	{
-		dev->busOffCount++;
+		dev->stats.busOffCount++;
 		dev->Disable();
 		dev->Enable();
 	}
