@@ -72,13 +72,18 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		return nullptr;
 	}
 	SPILocker lock;
-	DRV_CANFDSPI_Reset(0);
-	// Hardware should be in configuration mode after a reset
-	if (DRV_CANFDSPI_OperationModeGet(0) != CAN_CONFIGURATION_MODE)
-	{
-		debugPrintf("SPI CAN device not in configuration mode\n");
-		return nullptr;
-	}
+	uint32_t resetCnt = 0;
+	do {
+		if (resetCnt++ > 5)
+		{
+			debugPrintf("SPI CAN device not in configuration mode\n");
+			return nullptr;
+		}
+		DRV_CANFDSPI_Reset(0);
+		delay(100);
+		// Hardware should be in configuration mode after a reset
+	} while (DRV_CANFDSPI_OperationModeGet(0) != CAN_CONFIGURATION_MODE);
+	debugPrintf("SPI CAN reset complete after %d attempts\n", (int)resetCnt);
 	// Configure the clocks
 	CAN_OSC_CTRL osc;
 	DRV_CANFDSPI_OscillatorControlObjectReset(&osc);
