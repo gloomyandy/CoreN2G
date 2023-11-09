@@ -358,6 +358,8 @@ void MPU_Memory_Protection(void)
 	MPU_Set_Protection(0x30000000, 288 * 1024, 4, MPU_REGION_FULL_ACCESS, 1, 0, 0);       // protect SRAM1~SRAM3, Sharing is enabled, no cache, no buffering
   // SRAM4 currently not used
 	MPU_Set_Protection(0x38000000, 64 * 1024, 5, MPU_REGION_FULL_ACCESS, 0, 1, 1);        // protect SRAM4, Sharing is prohibited, cache is allowed, and buffering is allowed
+  // backup SRM used for SBC config
+	MPU_Set_Protection(0x38800000, 4 * 1024, 6, MPU_REGION_FULL_ACCESS, 1, 0, 0);       // protect backup sram, Sharing is enabled, no cache, no buffering
 
   // We don't use any of these
 	//MPU_Set_Protection(0x60000000, 64 * 1024 * 1024, 5, MPU_REGION_FULL_ACCESS, 0, 0, 0);   // protect LCD FMC  64M, No sharing, no cache, no buffering
