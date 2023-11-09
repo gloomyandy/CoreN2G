@@ -15,7 +15,6 @@
   License along with this library; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
-
 #if defined (USBCON) && defined(USBD_USE_CDC) && SUPPORT_USB
 
 #include "USBSerial.h"
@@ -24,7 +23,6 @@
 
 extern __IO  uint32_t lineState;
 
-USBSerial serialUSB;
 void serialEventUSB() __attribute__((weak));
 
 void USBSerial::begin(void) noexcept

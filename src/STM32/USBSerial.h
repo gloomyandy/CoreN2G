@@ -68,6 +68,5 @@ class USBSerial : public Stream {
     };
 };
 
-extern USBSerial serialUSB;
 #endif /* USBCON */
 #endif /* _USBSERIAL_H_ */
