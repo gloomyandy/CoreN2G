@@ -8,10 +8,6 @@
 #include <RTOSIface/RTOSIface.h>
 #endif
 #include "spi_com.h"
-#if SPI1DMA
-extern "C" void DMA2_Stream2_IRQHandler(void) noexcept;
-extern "C" void DMA2_Stream3_IRQHandler(void) noexcept;
-#endif
 extern "C" void DMA1_Stream3_IRQHandler(void) noexcept;
 extern "C" void DMA1_Stream4_IRQHandler(void) noexcept;
 extern "C" void DMA1_Stream0_IRQHandler(void) noexcept;
@@ -22,6 +18,8 @@ extern "C" void SPI3_IRQHandler() noexcept;
 #if STM32H7
 extern "C" void DMA1_Stream1_IRQHandler() noexcept;
 extern "C" void DMA1_Stream2_IRQHandler() noexcept;
+extern "C" void DMA1_Stream6_IRQHandler() noexcept;
+extern "C" void DMA1_Stream7_IRQHandler() noexcept;
 extern "C" void SPI4_IRQHandler() noexcept;
 extern "C" void SPI5_IRQHandler() noexcept;
 extern "C" void SPI6_IRQHandler() noexcept;
@@ -83,10 +81,6 @@ private:
     void configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, uint32_t dir, uint32_t minc) noexcept;
     void initDma(NvicPriority priority) noexcept;
 
-#if SPI1DMA
-    friend void DMA2_Stream2_IRQHandler() noexcept;
-    friend void DMA2_Stream3_IRQHandler() noexcept;
-#endif
     friend void DMA1_Stream3_IRQHandler() noexcept;
     friend void DMA1_Stream4_IRQHandler() noexcept;
     friend void DMA1_Stream0_IRQHandler() noexcept;
@@ -101,6 +95,8 @@ private:
 #if STM32H7
     friend void DMA1_Stream1_IRQHandler() noexcept;
     friend void DMA1_Stream2_IRQHandler() noexcept;
+    friend void DMA1_Stream6_IRQHandler() noexcept;
+    friend void DMA1_Stream7_IRQHandler() noexcept;
     friend void SPI4_IRQHandler() noexcept;
     friend void SPI5_IRQHandler() noexcept;
     friend void SPI6_IRQHandler() noexcept;

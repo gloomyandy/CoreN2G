@@ -53,7 +53,7 @@ extern uint32_t _nocache_ram_end;
 
 // Create SPI devices the actual configuration is set later
 #if USE_SSP1
-HardwareSPI HardwareSPI::SSP1(SPI1);
+HardwareSPI HardwareSPI::SSP1(SPI1, SPI1_IRQn, DMA1_Stream6, DMA_REQUEST_SPI1_RX, DMA1_Stream6_IRQn, DMA1_Stream7, DMA_REQUEST_SPI1_TX, DMA1_Stream7_IRQn);
 #endif
 #if USE_SSP2
 HardwareSPI HardwareSPI::SSP2(SPI2, SPI2_IRQn, DMA1_Stream3, DMA_REQUEST_SPI2_RX, DMA1_Stream3_IRQn, DMA1_Stream4, DMA_REQUEST_SPI2_TX, DMA1_Stream4_IRQn);
@@ -87,7 +87,6 @@ HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_CHANNEL_0, DMA1
 #endif
 #endif
 
-extern bool checkSem();
 //#define SSPI_DEBUG
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
@@ -115,18 +114,6 @@ extern "C" void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
     s->transferActive = false;
     if (s->callback) s->callback(s);
 }    
-
-#if SPI1DMA && USE_SSP1
-extern "C" void DMA2_Stream2_IRQHandler()
-{
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaRx));
-}
-
-extern "C" void DMA2_Stream3_IRQHandler()
-{
-    HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaTx));
-}
-#endif
 
 #if USE_SSP2
 extern "C" void DMA1_Stream3_IRQHandler()
@@ -162,23 +149,25 @@ extern "C" void SPI3_IRQHandler()
 }
 #endif
 
+
+#if STM32H7
 #if USE_SSP1
-#if STM32F4
-extern "C" void HAL_SPI_IT_IRQHandler(SPI_HandleTypeDef *hspi);
-extern "C" void SPI1_IRQHandler()
+extern "C" void DMA1_Stream6_IRQHandler()
 {
-    HAL_SPI_IT_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaRx));
 }
-#else
+
+extern "C" void DMA1_Stream7_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP1.dmaTx));
+}
+
 extern "C" void SPI1_IRQHandler()
 {
     HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
 }
 #endif
-#endif
 
-
-#if STM32H7
 #if USE_SSP4
 extern "C" void DMA1_Stream1_IRQHandler()
 {
@@ -209,6 +198,17 @@ extern "C" void SPI6_IRQHandler()
     HAL_SPI_IRQHandler(&(HardwareSPI::SSP6.spi.handle));
 }
 #endif
+
+#else
+
+#if USE_SSP1
+extern "C" void HAL_SPI_IT_IRQHandler(SPI_HandleTypeDef *hspi);
+extern "C" void SPI1_IRQHandler()
+{
+    HAL_SPI_IT_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+}
+#endif
+
 #endif
 
 static inline void flushTxFifo(SPI_HandleTypeDef *sspDevice) noexcept
