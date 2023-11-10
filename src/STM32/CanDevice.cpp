@@ -448,7 +448,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
 				{
-					debugPrintf("Fifo 0 timeout\n");
+					//debugPrintf("Fifo 0 timeout\n");
 					return false;
 				}
 			}
