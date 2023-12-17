@@ -32,7 +32,7 @@ void CanDevice::CanStats::Clear() noexcept
 }
 
 // Initialise a CAN device and return a pointer to it
-/*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
+/*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback, Pin ReadPin, Pin WritePin) noexcept
 {
 	if (   p_whichCan >= NumCanDevices									// device number out of range
 		|| p_whichPort >= 2												// CAN instance number out of range
@@ -93,7 +93,7 @@ void CanDevice::CanStats::Clear() noexcept
 
 	// setup the hardware
 	__HAL_RCC_FDCAN_CLK_ENABLE();
-  	pinmap_pinout(PB_8, PinMap_CAN_RD);
+  	pinmap_pinout(ReadPin, PinMap_CAN_RD);
   	pinmap_pinout(PB_9, PinMap_CAN_TD);
 
 	HAL_StatusTypeDef status = HAL_FDCAN_Init(&dev.hw);

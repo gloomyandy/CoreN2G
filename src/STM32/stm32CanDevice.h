@@ -169,8 +169,11 @@ public:
 	typedef void (*TxEventCallbackFunction)(uint8_t marker, CanId id, uint16_t timeStamp) noexcept;
 
 	// Initialise one of the CAN interfaces and return a pointer to the corresponding device. Returns null if device is already in use or device number is out of range.
+#if STM32H7
+	static CanDevice *Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming& timing, TxEventCallbackFunction p_txCallback, Pin ReadPin, Pin WritePin) noexcept;
+#else
 	static CanDevice *Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming& timing, TxEventCallbackFunction p_txCallback) noexcept;
-
+#endif
 	// Set the extended ID mask. May only be used while the interface is disabled.
 	void SetExtendedIdMask(uint32_t mask) noexcept;
 
