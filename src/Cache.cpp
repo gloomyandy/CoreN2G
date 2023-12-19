@@ -23,7 +23,10 @@
 
 extern uint32_t _nocache_ram_start;
 extern uint32_t _nocache_ram_end;
-
+#if STM32H7
+extern uint32_t _nocache2_ram_start;
+extern uint32_t _nocache2_ram_end;
+#endif
 # if USE_MPU
 #  include <mpu_armv7.h>
 
@@ -356,7 +359,12 @@ void Cache::Flush(const volatile void *start, size_t length) noexcept
 	if ((SCB->CCR & SCB_CCR_DC_Msk) != 0)			// if data cache is enabled
 	{
 		// The DMA buffer should be entirely inside the non-cached RAM area
+#if STM32H7
+		if ((((const char *)start < (const char *)&_nocache_ram_start) || ((const char *)start + length > (const char *)&_nocache_ram_end)) && 
+			(((const char *)start < (const char *)&_nocache2_ram_start) || ((const char *)start + length > (const char *)&_nocache2_ram_end)))
+#else
 		if ((const char *)start < (const char *)&_nocache_ram_start || (const char *)start + length > (const char *)&_nocache_ram_end)
+#endif
 		{
 			vAssertCalled(__LINE__, __FILE__);
 		}
@@ -371,8 +379,14 @@ void Cache::Invalidate(const volatile void *start, size_t length) noexcept
 # if SAME70 || STM32H7
 	if ((SCB->CCR & SCB_CCR_DC_Msk) != 0)			// if data cache is enabled
 	{
+#if STM32H7
+		// The DMA buffer should be entirely inside the non-cached RAM area
+		if ((((const char *)start < (const char *)&_nocache_ram_start) || ((const char *)start + length > (const char *)&_nocache_ram_end)) && 
+			(((const char *)start < (const char *)&_nocache2_ram_start) || ((const char *)start + length > (const char *)&_nocache2_ram_end)))
+#else
 		// The DMA buffer should be entirely inside the non-cached RAM area, unless we are reading the user signature area
 		if ((const char *)start < (const char *)&_nocache_ram_start || (const char *)start + length > (const char *)&_nocache_ram_end)
+#endif
 		{
 #  if SAME70
 			if (reinterpret_cast<uint32_t>(start) == IFLASH_ADDR)

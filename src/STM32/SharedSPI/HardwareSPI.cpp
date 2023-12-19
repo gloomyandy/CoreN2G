@@ -49,7 +49,9 @@ It is the prefered operating mode when available.
 // FIXME if the buffer is in the D1 none cached area this test will fail.
 extern uint32_t _nocache_ram_start;
 extern uint32_t _nocache_ram_end;
-#define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_nocache_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache_ram_end)))
+extern uint32_t _nocache2_ram_start;
+extern uint32_t _nocache2_ram_end;
+#define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_nocache_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache_ram_end)) || (((const char *)(ptr) >= (const char *)&_nocache2_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache2_ram_end)))
 
 // Create SPI devices the actual configuration is set later
 #if USE_SSP1
