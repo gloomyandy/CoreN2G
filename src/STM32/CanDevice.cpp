@@ -93,8 +93,8 @@ void CanDevice::CanStats::Clear() noexcept
 
 	// setup the hardware
 	__HAL_RCC_FDCAN_CLK_ENABLE();
-  	pinmap_pinout(ReadPin, PinMap_CAN_RD);
-  	pinmap_pinout(PB_9, PinMap_CAN_TD);
+	pinmap_pinout(ReadPin, PinMap_CAN_RD);
+	pinmap_pinout(WritePin, PinMap_CAN_TD);
 
 	HAL_StatusTypeDef status = HAL_FDCAN_Init(&dev.hw);
 	if (status != HAL_OK)
