@@ -85,13 +85,7 @@ extern uint32_t SystemCoreClock;
  * the next task to run using a generic C algorithm that works for all FreeRTOS
  * ports.  Not all FreeRTOS ports have this option.  Defaults to 0 if left
  * undefined. */
-#if defined(__SAME51N19A__) || defined(__SAME51G19A__) || defined(__SAME54P20A__) || defined(__SAME70Q21__) || defined(__SAME70Q20B__) || defined(__SAME70Q21B__) || defined(__SAM4E8E__) || defined(__SAM4S8C__) || defined(__SAM3X8E__) || defined(__SAMD51N19A__)
 # define configUSE_PORT_OPTIMISED_TASK_SELECTION	1
-#elif defined(__SAMC21G18A__) || defined(__RP2040__)
-# define configUSE_PORT_OPTIMISED_TASK_SELECTION	0
-#else
-# error Unsupported processor
-#endif
 
 /* Set configUSE_TICKLESS_IDLE to 1 to use the low power tickless mode.  Set to
  * 0 to keep the tick interrupt running at all times.  Not all FreeRTOS ports
@@ -280,16 +274,10 @@ extern uint32_t SystemCoreClock;
 
 /* Cortex-M specific definitions. */
 #ifdef __NVIC_PRIO_BITS
-	/* __NVIC_PRIO_BITS will be specified when CMSIS is being used. */
+	/* __BVIC_PRIO_BITS will be specified when CMSIS is being used. */
 	#define configPRIO_BITS       		__NVIC_PRIO_BITS
-#elif defined(__SAME51N19A__) || defined(__SAME51G19A__) || defined(__SAME70Q21__) || defined(__SAME70Q20B__) || defined(__SAME70Q21B__) || defined(__SAME54P20A__) || defined(__SAMD51N19A__)
-	#define configPRIO_BITS       		3        /* 7 priority levels */
-#elif defined(__SAM4E8E__) || defined(__SAM4S8C__) || defined(__SAM3X8E__)
-	#define configPRIO_BITS       		4        /* 15 priority levels */
-#elif defined(__SAMC21G18A__) || defined(__RP2040__)
-#	define configPRIO_BITS       		2        /* 4 priority levels */
-#else
-	#error Unknown value for configPRIO_BITS
+#else    
+    #define configPRIO_BITS               4        /* 15 priority levels */
 #endif
 
 /* The lowest interrupt priority that can be used in a call to a "set priority" function. */
@@ -302,7 +290,7 @@ PRIORITY THAN THIS! (higher priorities are lower numeric values. */
 #if configPRIO_BITS == 2
 # define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY	1	// 0 is for high priority interrupts that can't make system calls, 1-3 can make system calls
 #else
-# define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY	3	// 0-2 are for high priority interrupts that can't make system calls, 3-7 or 3-15 can make system calls
+# define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY	5	// 0-2 are for high priority interrupts that can't make system calls, 3-7 or 3-15 can make system calls
 #endif
 
 /* configKERNEL_INTERRUPT_PRIORITY sets the priority of the tick and context
@@ -595,14 +583,8 @@ extern void vAssertCalled( uint32_t ulLine, const char *pcFile ) noexcept __attr
 
 /* Definitions that map the FreeRTOS port interrupt handlers to their CMSIS standard names. */
 
-#ifdef __RP2040__
-#define xPortPendSVHandler isr_pendsv
-#define vPortSVCHandler isr_svcall
-#define xPortSysTickHandler isr_systick			// the name used in the Pico sdk
-#else
 #define xPortPendSVHandler PendSV_Handler
 #define vPortSVCHandler SVC_Handler
 #define xPortSysTickHandler SysTick_Handler		// the name used by everything else
-#endif
 
 #endif /* FREERTOS_CONFIG_H */
