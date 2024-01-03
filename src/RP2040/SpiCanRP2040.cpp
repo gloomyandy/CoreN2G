@@ -316,15 +316,18 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 	{
 		txFifo.waitingTask = TaskBase::GetCallerTaskHandle();
 		txFifoNotFullInterruptEnabled = true;
-		// We may get woken up by other tasks, keep waiting if we need to
-		while (nextTxFifoPutIndex != txFifo.getIndex)
+		bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
+		// In the following, when we call TaskBase::Take() the Move task sometimes gets woken up early by by the DDA ring
+		// Therefore we loop calling Take() until either the call times out or the buffer is free
+		while (!bufferFree)
 		{
-			if (!TaskBase::Take(timeout))
+			const bool timedOut = !TaskBase::Take(timeout);
+			bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
+			if (timedOut)
 			{
 				break;
 			}
 		}
-		bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
 		txFifo.waitingTask = nullptr;
 		txFifoNotFullInterruptEnabled = false;
 	}
