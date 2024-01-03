@@ -98,7 +98,12 @@ usb_write(const uint8_t *buf, uint32_t cnt)
 uint32_t
 usb_available_for_write()
 {
-    return ((transmit_rpos - transmit_wpos - 1) % sizeof(transmit_buf));
+    uint32_t space = (transmit_rpos - transmit_wpos - 1) % sizeof(transmit_buf);
+    if (space == 0)
+    {
+        usb_enable_bulk_in();
+    }
+    return space;
 }
 
 bool

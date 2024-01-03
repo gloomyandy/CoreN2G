@@ -205,6 +205,12 @@ usb_enable_bulk_in()
         usb_notify_bulk_in();
         IrqEnable();
     }
+    else
+    {
+        IrqDisable();
+        peek_rx_queue(USB_CDC_EP_BULK_OUT);
+        IrqEnable();
+    }
 }
 
 int_fast8_t
