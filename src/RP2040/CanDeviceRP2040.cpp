@@ -12,6 +12,7 @@
 #include <CanSettings.h>
 #include <CanMessageBuffer.h>
 #include <General/Bitmap.h>
+#include <CoreNotifyIndices.h>
 #include "VirtualCanRegisters.h"
 #include <cstring>
 
@@ -188,7 +189,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 		// Therefore we loop calling Take() until either the call times out or the buffer is free
 		while (!bufferFree)
 		{
-			const bool timedOut = !TaskBase::Take(timeout);
+			const bool timedOut = !TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout);
 			bufferFree = nextTxFifoPutIndex != virtualRegs.txFifo.getIndex;
 			if (timedOut)
 			{
@@ -418,10 +419,10 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			{
 				return false;
 			}
-			TaskBase::ClearCurrentTaskNotifyCount();
+			TaskBase::ClearCurrentTaskNotifyCount(NotifyIndices::CanDevice);
 			const unsigned int waitingIndex = (unsigned int)whichBuffer;
 			rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
-			const bool success = (getIndex != fifo.putIndex) || (TaskBase::Take(timeout), getIndex != fifo.putIndex);
+			const bool success = (getIndex != fifo.putIndex) || (TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout), getIndex != fifo.putIndex);
 			rxTaskWaiting[waitingIndex] = nullptr;
 			if (!success)
 			{
@@ -605,20 +606,20 @@ void CanDevice::Interrupt() noexcept
 		constexpr unsigned int rxFifo0WaitingIndex = (unsigned int)RxBufferNumber::fifo0;
 		if (ir & VirtualCanRegisters::recdFifo0)
 		{
-			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo0WaitingIndex]);
+			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo0WaitingIndex], NotifyIndices::CanDevice);
 		}
 
 		// Test whether messages have been received into fifo 1
 		constexpr unsigned int rxFifo1WaitingIndex = (unsigned int)RxBufferNumber::fifo1;
 		if (ir & VirtualCanRegisters::recdFifo1)
 		{
-			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo1WaitingIndex]);
+			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo1WaitingIndex], NotifyIndices::CanDevice);
 		}
 
 		// Test whether any messages have been transmitted
 		if (ir & VirtualCanRegisters::txFifoNotFull)
 		{
-			TaskBase::GiveFromISR(txTaskWaiting[(unsigned int)TxBufferNumber::fifo]);
+			TaskBase::GiveFromISR(txTaskWaiting[(unsigned int)TxBufferNumber::fifo], NotifyIndices::CanDevice);
 		}
 	}
 }
