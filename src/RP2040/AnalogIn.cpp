@@ -305,6 +305,7 @@ void AdcClass::ExecuteCallbacks() noexcept
 
 // ADC instances
 static AdcClass *adc;
+static AnalogIn::AdcTaskHookFunction *taskHookFunction = nullptr;
 
 // Main loop executed by the AIN task
 void AnalogIn::TaskLoop(void*) noexcept
@@ -321,6 +322,12 @@ void AnalogIn::TaskLoop(void*) noexcept
 		{
 			conversionStarted = true;
 		}
+
+		if (taskHookFunction != nullptr)
+		{
+			taskHookFunction();
+		}
+
 
 		if (conversionStarted)
 		{
@@ -393,6 +400,14 @@ void AnalogIn::GetDebugInfo(uint32_t &convsStarted, uint32_t &convsCompleted, ui
 	convTimeouts = conversionTimeouts;
 	errs = errors;
 }
+
+AnalogIn::AdcTaskHookFunction *AnalogIn::SetTaskHook(AdcTaskHookFunction *func) noexcept
+{
+	const AdcTaskHookFunction *oldFunc = taskHookFunction;
+	taskHookFunction = func;
+	return oldFunc;
+}
+
 
 #endif
 
