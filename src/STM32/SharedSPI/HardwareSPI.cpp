@@ -3,6 +3,7 @@
 
 #ifdef RTOS
 #include <RTOSIface/RTOSIface.h>
+#include <CoreNotifyIndices.h>
 #endif
 #include "spi_com.h"
 #include "Cache.h"
@@ -262,7 +263,7 @@ void transferComplete(HardwareSPI *spiDevice) noexcept
     if (spiDevice->csPin != NoPin) fastDigitalWriteHigh(spiDevice->csPin);
 #ifdef RTOS
     if (spiDevice->waitingTask != nullptr)
-        spiDevice->waitingTask->GiveFromISR();
+        spiDevice->waitingTask->GiveFromISR(NotifyIndices::HardwareSpi);
 #endif
 }
 
@@ -515,7 +516,7 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
     startTransfer(tx_data, rx_data, len, transferComplete);
     while (transferActive)
     {
-        if (!TaskBase::Take(SPITimeoutMillis))
+        if (!TaskBase::TakeIndexed(NotifyIndices::HardwareSpi, SPITimeoutMillis))
         {
             break;
         }

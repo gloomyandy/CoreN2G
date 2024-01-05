@@ -4,6 +4,7 @@
 #include "CoreImp.h"
 #ifdef RTOS
 #include "FreeRTOS.h"
+#include <CoreNotifyIndices.h>
 #include "semphr.h"
 #include "task.h"
 #endif
@@ -28,7 +29,7 @@ extern "C" void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsdio)
 {
   HardwareSDIO::SDIO1.ioComplete = true;
 #ifdef RTOS
-  TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask);
+  TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask, NotifyIndices::Sdio);
 #endif
 }
 
@@ -36,7 +37,8 @@ extern "C" void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsdio)
 {
   HardwareSDIO::SDIO1.ioComplete = true;
 #ifdef RTOS
-  TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask);
+  TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask, NotifyIndices::Sdio);
+
 #endif
 }    
 
@@ -262,7 +264,7 @@ uint8_t HardwareSDIO::ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t Nu
   while (!ioComplete)
   {
 #ifdef RTOS
-    if(!TaskBase::Take(Timeout)) // timed out
+    if(!TaskBase::TakeIndexed(NotifyIndices::Sdio, Timeout)) // timed out
 #else
     if (millis() - start > Timeout)
 #endif
@@ -314,7 +316,7 @@ uint8_t HardwareSDIO::WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t 
   while (!ioComplete)
   {
 #ifdef RTOS
-    if(!TaskBase::Take(Timeout)) // timed out
+    if(!TaskBase::TakeIndexed(NotifyIndices::Sdio, Timeout)) // timed out
 #else
     if (millis() - start > Timeout)
 #endif

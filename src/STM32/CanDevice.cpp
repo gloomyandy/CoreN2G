@@ -10,6 +10,7 @@
 #if SUPPORT_CAN && STM32H7
 #include <CoreImp.h>
 #include <Cache.h>
+#include <CoreNotifyIndices.h>
 #include <CanSettings.h>
 #include <CanMessageBuffer.h>
 #include <General/Bitmap.h>
@@ -254,7 +255,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 			// Therefore we loop calling Take() until either the call times out or the buffer is free
 			while (!bufferFree)
 			{
-				const bool timedOut = !TaskBase::Take(timeout);
+				const bool timedOut = !TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout);
 				bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(&hw) != 0;
 				if (timedOut)
 				{
@@ -295,7 +296,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 			// Therefore we loop calling Take() until either the call times out or the buffer is free
 			while (!bufferFree)
 			{
-				const bool timedOut = !TaskBase::Take(timeout);
+				const bool timedOut = !TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout);
 				bufferFree = HAL_FDCAN_IsTxBufferMessagePending(&hw, trigMask) == 0;
 				if (timedOut)
 				{
@@ -441,10 +442,10 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 				{
 					return false;
 				}
-				TaskBase::ClearCurrentTaskNotifyCount();
+				TaskBase::ClearCurrentTaskNotifyCount(NotifyIndices::CanDevice);
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
-				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0);
+				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0) || (TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout), HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO0) != 0);
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
 				{
@@ -482,10 +483,10 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 					debugPrintf("Fifo 1 timeout\n");
 					return false;
 				}
-				TaskBase::ClearCurrentTaskNotifyCount();
+				TaskBase::ClearCurrentTaskNotifyCount(NotifyIndices::CanDevice);
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
-				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0) || (TaskBase::Take(timeout), HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0);
+				const bool success = (HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0) || (TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout), HAL_FDCAN_GetRxFifoFillLevel(&hw, FDCAN_RX_FIFO1) != 0);
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
 				{
@@ -526,11 +527,11 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 					debugPrintf("Buffer %d timeout\n", (int)bufferNumber);
 					return false;
 				}
-				TaskBase::ClearCurrentTaskNotifyCount();
+				TaskBase::ClearCurrentTaskNotifyCount(NotifyIndices::CanDevice);
 				const unsigned int waitingIndex = (unsigned int)whichBuffer;
 				rxTaskWaiting[waitingIndex] = TaskBase::GetCallerTaskHandle();
 				rxBuffersWaiting |= ndatMask;
-				const bool success = (HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) != 0 || (TaskBase::Take(timeout), HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) != 0));
+				const bool success = (HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) != 0 || (TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout), HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) != 0));
 				rxBuffersWaiting &= ~ndatMask;
 				rxTaskWaiting[waitingIndex] = nullptr;
 				if (!success)
@@ -794,13 +795,13 @@ void CanDevice::Interrupt() noexcept
 		constexpr unsigned int rxFifo0WaitingIndex = (unsigned int)RxBufferNumber::fifo0;
 		if ((ir & CAN_(IR_RF0N)) != 0)
 		{
-			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo0WaitingIndex]);
+			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo0WaitingIndex], NotifyIndices::CanDevice);
 		}
 
 		constexpr unsigned int rxFifo1WaitingIndex = (unsigned int)RxBufferNumber::fifo1;
 		if ((ir & CAN_(IR_RF1N)) != 0)
 		{
-			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo1WaitingIndex]);
+			TaskBase::GiveFromISR(rxTaskWaiting[rxFifo1WaitingIndex], NotifyIndices::CanDevice);
 		}
 
 		if (ir & CAN_(IR_DRX))
@@ -814,7 +815,7 @@ void CanDevice::Interrupt() noexcept
 				const unsigned int waitingIndex = rxBufferNumber + (unsigned int)RxBufferNumber::buffer0;
 				if (waitingIndex < ARRAY_SIZE(rxTaskWaiting))
 				{
-					TaskBase::GiveFromISR(rxTaskWaiting[waitingIndex]);
+					TaskBase::GiveFromISR(rxTaskWaiting[waitingIndex], NotifyIndices::CanDevice);
 				}
 			}
 		}
@@ -833,13 +834,13 @@ void CanDevice::Interrupt() noexcept
 					const unsigned int waitingIndex = bufferNumber + (unsigned int)TxBufferNumber::buffer0;
 					if (waitingIndex < ARRAY_SIZE(txTaskWaiting))
 					{
-						TaskBase::GiveFromISR(txTaskWaiting[waitingIndex]);
+						TaskBase::GiveFromISR(txTaskWaiting[waitingIndex], NotifyIndices::CanDevice);
 					}
 				}
 				else
 				{
 					// Completed transmission from a transmit FIFO buffer
-					TaskBase::GiveFromISR(txTaskWaiting[(unsigned int)TxBufferNumber::fifo]);
+					TaskBase::GiveFromISR(txTaskWaiting[(unsigned int)TxBufferNumber::fifo], NotifyIndices::CanDevice);
 				}
 			}
 		}
@@ -934,13 +935,13 @@ extern "C" void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, 
 			const unsigned int waitingIndex = bufferNumber + (unsigned int)CanDevice::TxBufferNumber::buffer0;
 			if (waitingIndex < ARRAY_SIZE(dev->txTaskWaiting))
 			{
-				TaskBase::GiveFromISR(dev->txTaskWaiting[waitingIndex]);
+				TaskBase::GiveFromISR(dev->txTaskWaiting[waitingIndex], NotifyIndices::CanDevice);
 			}
 		}
 		else
 		{
 			// Completed transmission from a transmit FIFO buffer
-			TaskBase::GiveFromISR(dev->txTaskWaiting[(unsigned int)CanDevice::TxBufferNumber::fifo]);
+			TaskBase::GiveFromISR(dev->txTaskWaiting[(unsigned int)CanDevice::TxBufferNumber::fifo], NotifyIndices::CanDevice);
 		}
 	}
 }
@@ -950,7 +951,7 @@ extern "C" void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
 	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0)
 	{
-		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo0]);
+		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo0], NotifyIndices::CanDevice);	
 	}
 	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_MESSAGE_LOST) != 0)
 	{
@@ -963,7 +964,7 @@ extern "C" void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t 
 	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
 	if ((RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE) != 0)
 	{
-		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo1]);
+		TaskBase::GiveFromISR(dev->rxTaskWaiting[(unsigned int)CanDevice::RxBufferNumber::fifo1], NotifyIndices::CanDevice);
 	}
 	if ((RxFifo1ITs & FDCAN_IT_RX_FIFO1_MESSAGE_LOST) != 0)
 	{
@@ -982,7 +983,7 @@ extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan
 		const unsigned int waitingIndex = rxBufferNumber + (unsigned int)CanDevice::RxBufferNumber::buffer0;
 		if (waitingIndex < ARRAY_SIZE(dev->rxTaskWaiting))
 		{
-			TaskBase::GiveFromISR(dev->rxTaskWaiting[waitingIndex]);
+			TaskBase::GiveFromISR(dev->rxTaskWaiting[waitingIndex], NotifyIndices::CanDevice);
 		}
 	}
 }

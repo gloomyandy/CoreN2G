@@ -18,6 +18,7 @@
 #include <CanSettings.h>
 #include <CanMessageBuffer.h>
 #include <General/Bitmap.h>
+#include <CoreNotifyIndices.h>
 #include <cstring>
 #undef from
 #define PICO_MUTEX_ENABLE_SDK120_COMPATIBILITY	0	// used by mutex.h which is included by multicore.h
@@ -321,7 +322,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 		// Therefore we loop calling Take() until either the call times out or the buffer is free
 		while (!bufferFree)
 		{
-			const bool timedOut = !TaskBase::Take(timeout);
+			const bool timedOut = !TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout);
 			bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
 			if (timedOut)
 			{
@@ -433,12 +434,12 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			{
 				return false;
 			}
-			TaskBase::ClearCurrentTaskNotifyCount();
+			TaskBase::ClearCurrentTaskNotifyCount(NotifyIndices::CanDevice);
 			fifo.waitingTask = TaskBase::GetCallerTaskHandle();
 			// We may get woken up by other tasks, keep waiting if we need to
 			while (getIndex == fifo.putIndex)
 			{
-				if (!TaskBase::Take(timeout))
+				if (!TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout))
 				{
 					break;
 				}
@@ -550,18 +551,18 @@ void CanDevice::Interrupt() noexcept
 		// Test whether messages have been received into fifo 0
 		if (ir & rxFifo0NotEmpty)
 		{
-			TaskBase::GiveFromISR(rxFifos[0].waitingTask);
+			TaskBase::GiveFromISR(rxFifos[0].waitingTask, NotifyIndices::CanDevice);
 		}
 		// and in fifo1
 		if (ir & rxFifo1NotEmpty)
 		{
-			TaskBase::GiveFromISR(rxFifos[1].waitingTask);
+			TaskBase::GiveFromISR(rxFifos[1].waitingTask, NotifyIndices::CanDevice);
 		}
 
 		// Test whether any messages have been transmitted
 		if (ir & txFifoNotFull)
 		{
-			TaskBase::GiveFromISR(txFifo.waitingTask);
+			TaskBase::GiveFromISR(txFifo.waitingTask, NotifyIndices::CanDevice);
 		}
 	}
 }
