@@ -21,6 +21,7 @@
 
 #if defined (USBCON) && defined(USBD_USE_CDC) && SUPPORT_USB
 #include "Stream.h"
+#include <General/RingBuffer.h>
 //#include "usbd_core.h"
 
 //================================================================================
