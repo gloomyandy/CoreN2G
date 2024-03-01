@@ -242,7 +242,7 @@ uint8_t HardwareSDIO::ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t Nu
 
   while(HAL_SD_GetCardState(&hsd) != HAL_SD_CARD_TRANSFER)
   {
-    if (millis() - start > 5000)
+    if (millis() - start > 1000)
     {
       debugPrintf("SDIO Card not ready on read\n");
       return MSD_ERROR;
@@ -294,7 +294,7 @@ uint8_t HardwareSDIO::WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t 
   uint32_t start = millis();
   while(HAL_SD_GetCardState(&hsd) != HAL_SD_CARD_TRANSFER)
   {
-    if (millis() - start > 5000)
+    if (millis() - start > 1000)
     {
       debugPrintf("SDIO Card not ready on write\n");
       return MSD_ERROR;
