@@ -118,7 +118,7 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
   /* HAL SD initialization */
   int retryCnt = 0;
   do {
-    if (retryCnt > 0) debugPrintf("SDIO Init: retry %d\n", retryCnt);
+    //if (retryCnt > 0) debugPrintf("SDIO Init: retry %d\n", retryCnt);
 #if STM32H7
     __HAL_RCC_SDMMC1_FORCE_RESET();
     __HAL_RCC_SDMMC1_RELEASE_RESET();
@@ -143,11 +143,11 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
     if (sd_state == MSD_OK)
     {
       sd_state = HAL_SD_InitCard(&hsd);
-      if (sd_state != MSD_OK)
-        debugPrintf("HAL_SD_InitCard returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
+      //if (sd_state != MSD_OK)
+        //debugPrintf("HAL_SD_InitCard returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
     }
-    else
-      debugPrintf("HAL_SD_Init returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
+    //else
+      //debugPrintf("HAL_SD_Init returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
 
     /* Configure SD Bus width (4 bits mode selected) */
     if (sd_state == MSD_OK) {
@@ -244,7 +244,7 @@ uint8_t HardwareSDIO::ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t Nu
   {
     if (millis() - start > 1000)
     {
-      debugPrintf("SDIO Card not ready on read\n");
+      //debugPrintf("SDIO Card not ready on read\n");
       return MSD_ERROR;
     }
   }
