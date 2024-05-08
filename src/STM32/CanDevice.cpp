@@ -48,7 +48,7 @@ void CanDevice::CanStats::Clear() noexcept
 	{
 		return nullptr;
 	}
-	debugPrintf("Init Can device %d port %d\n", p_whichCan, p_whichPort);
+	//debugPrintf("Init Can device %d port %d\n", p_whichCan, p_whichPort);
 	// Set up device number, peripheral number, hardware address etc.
 	dev.whichCan = p_whichCan;
 	dev.whichPort = p_whichPort;
