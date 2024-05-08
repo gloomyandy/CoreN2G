@@ -2925,10 +2925,10 @@ int8_t DRV_CANFDSPI_BitTimeConfigureNominal40MHz(CANFDSPI_MODULE_ID index,
             break;
 
         case CAN_1000K_1M:
-            ciNbtcfg.bF.BRP = 0;
-            ciNbtcfg.bF.TSEG1 = 22;
-            ciNbtcfg.bF.TSEG2 = 15;
-            ciNbtcfg.bF.SJW = 7;
+            ciNbtcfg.bF.BRP = 1;
+            ciNbtcfg.bF.TSEG1 = 11 - 1;
+            ciNbtcfg.bF.TSEG2 = (20 - 11 - 1) - 1;
+            ciNbtcfg.bF.SJW = 3 - 1;
             break;
 
         case CAN_125K_500K:
@@ -3008,10 +3008,10 @@ int8_t DRV_CANFDSPI_BitTimeConfigureData40MHz(CANFDSPI_MODULE_ID index,
             break;
 
         case CAN_1000K_1M:
-            ciDbtcfg.bF.BRP = 0;
-            ciDbtcfg.bF.TSEG1 = 22;
-            ciDbtcfg.bF.TSEG2 = 15;
-            ciDbtcfg.bF.SJW = 7;
+            ciDbtcfg.bF.BRP = 1;
+            ciDbtcfg.bF.TSEG1 = 11 - 1;
+            ciDbtcfg.bF.TSEG2 = (20 - 11 - 1) - 1;
+            ciDbtcfg.bF.SJW = 3 - 1;
             // SSP
             ciTdc.bF.TDCOffset = 22;
             ciTdc.bF.TDCValue = tdcValue;
