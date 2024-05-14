@@ -2,7 +2,7 @@
  * CanDevice.cpp
  *
  *  Created on: 8 Jan 2022
- *      Author: Andy
+ *  Author: Andy
  */
 
 #include "CanDevice.h"
@@ -74,7 +74,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	SPILocker lock;
 	uint32_t resetCnt = 0;
 	do {
-		if (resetCnt++ > 5)
+		if (resetCnt++ > 10)
 		{
 			debugPrintf("SPI CAN device not in configuration mode\n");
 			return nullptr;
@@ -83,14 +83,15 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		delay(100);
 		// Hardware should be in configuration mode after a reset
 	} while (DRV_CANFDSPI_OperationModeGet(0) != CAN_CONFIGURATION_MODE);
-	debugPrintf("SPI CAN reset complete after %d attempts\n", (int)resetCnt);
+	if (resetCnt > 1)
+		debugPrintf("SPI CAN reset complete after %d attempts\n", (int)resetCnt);
 	// Configure the clocks
 	CAN_OSC_CTRL osc;
 	DRV_CANFDSPI_OscillatorControlObjectReset(&osc);
-    osc.PllEnable = 0;
-    osc.OscDisable = 0;
-    osc.SclkDivide = 0;
-    osc.ClkOutDivide = 0;
+	osc.PllEnable = 0;
+	osc.OscDisable = 0;
+	osc.SclkDivide = 0;
+	osc.ClkOutDivide = 0;
 	status = DRV_CANFDSPI_OscillatorControlSet(0, osc);
 	if (status != 0)
 	{
@@ -104,9 +105,9 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	// Now configure can fifos and memory usage
 	CAN_CONFIG config;
 	DRV_CANFDSPI_ConfigureObjectReset(&config);
-    config.IsoCrcEnable = 1;
-    config.StoreInTEF = 1;
-    config.TXQEnable = 0;
+	config.IsoCrcEnable = 1;
+	config.StoreInTEF = 1;
+	config.TXQEnable = 0;
 	config.TxBandWidthSharing = 1;
 	config.RestrictReTxAttempts = 1;
 	status = DRV_CANFDSPI_Configure(0, &config);
@@ -125,9 +126,9 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 
 	CAN_TEF_CONFIG tef;
 	DRV_CANFDSPI_TefConfigureObjectReset(&tef);
-    //tef.FifoSize = p_config.txEventFifoSize;
+	//tef.FifoSize = p_config.txEventFifoSize;
 	tef.FifoSize = 8 - 1;
-    tef.TimeStampEnable = 1;
+	tef.TimeStampEnable = 1;
 	status = DRV_CANFDSPI_TefConfigure(0, &tef);
 	if (status != 0)
 	{
@@ -154,8 +155,8 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	{
 		CAN_TX_FIFO_CONFIG txc;
 		DRV_CANFDSPI_TransmitChannelConfigureObjectReset(&txc);
-    	txc.FifoSize = 1 - 1;
-    	txc.PayLoadSize = CAN_PLSIZE_64;
+		txc.FifoSize = 1 - 1;
+		txc.PayLoadSize = CAN_PLSIZE_64;
 		txc.TxAttempts = 3;
 		txc.TxPriority = p_config.numTxBuffers - i;
 		status = DRV_CANFDSPI_TransmitChannelConfigure(0, (CAN_FIFO_CHANNEL)((size_t)TxBufferNumber::buffer0 + i), &txc);
@@ -173,7 +174,7 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 	DRV_CANFDSPI_ReceiveChannelConfigureObjectReset(&rxc);
 	rxc.FifoSize = 8 - 1;
 	rxc.PayLoadSize = CAN_PLSIZE_64;
-    rxc.RxTimeStampEnable = 1;
+	rxc.RxTimeStampEnable = 1;
  	status = DRV_CANFDSPI_ReceiveChannelConfigure(0, (CAN_FIFO_CHANNEL)(RxBufferNumber::fifo0), &rxc);
 	if (status != 0)
 	{
@@ -390,7 +391,7 @@ uint16_t CanDevice::ReadTimeStampCounter() noexcept
 		//DRV_CANFDSPI_TimeStampGet(0, &ts);
 		DRV_CANFDSPI_ReadByteArrayWithCRC(0, cREGADDR_CiTBC, (uint8_t *)&ts, 2, false, &goodCrc);
 #if MCP_DEBUG
-	    if (!goodCrc) crcErrors++;
+		if (!goodCrc) crcErrors++;
 		if (((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80)) rollovers++;
 #endif
 	} while (!goodCrc || ((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80));
@@ -501,7 +502,7 @@ bool CanDevice::AbortMessage(TxBufferNumber whichBuffer) noexcept
 static const uint8_t DLCtoBytes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64};
 static const uint8_t BytesToDLC[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 10, 10, 
 									 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13, 
-                                     14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+									 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
 									 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15};
 
 // Queue a message for sending via a buffer or FIFO. If the buffer isn't free, cancel the previous message (or oldest message in the fifo) and send it anyway.

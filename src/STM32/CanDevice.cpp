@@ -2,7 +2,7 @@
  * CanDevice.cpp
  *
  *  Created on: 8 Jan 2022
- *      Author: Andy
+ *  Author: Andy
  */
 
 #include "CanDevice.h"
@@ -108,7 +108,7 @@ void CanDevice::CanStats::Clear() noexcept
 	for(uint32_t i = 0; i < Init.ExtFiltersNbr; i++)
 		dev.DisableExtendedFilterElement(i);
 	status = HAL_FDCAN_ConfigGlobalFilter(&dev.hw, FDCAN_REJECT, FDCAN_REJECT,
-                                               		FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
+													FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE);
 	if (status != HAL_OK)
 	{
 		debugPrintf("Failed to set global filter %x\n", status);
@@ -149,7 +149,7 @@ void CanDevice::CanStats::Clear() noexcept
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_BUS_OFF, 0);
 	HAL_FDCAN_EnableTxDelayCompensation(&dev.hw);
 	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][0]);
-  	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][1]);
+	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][1]);
 	return &dev;
 }
 
@@ -179,8 +179,8 @@ void CanDevice::DeInit() noexcept
 	if (hw.Instance != nullptr)
 	{
 		Disable();
-  		HAL_NVIC_DisableIRQ(IRQnsByPort[whichPort][0]);
-  		HAL_NVIC_DisableIRQ(IRQnsByPort[whichPort][1]);
+		HAL_NVIC_DisableIRQ(IRQnsByPort[whichPort][0]);
+		HAL_NVIC_DisableIRQ(IRQnsByPort[whichPort][1]);
 		HAL_FDCAN_DeInit(&hw);
 		__HAL_RCC_FDCAN_FORCE_RESET();
 		__HAL_RCC_FDCAN_RELEASE_RESET();
@@ -247,7 +247,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 
 			{
 				AtomicCriticalSectionLocker lock;
-      			SET_BIT(hw.Instance->TXBTIE, trigMask);
+	  			SET_BIT(hw.Instance->TXBTIE, trigMask);
 			}
 
 			bufferFree = HAL_FDCAN_GetTxFifoFreeLevel(&hw) != 0;
@@ -266,7 +266,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 
 			{
 				AtomicCriticalSectionLocker lock;
-      			CLEAR_BIT(hw.Instance->TXBTIE, trigMask);
+				CLEAR_BIT(hw.Instance->TXBTIE, trigMask);
 			}
 		}
 #else
@@ -288,7 +288,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 			txTaskWaiting[(unsigned int)whichBuffer] = TaskBase::GetCallerTaskHandle();
 			{
 				AtomicCriticalSectionLocker lock;
-      			SET_BIT(hw.Instance->TXBTIE, trigMask);
+				SET_BIT(hw.Instance->TXBTIE, trigMask);
 			}
 			bufferFree = HAL_FDCAN_IsTxBufferMessagePending(&hw, trigMask) == 0;
 
@@ -307,7 +307,7 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 			txTaskWaiting[(unsigned int)whichBuffer] = nullptr;
 			{
 				AtomicCriticalSectionLocker lock;
-      			CLEAR_BIT(hw.Instance->TXBTIE, trigMask);
+				CLEAR_BIT(hw.Instance->TXBTIE, trigMask);
 			}
 		}
 #else
@@ -341,7 +341,7 @@ unsigned int CanDevice::NumTxMessagesPending(TxBufferNumber whichBuffer) noexcep
 static const uint8_t DLCtoBytes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64};
 static const uint8_t BytesToDLC[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 10, 10, 
 									 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13, 
-                                     14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+									 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
 									 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15};
 
 // Queue a message for sending via a buffer or FIFO. If the buffer isn't free, cancel the previous message (or oldest message in the fifo) and send it anyway.
@@ -727,15 +727,15 @@ void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
 {
 	UpdateLocalCanTiming(timing);				// set up nbtp and dbtp variables
 	Disable();
-  	hw.Instance->NBTP = ((((uint32_t)hw.Init.NominalSyncJumpWidth - 1U) << FDCAN_NBTP_NSJW_Pos) |
-                            (((uint32_t)hw.Init.NominalTimeSeg1 - 1U) << FDCAN_NBTP_NTSEG1_Pos)    |
-                            (((uint32_t)hw.Init.NominalTimeSeg2 - 1U) << FDCAN_NBTP_NTSEG2_Pos)    |
-                            (((uint32_t)hw.Init.NominalPrescaler - 1U) << FDCAN_NBTP_NBRP_Pos));
+	hw.Instance->NBTP = ((((uint32_t)hw.Init.NominalSyncJumpWidth - 1U) << FDCAN_NBTP_NSJW_Pos) |
+							(((uint32_t)hw.Init.NominalTimeSeg1 - 1U) << FDCAN_NBTP_NTSEG1_Pos)	|
+							(((uint32_t)hw.Init.NominalTimeSeg2 - 1U) << FDCAN_NBTP_NTSEG2_Pos)	|
+							(((uint32_t)hw.Init.NominalPrescaler - 1U) << FDCAN_NBTP_NBRP_Pos));
 
-    hw.Instance->DBTP = ((((uint32_t)hw.Init.DataSyncJumpWidth - 1U) << FDCAN_DBTP_DSJW_Pos) |
-                              (((uint32_t)hw.Init.DataTimeSeg1 - 1U) << FDCAN_DBTP_DTSEG1_Pos)    |
-                              (((uint32_t)hw.Init.DataTimeSeg2 - 1U) << FDCAN_DBTP_DTSEG2_Pos)    |
-                              (((uint32_t)hw.Init.DataPrescaler - 1U) << FDCAN_DBTP_DBRP_Pos));
+	hw.Instance->DBTP = ((((uint32_t)hw.Init.DataSyncJumpWidth - 1U) << FDCAN_DBTP_DSJW_Pos) |
+							  (((uint32_t)hw.Init.DataTimeSeg1 - 1U) << FDCAN_DBTP_DTSEG1_Pos)	|
+							  (((uint32_t)hw.Init.DataTimeSeg2 - 1U) << FDCAN_DBTP_DTSEG2_Pos)	|
+							  (((uint32_t)hw.Init.DataPrescaler - 1U) << FDCAN_DBTP_DBRP_Pos));
 	Enable();
 }
 
@@ -767,8 +767,8 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 	FDCAN_InitTypeDef& Init = hw.Init;
 	Init.NominalPrescaler = prescaler; /* tq = NominalPrescaler x (1/fdcan_ker_ck) */
 	Init.NominalSyncJumpWidth = jumpWidth;
-  	Init.NominalTimeSeg1 = tseg1; /* NominalTimeSeg1 = Propagation_segment + Phase_segment_1 */
-  	Init.NominalTimeSeg2 = tseg2;
+	Init.NominalTimeSeg1 = tseg1; /* NominalTimeSeg1 = Propagation_segment + Phase_segment_1 */
+	Init.NominalTimeSeg2 = tseg2;
 	Init.DataPrescaler = prescaler;
 	Init.DataSyncJumpWidth = jumpWidth;
 	Init.DataTimeSeg1 = tseg1; /* DataTimeSeg1 = Propagation_segment + Phase_segment_1 */
