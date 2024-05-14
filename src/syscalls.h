@@ -73,8 +73,13 @@ extern "C" void * _sbrk(ptrdiff_t incr) noexcept
 void *CoreAllocPermanent(size_t sz, std::align_val_t align) noexcept
 {
 #if STM32F4
-	return CoreAllocCCMRAMPermanent(sz, align);
-#else
+	void *newmem = CoreAllocCCMRAMPermanent(sz, align);
+	if (newmem != nullptr)
+	{
+		return newmem;
+	}
+	// if we do not have any CCMRAM available try "normal ram"
+#endif
 	char * const newHeapLimit = reinterpret_cast<char *>(reinterpret_cast<uint32_t>(heapLimit - sz) & ~((uint32_t)align - 1));
 	if (newHeapLimit < heapTop)
 	{
@@ -82,7 +87,6 @@ void *CoreAllocPermanent(size_t sz, std::align_val_t align) noexcept
 	}
 	heapLimit = newHeapLimit;
 	return newHeapLimit;
-#endif
 }
 
 /**

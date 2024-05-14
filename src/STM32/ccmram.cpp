@@ -17,7 +17,7 @@ void *CoreAllocCCMRAMPermanent(size_t sz, std::align_val_t align) noexcept
 	char * const newHeapLimit = reinterpret_cast<char *>(reinterpret_cast<uint32_t>(ccmHeapLimit - sz) & ~((uint32_t)align - 1));
 	if (newHeapLimit < ccmHeapTop)
 	{
-		OutOfMemoryHandler();
+		return nullptr;
 	}
 	ccmHeapLimit = newHeapLimit;
 	return newHeapLimit;
