@@ -362,15 +362,17 @@ PRIORITY THAN THIS! (higher priorities are lower numeric values. */
 /* Run time and task stats gathering related definitions. *********************/
 /******************************************************************************/
 
+#define configRUN_TIME_COUNTER_TYPE				uint64_t
+
 /* Set configGENERATE_RUN_TIME_STATS to 1 to have FreeRTOS collect data on the
  * processing time used by each task.  Set to 0 to not collect the data.  The
  * application writer needs to provide a clock source if set to 1.  Defaults to 0
  * if left undefined.  See https://www.freertos.org/rtos-run-time-stats.html. */
-extern uint32_t StepTimerGetTimerTicks(void) noexcept;
-extern uint32_t TaskResetRunTimeCounter(void) noexcept;
+extern configRUN_TIME_COUNTER_TYPE TaskGetRunTimeTicks(void) noexcept;
+extern configRUN_TIME_COUNTER_TYPE TaskResetRunTimeCounter(void) noexcept;
 #define configGENERATE_RUN_TIME_STATS	1
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()	(void)TaskResetRunTimeCounter()
-#define portGET_RUN_TIME_COUNTER_VALUE()			StepTimerGetTimerTicks()
+#define portGET_RUN_TIME_COUNTER_VALUE()			TaskGetRunTimeTicks()
 
 /* Set configUSE_TRACE_FACILITY to include additional task structure members
  * are used by trace and visualisation functions and tools.  Set to 0 to exclude
