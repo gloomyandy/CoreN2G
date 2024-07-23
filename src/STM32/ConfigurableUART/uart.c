@@ -43,20 +43,6 @@ extern "C" {
 #if defined(HAL_UART_MODULE_ENABLED)
 extern void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
-/* If DEBUG_UART is not defined assume this is the one linked to PIN_SERIAL_TX */
-#if !defined(DEBUG_UART)
-#if defined(PIN_SERIAL_TX)
-#define DEBUG_UART          pinmap_peripheral(digitalPinToPinName(PIN_SERIAL_TX), PinMap_UART_TX)
-#define DEBUG_PINNAME_TX    digitalPinToPinName(PIN_SERIAL_TX)
-#else
-/* No debug UART defined */
-#define DEBUG_UART          NP
-#define DEBUG_PINNAME_TX    NC
-#endif
-#endif
-#if !defined(DEBUG_UART_BAUDRATE)
-#define DEBUG_UART_BAUDRATE 9600
-#endif
 
 /* @brief uart caracteristics */
 typedef enum {
@@ -98,8 +84,6 @@ typedef enum {
 
 static UART_HandleTypeDef *uart_handlers[UART_NUM] = {NULL};
 
-static serial_t serial_debug = { .uart = NP, .index = UART_NUM };
-
 /* Aim of the function is to get serial_s pointer using huart pointer */
 /* Highly inspired from magical linux kernel's "container_of" */
 serial_t inline *get_serial_obj(UART_HandleTypeDef *huart)
@@ -135,7 +119,8 @@ void uart_init(serial_t *obj, uint32_t baudrate, uint32_t databits, uint32_t par
     debugPrintf("ERROR: at least one UART pin has no peripheral\n");
     return;
   }
-
+  obj->hw_error = obj->rx_full = 0;
+ 
   /*
    * Get the peripheral name (USART1, USART2, ...) from the pin
    * and assign it to the object
@@ -311,58 +296,7 @@ void uart_init(serial_t *obj, uint32_t baudrate, uint32_t databits, uint32_t par
   huart->Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
 #endif
 
-#if 0
-#if defined(LPUART1_BASE)
-  /*
-   * Note that LPUART clock source must be in the range
-   * [3 x baud rate, 4096 x baud rate]
-   * check Reference Manual
-   */
-  if (obj->uart == LPUART1) {
-    if (baudrate <= 9600) {
-#if defined(USART_CR3_UCESM)
-      HAL_UARTEx_EnableClockStopMode(huart);
-#endif
-      HAL_UARTEx_EnableStopMode(huart);
-    } else {
-#if defined(USART_CR3_UCESM)
-      HAL_UARTEx_DisableClockStopMode(huart);
-#endif
-      HAL_UARTEx_DisableStopMode(huart);
-    }
-    /* Trying default LPUART clock source */
-    if (HAL_UART_Init(huart) == HAL_OK) {
-      return;
-    }
-    /* Trying to change LPUART clock source */
-    /* If baudrate is lower than or equal to 9600 try to change to LSE */
-    if (baudrate <= 9600) {
-      /* Enable the clock if not already set by user */
-      enableClock(LSE_CLOCK);
 
-      __HAL_RCC_LPUART1_CONFIG(RCC_LPUART1CLKSOURCE_LSE);
-      if (HAL_UART_Init(huart) == HAL_OK) {
-        return;
-      }
-    }
-    if (__HAL_RCC_GET_FLAG(RCC_FLAG_HSIRDY)) {
-      __HAL_RCC_LPUART1_CONFIG(RCC_LPUART1CLKSOURCE_HSI);
-      if (HAL_UART_Init(huart) == HAL_OK) {
-        return;
-      }
-    }
-#ifndef STM32H7xx
-    __HAL_RCC_LPUART1_CONFIG(RCC_LPUART1CLKSOURCE_PCLK1);
-    if (HAL_UART_Init(huart) == HAL_OK) {
-      return;
-    }
-    __HAL_RCC_LPUART1_CONFIG(RCC_LPUART1CLKSOURCE_SYSCLK);
-#else
-    __HAL_RCC_LPUART1_CONFIG(RCC_LPUART1CLKSOURCE_CSI);
-#endif
-  }
-#endif
-#endif
   if (HAL_UART_Init(huart) != HAL_OK) {
     return;
   }
@@ -484,75 +418,9 @@ void uart_deinit(serial_t *obj)
 
   HAL_UART_DeInit(uart_handlers[obj->index]);
 
-  /* Release uart debug to ensure init */
-  if (serial_debug.index == obj->index) {
-    serial_debug.index = UART_NUM;
-  }
 }
 
-#if 0
-#if defined(HAL_PWR_MODULE_ENABLED) && defined(UART_IT_WUF)
-/**
-  * @brief  Function called to configure the uart interface for low power
-  * @param  obj : pointer to serial_t structure
-  * @retval None
-  */
-void uart_config_lowpower(serial_t *obj)
-{
-  if (obj == NULL) {
-    return;
-  }
-  /* Ensure HSI clock is enable */
-  enableClock(HSI_CLOCK);
 
-  /* Configure HSI as source clock for low power wakeup clock */
-  switch (obj->index) {
-#if defined(USART1_BASE)
-    case UART1_INDEX:
-      if (__HAL_RCC_GET_USART1_SOURCE() != RCC_USART1CLKSOURCE_HSI) {
-        __HAL_RCC_USART1_CONFIG(RCC_USART1CLKSOURCE_HSI);
-      }
-      break;
-#endif
-#if defined(USART2_BASE) && defined(__HAL_RCC_USART2_CONFIG)
-    case UART2_INDEX:
-      if (__HAL_RCC_GET_USART2_SOURCE() != RCC_USART2CLKSOURCE_HSI) {
-        __HAL_RCC_USART2_CONFIG(RCC_USART2CLKSOURCE_HSI);
-      }
-      break;
-#endif
-#if defined(USART3_BASE) && defined(__HAL_RCC_USART3_CONFIG)
-    case UART3_INDEX:
-      if (__HAL_RCC_GET_USART3_SOURCE() != RCC_USART3CLKSOURCE_HSI) {
-        __HAL_RCC_USART3_CONFIG(RCC_USART3CLKSOURCE_HSI);
-      }
-      break;
-#endif
-#if defined(UART4_BASE) && defined(__HAL_RCC_UART4_CONFIG)
-    case UART4_INDEX:
-      if (__HAL_RCC_GET_UART4_SOURCE() != RCC_UART4CLKSOURCE_HSI) {
-        __HAL_RCC_UART4_CONFIG(RCC_UART4CLKSOURCE_HSI);
-      }
-      break;
-#endif
-#if defined(UART5_BASE) && defined(__HAL_RCC_UART5_CONFIG)
-    case UART5_INDEX:
-      if (__HAL_RCC_GET_UART5_SOURCE() != RCC_UART5CLKSOURCE_HSI) {
-        __HAL_RCC_UART5_CONFIG(RCC_UART5CLKSOURCE_HSI);
-      }
-      break;
-#endif
-#if defined(LPUART1_BASE) && defined(__HAL_RCC_LPUART1_CONFIG)
-    case LPUART1_INDEX:
-      if (__HAL_RCC_GET_LPUART1_SOURCE() != RCC_LPUART1CLKSOURCE_HSI) {
-        __HAL_RCC_LPUART1_CONFIG(RCC_LPUART1CLKSOURCE_HSI);
-      }
-      break;
-#endif
-  }
-}
-#endif
-#endif
 
 /**
   * @brief  write the data on the uart
@@ -570,76 +438,82 @@ size_t uart_write(serial_t *obj, uint8_t data, uint16_t size)
   }
 }
 
-/**
-  * @brief  Function called to initialize the debug uart interface
-  * @note   Call only if debug U(S)ART peripheral is not already initialized
-  *         by a Serial instance
-  *         Default config: 8N1
-  * @retval None
-  */
-void uart_debug_init(void)
+int8_t uart_get_port_number(serial_t *obj)
 {
-  if (DEBUG_UART != NP) {
-    serial_debug.pin_rx = pinmap_pin(DEBUG_UART, PinMap_UART_RX);
-#if defined(DEBUG_PINNAME_TX)
-    serial_debug.pin_tx = DEBUG_PINNAME_TX;
-#else
-    serial_debug.pin_tx = pinmap_pin(DEBUG_UART, PinMap_UART_TX);
-#endif
-
-    uart_init(&serial_debug, DEBUG_UART_BAUDRATE, UART_WORDLENGTH_8B, UART_PARITY_NONE, UART_STOPBITS_1);
-  }
-}
-
-/**
-  * @brief  write the data on the uart: used by printf for debug only (syscalls)
-  * @param  data : bytes to write
-  * @param  size : number of data to write
-  * @retval The number of bytes written
-  */
-size_t uart_debug_write(uint8_t *data, uint32_t size)
-{
-  uint32_t tickstart = HAL_GetTick();
-
-  if (DEBUG_UART == NP) {
-    return 0;
-  }
-  if (serial_debug.index >= UART_NUM) {
-    /* Search if DEBUG_UART already initialized */
-    for (serial_debug.index = 0; serial_debug.index < UART_NUM; serial_debug.index++) {
-      if (uart_handlers[serial_debug.index] != NULL) {
-        if (DEBUG_UART == uart_handlers[serial_debug.index]->Instance) {
-          break;
-        }
-      }
-    }
-
-    if (serial_debug.index >= UART_NUM) {
-      /* DEBUG_UART not initialized */
-      uart_debug_init();
-      if (serial_debug.index >= UART_NUM) {
-        return 0;
-      }
-    } else {
-      serial_t *obj = get_serial_obj(uart_handlers[serial_debug.index]);
-      if (obj) {
-        serial_debug.irq = obj->irq;
-      }
-    }
-  }
-
-  HAL_NVIC_DisableIRQ(serial_debug.irq);
-
-  while (HAL_UART_Transmit(uart_handlers[serial_debug.index], data, size, TX_TIMEOUT) != HAL_OK) {
-    if ((HAL_GetTick() - tickstart) >=  TX_TIMEOUT) {
-      size = 0;
+  switch (obj->index) {
+#if defined(USART1_BASE)
+    case UART1_INDEX:
+      return 1;
       break;
-    }
+#endif
+#if defined(USART2_BASE)
+    case UART2_INDEX:
+      return 2;
+      break;
+#endif
+#if defined(USART3_BASE)
+    case UART3_INDEX:
+      return 3;
+      break;
+#endif
+#if defined(UART4_BASE)
+    case UART4_INDEX:
+      return 4;
+      break;
+#elif defined(USART4_BASE)
+    case UART4_INDEX:
+      return 4;
+      break;
+#endif
+#if defined(UART5_BASE)
+    case UART5_INDEX:
+      return 5;
+      break;
+#elif defined(USART5_BASE)
+    case UART5_INDEX:
+      return 5;
+      break;
+#endif
+#if defined(USART6_BASE)
+    case UART6_INDEX:
+      return 6;
+      break;
+#endif
+#if defined(LPUART1_BASE)
+    case LPUART1_INDEX:
+      return 1;
+      break;
+#endif
+#if defined(UART7_BASE)
+    case UART7_INDEX:
+       return 7;
+      break;
+#elif defined(USART7_BASE)
+    case UART7_INDEX:
+      return 7;
+      break;
+#endif
+#if defined(UART8_BASE)
+    case UART8_INDEX:
+      return 8;
+      break;
+#elif defined(USART8_BASE)
+    case UART8_INDEX:
+      return 8;
+      break;
+#endif
+#if defined(UART9_BASE)
+    case UART9_INDEX:
+      return 9;
+      break;
+#endif
+#if defined(UART10_BASE)
+    case UART10_INDEX:
+      return 10;
+      break;
+#endif
   }
-
-  HAL_NVIC_EnableIRQ(serial_debug.irq);
-
-  return size;
+  return -1;
 }
 
 /**
@@ -923,7 +797,7 @@ static void UART_IRQHandler(UART_HandleTypeDef *huart)
         UART_Receive_IT(huart);
       }
       // record error and restart
-      HAL_UART_ErrorCallback(huart);
+      UART_ErrorCallback(huart);
       huart->ErrorCode = HAL_UART_ERROR_NONE;
     }
     return;
@@ -966,7 +840,7 @@ static void UART_IRQHandler(UART_HandleTypeDef *huart)
       }
 
       // record error and restart
-      HAL_UART_ErrorCallback(huart);
+      UART_ErrorCallback(huart);
       huart->ErrorCode = HAL_UART_ERROR_NONE;
     }
     return;
@@ -1186,17 +1060,6 @@ void UART10_IRQHandler(void)
   UART_IRQHandler(uart_handlers[UART10_INDEX]);
 }
 #endif
-
-/**
-  * @brief  HAL UART Call Back
-  * @param  UART handler
-  * @retval None
-  */
-void HAL_UARTEx_WakeupCallback(UART_HandleTypeDef *huart)
-{
-  serial_t *obj = get_serial_obj(huart);
-  HAL_UART_Receive_IT(huart,  &(obj->recv), 1);
-}
 #endif /* HAL_UART_MODULE_ENABLED */
 
 #ifdef __cplusplus

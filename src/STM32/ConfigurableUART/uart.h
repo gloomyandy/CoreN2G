@@ -52,16 +52,7 @@
 extern "C" {
 #endif
 
-#if !defined(HAL_UART_MODULE_ENABLED)
-#define serial_t void*
-#else
-
-#ifndef UART_IRQ_PRIO
-#define UART_IRQ_PRIO       1
-#endif
-#ifndef UART_IRQ_SUBPRIO
-#define UART_IRQ_SUBPRIO    0
-#endif
+#if defined(HAL_UART_MODULE_ENABLED)
 
 /* Exported types ------------------------------------------------------------*/
 typedef struct serial_s serial_t;
@@ -76,11 +67,10 @@ struct serial_s {
   UART_HandleTypeDef handle;
   PinName pin_tx;
   PinName pin_rx;
+  int8_t index;
   IRQn_Type irq;
-  uint8_t index;
-  uint8_t recv;
-  uint8_t *rx_buff;
-  uint8_t *tx_buff;
+  uint8_t rx_buff[SERIAL_RX_BUFFER_SIZE];
+  uint8_t tx_buff[SERIAL_TX_BUFFER_SIZE];
   volatile uint32_t rx_tail;
   volatile uint32_t tx_head;
   volatile uint32_t rx_head;
@@ -178,18 +168,13 @@ struct serial_s {
 /* Exported functions ------------------------------------------------------- */
 void uart_init(serial_t *obj, uint32_t baudrate, uint32_t databits, uint32_t parity, uint32_t stopbits);
 void uart_deinit(serial_t *obj);
-#if defined(HAL_PWR_MODULE_ENABLED) && defined(UART_IT_WUF)
-void uart_config_lowpower(serial_t *obj);
-#endif
 size_t uart_write(serial_t *obj, uint8_t data, uint16_t size);
 void uart_start_rx(serial_t *obj);
 void uart_start_tx(serial_t *obj);
 void uart_set_interrupt_priority(serial_t *obj, uint32_t priority);
-
+int8_t uart_get_port_number(serial_t *obj);
 uint8_t serial_tx_active(serial_t *obj);
 uint8_t serial_rx_active(serial_t *obj);
-
-size_t uart_debug_write(uint8_t *data, uint32_t size);
 
 #endif /* HAL_UART_MODULE_ENABLED */
 #ifdef __cplusplus
