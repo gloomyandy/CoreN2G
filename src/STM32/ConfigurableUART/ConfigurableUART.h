@@ -8,18 +8,16 @@
 #include "Stream.h"
 #include "Print.h"
 
-#include "uart.h"
+#ifdef RTOS
+# include <RTOSIface/RTOSIface.h>
+#endif
+#if !defined(SERIAL_TX_BUFFER_SIZE)
+#define SERIAL_TX_BUFFER_SIZE 128
+#endif
+#if !defined(SERIAL_RX_BUFFER_SIZE)
+#define SERIAL_RX_BUFFER_SIZE 128
+#endif
 
-// Define config for Serial.begin(baud, config);
-// below configs are not supported by STM32
-//#define SERIAL_5N1 0x00
-//#define SERIAL_5N2 0x08
-//#define SERIAL_5E1 0x20
-//#define SERIAL_5E2 0x28
-//#define SERIAL_5O1 0x30
-//#define SERIAL_5O2 0x38
-//#define SERIAL_6N1 0x02
-//#define SERIAL_6N2 0x0A
 
 #ifdef UART_WORDLENGTH_7B
 #define SERIAL_7N1 0x04
@@ -90,13 +88,44 @@ public:
 
 	// Get and clear the errors
 	Errors GetAndClearErrors() noexcept;
-
-  protected:
-    serial_t _serial;
+    void UART_IRQHandler() noexcept;
 
 private:
     size_t writeBlock(const uint8_t *buffer, size_t size) noexcept;
+    void init(uint32_t baudrate, uint32_t databits, uint32_t parity, uint32_t stopbits) noexcept;
+    void deinit() noexcept;
+    void start_rx() noexcept;
+    void start_tx() noexcept;
+    void set_interrupt_priority(uint32_t priority) noexcept;
+    int8_t get_port_number() noexcept;
+    uint8_t serial_tx_active() noexcept;
+    uint8_t serial_rx_active() noexcept;
+    uint32_t rx_available() noexcept;
+    uint32_t tx_available() noexcept;
+    void UART_ErrorCallback() noexcept;
+    HAL_StatusTypeDef UART_Receive_IT() noexcept;
+    HAL_StatusTypeDef UART_Transmit_IT() noexcept;
+    HAL_StatusTypeDef UART_EndTransmit_IT() noexcept;
     InterruptCallbackFn interruptCallback;
+    USART_TypeDef *uart;
+    UART_HandleTypeDef handle;
+    PinName pin_tx;
+    PinName pin_rx;
+    IRQn_Type irq;
+    uint8_t prio;
+    uint8_t rx_buff[SERIAL_RX_BUFFER_SIZE];
+    uint8_t tx_buff[SERIAL_TX_BUFFER_SIZE];
+    volatile uint32_t rx_tail;
+    volatile uint32_t tx_head;
+    volatile uint32_t rx_head;
+    volatile uint32_t tx_tail;
+
+#ifdef RTOS
+    volatile TaskHandle txWaitingTask;
+#endif
+
+    uint32_t rx_full;
+    uint32_t hw_error;
 };
 
 extern ConfigurableUART UART_Slot0;
