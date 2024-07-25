@@ -21,6 +21,7 @@ ConfigurableUART::ConfigurableUART() noexcept
 {
     uart = nullptr;
     prio = 0;
+    txWaitingTask = nullptr;
 }
 
 
