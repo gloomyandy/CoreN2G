@@ -79,6 +79,14 @@ extern "C" unsigned int __atomic_fetch_add_4(volatile void *ptr, unsigned int va
 	return ret;
 }
 
+extern "C" unsigned int __atomic_exchange_4(volatile void *ptr, unsigned int val, int memorder) noexcept
+{
+	const irqflags_t flags = IrqSave();
+	const unsigned int ret = *(volatile unsigned int*)ptr;
+	*(volatile unsigned int*)ptr = val;
+	IrqRestore(flags);
+	return ret;
+}
 #endif
 
 // End
