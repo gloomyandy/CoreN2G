@@ -28,7 +28,704 @@
 
 #ifdef HAL_TIM_MODULE_ENABLED
 
+#if 1
 /* Private Defines */
+#define PIN_NOT_USED 0xFF
+#define MAX_RELOAD ((1 << 16) - 1) // Currently even 32b timers are used as 16b to have generic behavior
+extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
+
+/* Private Variables */
+HardwareTimerObj_t *HardwareTimer_Handle[TIMER_NUM] = {NULL};
+
+static uint32_t get_pwm_channel(PinName pin)
+{
+  uint32_t function = pinmap_function(pin, PinMap_PWM);
+  uint32_t channel = 0;
+  switch (STM_PIN_CHANNEL(function)) {
+    case 1:
+      channel = TIM_CHANNEL_1;
+      break;
+    case 2:
+      channel = TIM_CHANNEL_2;
+      break;
+    case 3:
+      channel = TIM_CHANNEL_3;
+      break;
+    case 4:
+      channel = TIM_CHANNEL_4;
+      break;
+    default:
+      channel = 0;
+      break;
+  }
+  return channel;
+}
+/**
+  * @brief  HardwareTimer constructor: set default configuration values
+  * @param  Timer instance ex: TIM1, ...
+  * @retval None
+  */
+HardwareTimer::HardwareTimer(TIM_TypeDef *instance)
+{
+  uint32_t index = get_timer_index(instance);
+  if (index == UNKNOWN_TIMER) {
+    Error_Handler();
+  }
+
+  HardwareTimer_Handle[index] = &_HardwareTimerObj;
+
+  _HardwareTimerObj.handle.Instance = instance;
+  _HardwareTimerObj.handle.Channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED;
+  _HardwareTimerObj.handle.hdma[0] = NULL;
+  _HardwareTimerObj.handle.hdma[1] = NULL;
+  _HardwareTimerObj.handle.hdma[2] = NULL;
+  _HardwareTimerObj.handle.hdma[3] = NULL;
+  _HardwareTimerObj.handle.hdma[4] = NULL;
+  _HardwareTimerObj.handle.hdma[5] = NULL;
+  _HardwareTimerObj.handle.hdma[6] = NULL;
+  _HardwareTimerObj.handle.Lock = HAL_UNLOCKED;
+  _HardwareTimerObj.handle.State = HAL_TIM_STATE_RESET;
+
+  _HardwareTimerObj.handle.Instance = instance;
+  _HardwareTimerObj.__this = (void *)this;
+
+  // Enable Timer clock
+  enableTimerClock(&(_HardwareTimerObj.handle));
+
+  // Configure HAL structure for all channels
+  for (int i = 0; i < TIMER_CHANNELS; i++) {
+    OCMode[i] = TIMER_NOT_USED;
+  }
+}
+
+/**
+  * @brief  Pause HardwareTimer: stop timer
+  * @param  None
+  * @retval None
+  */
+void HardwareTimer::pause()
+{
+  HAL_TIM_Base_Stop_IT(&(_HardwareTimerObj.handle));
+}
+
+/**
+  * @brief  Start or resume HardwareTimer: all channels are resumed, interrupts are enabled if necessary
+  * @param  None
+  * @retval None
+  */
+void HardwareTimer::resume(void)
+{
+  _HardwareTimerObj.handle.Init.CounterMode = TIM_COUNTERMODE_UP;
+  _HardwareTimerObj.handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+#if defined(TIM_RCR_REP)
+  _HardwareTimerObj.handle.Init.RepetitionCounter = 0;
+#endif
+  _HardwareTimerObj.handle.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  HAL_TIM_Base_Init(&(_HardwareTimerObj.handle));
+
+  HAL_TIM_Base_Start(&(_HardwareTimerObj.handle));
+
+  resumeChannel(1);
+  resumeChannel(2);
+  resumeChannel(3);
+  resumeChannel(4);
+}
+
+/**
+  * @brief  Convert arduino  into HAL channel
+  * @param  Arduino channel [1..4]
+  * @retval HAL channel. return -1 if arduino channel is invalid
+  */
+int HardwareTimer::getChannel(uint32_t channel)
+{
+  uint32_t return_value;
+
+  switch (channel) {
+    case 1:
+      return_value = TIM_CHANNEL_1;
+      break;
+    case 2:
+      return_value = TIM_CHANNEL_2;
+      break;
+    case 3:
+      return_value = TIM_CHANNEL_3;
+      break;
+    case 4:
+      return_value = TIM_CHANNEL_4;
+      break;
+    default:
+      return_value = -1;
+  }
+  return return_value;
+}
+
+/**
+  * @brief  Configure specified channel and resume/start timer
+  * @param  Arduino channel [1..4]
+  * @retval None
+  */
+void HardwareTimer::resumeChannel(uint32_t channel)
+{
+  int timChannel = getChannel(channel);
+  if (timChannel == -1) {
+    Error_Handler();
+  }
+  if (IS_TIM_PWM_MODE(OCMode[channel - 1])) {
+    TIM_OC_InitTypeDef channelOC;
+    memset(&channelOC, 0, sizeof(channelOC));
+    switch (timChannel)
+    {
+    case TIM_CHANNEL_1:
+      channelOC.Pulse = _HardwareTimerObj.handle.Instance->CCR1;
+      break;
+    case TIM_CHANNEL_2:
+      channelOC.Pulse = _HardwareTimerObj.handle.Instance->CCR2;
+      break;
+    case TIM_CHANNEL_3:
+      channelOC.Pulse = _HardwareTimerObj.handle.Instance->CCR3;
+      break;
+    case TIM_CHANNEL_4:
+      channelOC.Pulse = _HardwareTimerObj.handle.Instance->CCR4;
+      break;
+    }
+    channelOC.OCMode = OCMode[channel -1];
+    HAL_TIM_PWM_ConfigChannel(&(_HardwareTimerObj.handle), &channelOC, timChannel);
+    HAL_TIM_PWM_Start(&(_HardwareTimerObj.handle), timChannel);
+  }
+}
+
+
+/**
+  * @brief  Configure hardwareTimer prescaler
+  * @param  prescaler factor
+  * @retval None
+  */
+void HardwareTimer::setPrescaleFactor(uint32_t prescaler)
+{
+  // Hardware register correspond to prescaler-1. Example PSC register value 0 means divided by 1
+  __HAL_TIM_SET_PRESCALER(&_HardwareTimerObj.handle, prescaler - 1);
+  _HardwareTimerObj.handle.Init.Prescaler = prescaler - 1;
+}
+
+
+/**
+  * @brief  Set overflow (rollover)
+  * @param  overflow: depend on format parameter
+  * @param  format of overflow parameter. If ommited default format is Tick
+  *           TICK_FORMAT:     overflow is the number of tick for overflow
+  *           MICROSEC_FORMAT: overflow is the number of microsecondes for overflow
+  *           HERTZ_FORMAT:    overflow is the frequency in hertz for overflow
+  * @retval None
+  */
+void HardwareTimer::setOverflow(uint32_t overflow, TimerFormat_t format)
+{
+  uint32_t ARR_RegisterValue;
+  uint32_t Prescalerfactor;
+  uint32_t period_cyc;
+  // Remark: Hardware register correspond to period count-1. Example ARR register value 9 means period of 10 timer cycle
+  switch (format) {
+    case MICROSEC_FORMAT:
+      period_cyc = overflow * (getTimerClkFreq() / 1000000);
+      Prescalerfactor = (period_cyc / 0x10000) + 1;
+      __HAL_TIM_SET_PRESCALER(&_HardwareTimerObj.handle, Prescalerfactor - 1);
+      _HardwareTimerObj.handle.Init.Prescaler = Prescalerfactor - 1;
+      ARR_RegisterValue = (period_cyc / Prescalerfactor) - 1;
+      break;
+    case HERTZ_FORMAT:
+      period_cyc = getTimerClkFreq() / overflow;
+      Prescalerfactor = (period_cyc / 0x10000) + 1;
+      __HAL_TIM_SET_PRESCALER(&_HardwareTimerObj.handle, Prescalerfactor - 1);
+      _HardwareTimerObj.handle.Init.Prescaler = Prescalerfactor - 1;
+      ARR_RegisterValue = (period_cyc / Prescalerfactor) - 1;
+      break;
+    case TICK_FORMAT:
+    default :
+      ARR_RegisterValue = overflow - 1;
+      break;
+  }
+
+  __HAL_TIM_SET_AUTORELOAD(&_HardwareTimerObj.handle, ARR_RegisterValue);
+  _HardwareTimerObj.handle.Init.Period = ARR_RegisterValue;
+}
+
+/**
+  * @brief  Retreive timer counter value
+  * @param  format of returned value. If ommited default format is Tick
+  * @retval overflow depending on format value:
+  *           TICK_FORMAT:     return number of tick for counter
+  *           MICROSEC_FORMAT: return number of microsecondes for counter
+  *           HERTZ_FORMAT:    return frequency in hertz for counter
+  */
+uint32_t HardwareTimer::getCount(TimerFormat_t format)
+{
+  uint32_t CNT_RegisterValue = __HAL_TIM_GET_COUNTER(&(_HardwareTimerObj.handle));
+  uint32_t Prescalerfactor = _HardwareTimerObj.handle.Instance->PSC + 1;
+  uint32_t return_value;
+  switch (format) {
+    case MICROSEC_FORMAT:
+      return_value = (uint32_t)((CNT_RegisterValue * Prescalerfactor * 1000000.0) / getTimerClkFreq());
+      break;
+    case HERTZ_FORMAT:
+      return_value = (uint32_t)(getTimerClkFreq() / (CNT_RegisterValue  * Prescalerfactor));
+      break;
+    case TICK_FORMAT:
+    default :
+      return_value = CNT_RegisterValue;
+      break;
+  }
+  return return_value;
+}
+
+/**
+  * @brief  Set timer counter value
+  * @param  counter: depend on format parameter
+  * @param  format of overflow parameter. If ommited default format is Tick
+  *           TICK_FORMAT:     counter is the number of tick
+  *           MICROSEC_FORMAT: counter is the number of microsecondes
+  *           HERTZ_FORMAT:    counter is the frequency in hertz
+  * @retval None
+  */
+void HardwareTimer::setCount(uint32_t counter, TimerFormat_t format)
+{
+  uint32_t CNT_RegisterValue;
+  uint32_t Prescalerfactor = _HardwareTimerObj.handle.Instance->PSC + 1;
+  switch (format) {
+    case MICROSEC_FORMAT:
+      CNT_RegisterValue = ((counter * (getTimerClkFreq() / 1000000)) / Prescalerfactor) - 1 ;
+      break;
+    case HERTZ_FORMAT:
+      CNT_RegisterValue = (uint32_t)((getTimerClkFreq() / (counter * Prescalerfactor)) - 1);
+      break;
+    case TICK_FORMAT:
+    default :
+      CNT_RegisterValue = counter - 1;
+      break;
+  }
+  __HAL_TIM_SET_COUNTER(&(_HardwareTimerObj.handle), CNT_RegisterValue);
+}
+
+/**
+  * @brief  Set channel mode
+  * @param  channel: Arduino channel [1..4]
+  * @param  mode: mode configuration for the channel (see TimerModes_t)
+  * @param  pin: pin name, ex: PB_0
+  * @retval None
+  */
+void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin)
+{
+  if (getChannel(channel) == -1) {
+    Error_Handler();
+  }
+
+  switch (mode) {
+    case TIMER_OUTPUT_COMPARE_PWM1:
+      OCMode[channel - 1] = TIM_OCMODE_PWM1;
+      break;
+
+    case TIMER_DISABLED:
+      OCMode[channel - 1] = TIMER_NOT_USED;
+      break;
+
+    default:
+      debugPrintf("Warning attempt to use timer mode %d\n", mode);
+      break;
+  }
+
+  if (pin != NC) {
+    if ((int)get_pwm_channel(pin) == getChannel(channel)) {
+      /* Configure PWM GPIO pins */
+      pinmap_pinout(pin, PinMap_PWM);
+    } else {
+      // Pin doesn't match with timer output channels
+      Error_Handler();
+    }
+  }
+}
+
+/**
+  * @brief  Set channel Capture/Compare register
+  * @param  channel: Arduino channel [1..4]
+  * @param  compare: compare value depending on format
+  * @param  format of compare parameter. If ommited default format is Tick
+  *           TICK_FORMAT:     compare is the number of tick
+  *           MICROSEC_FORMAT: compare is the number of microsecondes
+  *           HERTZ_FORMAT:    compare is the frequency in hertz
+  * @retval None
+  */
+void HardwareTimer::setCaptureCompare(uint32_t channel, uint32_t compare, TimerCompareFormat_t format)
+{
+  int timChannel = getChannel(channel);
+  uint32_t Prescalerfactor = _HardwareTimerObj.handle.Instance->PSC + 1;
+  uint32_t CCR_RegisterValue;
+
+  if (timChannel == -1) {
+    Error_Handler();
+  }
+
+  switch (format) {
+    case MICROSEC_COMPARE_FORMAT:
+      CCR_RegisterValue = ((compare * (getTimerClkFreq() / 1000000)) / Prescalerfactor) - 1 ;
+      break;
+    case HERTZ_COMPARE_FORMAT:
+      CCR_RegisterValue = (getTimerClkFreq() / (compare * Prescalerfactor)) - 1;
+      break;
+    case PERCENT_COMPARE_FORMAT:
+      CCR_RegisterValue = ((__HAL_TIM_GET_AUTORELOAD(&(_HardwareTimerObj.handle)) + 1) * compare) / 100;
+      break;
+    case RESOLUTION_8B_COMPARE_FORMAT:
+      CCR_RegisterValue = ((__HAL_TIM_GET_AUTORELOAD(&(_HardwareTimerObj.handle)) + 1) * compare) / 255 ;
+      break;
+    case RESOLUTION_12B_COMPARE_FORMAT:
+      CCR_RegisterValue = ((__HAL_TIM_GET_AUTORELOAD(&(_HardwareTimerObj.handle)) + 1) * compare) / 4095 ;
+      break;
+    case TICK_COMPARE_FORMAT:
+    default :
+      CCR_RegisterValue = compare - 1;
+      break;
+  }
+
+  __HAL_TIM_SET_COMPARE(&(_HardwareTimerObj.handle), timChannel, CCR_RegisterValue);
+}
+
+
+/**
+  * @brief  HardwareTimer destructor
+  * @retval None
+  */
+HardwareTimer::~HardwareTimer()
+{
+  uint32_t index = get_timer_index(_HardwareTimerObj.handle.Instance);
+  HardwareTimer_Handle[index] = NULL;
+  _HardwareTimerObj.__this = NULL;
+  enableTimerClock(&(_HardwareTimerObj.handle));
+}
+
+/**
+  * @brief  return timer index from timer handle
+  * @param  htim : one of the defined timer
+  * @retval None
+  */
+timer_index_t get_timer_index(TIM_TypeDef *instance)
+{
+  timer_index_t index = UNKNOWN_TIMER;
+
+#if defined(TIM1_BASE)
+  if (instance == TIM1) {
+    index = TIMER1_INDEX;
+  }
+#endif
+#if defined(TIM2_BASE)
+  if (instance == TIM2) {
+    index = TIMER2_INDEX;
+  }
+#endif
+#if defined(TIM3_BASE)
+  if (instance == TIM3) {
+    index = TIMER3_INDEX;
+  }
+#endif
+#if defined(TIM4_BASE)
+  if (instance == TIM4) {
+    index = TIMER4_INDEX;
+  }
+#endif
+#if defined(TIM5_BASE)
+  if (instance == TIM5) {
+    index = TIMER5_INDEX;
+  }
+#endif
+#if defined(TIM6_BASE)
+  if (instance == TIM6) {
+    index = TIMER6_INDEX;
+  }
+#endif
+#if defined(TIM7_BASE)
+  if (instance == TIM7) {
+    index = TIMER7_INDEX;
+  }
+#endif
+#if defined(TIM8_BASE)
+  if (instance == TIM8) {
+    index = TIMER8_INDEX;
+  }
+#endif
+#if defined(TIM9_BASE)
+  if (instance == TIM9) {
+    index = TIMER9_INDEX;
+  }
+#endif
+#if defined(TIM10_BASE)
+  if (instance == TIM10) {
+    index = TIMER10_INDEX;
+  }
+#endif
+#if defined(TIM11_BASE)
+  if (instance == TIM11) {
+    index = TIMER11_INDEX;
+  }
+#endif
+#if defined(TIM12_BASE)
+  if (instance == TIM12) {
+    index = TIMER12_INDEX;
+  }
+#endif
+#if defined(TIM13_BASE)
+  if (instance == TIM13) {
+    index = TIMER13_INDEX;
+  }
+#endif
+#if defined(TIM14_BASE)
+  if (instance == TIM14) {
+    index = TIMER14_INDEX;
+  }
+#endif
+#if defined(TIM15_BASE)
+  if (instance == TIM15) {
+    index = TIMER15_INDEX;
+  }
+#endif
+#if defined(TIM16_BASE)
+  if (instance == TIM16) {
+    index = TIMER16_INDEX;
+  }
+#endif
+#if defined(TIM17_BASE)
+  if (instance == TIM17) {
+    index = TIMER17_INDEX;
+  }
+#endif
+#if defined(TIM18_BASE)
+  if (instance == TIM18) {
+    index = TIMER18_INDEX;
+  }
+#endif
+#if defined(TIM19_BASE)
+  if (instance == TIM19) {
+    index = TIMER19_INDEX;
+  }
+#endif
+#if defined(TIM20_BASE)
+  if (instance == TIM20) {
+    index = TIMER20_INDEX;
+  }
+#endif
+#if defined(TIM21_BASE)
+  if (instance == TIM21) {
+    index = TIMER21_INDEX;
+  }
+#endif
+#if defined(TIM22_BASE)
+  if (instance == TIM22) {
+    index = TIMER22_INDEX;
+  }
+#endif
+  return index;
+}
+
+
+/**
+  * @brief  return timer id from a timer index
+  * @param  htim : one of the defined timer
+  * @retval None
+  */
+uint32_t get_timer_id(timer_index_t index)
+{
+  static uint32_t ids[] = {
+#if defined(TIM1_BASE)
+1,
+#endif
+#if defined(TIM2_BASE)
+2,
+#endif
+#if defined(TIM3_BASE)
+3,
+#endif
+#if defined(TIM4_BASE)
+4,
+#endif
+#if defined(TIM5_BASE)
+5,
+#endif
+#if defined(TIM6_BASE)
+6,
+#endif
+#if defined(TIM7_BASE)
+7,
+#endif
+#if defined(TIM8_BASE)
+8,
+#endif
+#if defined(TIM9_BASE)
+9,
+#endif
+#if defined(TIM10_BASE)
+10,
+#endif
+#if defined(TIM11_BASE)
+11,
+#endif
+#if defined(TIM12_BASE)
+12,
+#endif
+#if defined(TIM13_BASE)
+13,
+#endif
+#if defined(TIM14_BASE)
+14,
+#endif
+#if defined(TIM15_BASE)
+15,
+#endif
+#if defined(TIM16_BASE)
+16,
+#endif
+#if defined(TIM17_BASE)
+17,
+#endif
+#if defined(TIM18_BASE)
+18,
+#endif
+#if defined(TIM19_BASE)
+19,
+#endif
+#if defined(TIM20_BASE)
+20,
+#endif
+#if defined(TIM21_BASE)
+21,
+#endif
+#if defined(TIM22_BASE)
+22
+#endif
+  };
+  return ids[index];
+}
+
+/**
+  * @brief  This function return the timer clock frequency.
+  * @param  tim: timer instance
+  * @retval frequency in Hz
+  */
+uint32_t HardwareTimer::getTimerClkFreq()
+{
+  RCC_ClkInitTypeDef    clkconfig = {};
+  uint32_t              pFLatency = 0U;
+  uint32_t              uwTimclock = 0U, uwAPBxPrescaler = 0U;
+
+  /* Get clock configuration */
+  HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
+  switch (getTimerClkSrc(_HardwareTimerObj.handle.Instance)) {
+    case 1:
+      uwAPBxPrescaler = clkconfig.APB1CLKDivider;
+      uwTimclock = HAL_RCC_GetPCLK1Freq();
+      break;
+#if !defined(STM32F0xx) && !defined(STM32G0xx)
+    case 2:
+      uwAPBxPrescaler = clkconfig.APB2CLKDivider;
+      uwTimclock = HAL_RCC_GetPCLK2Freq();
+      break;
+#endif
+    default:
+    case 0: // Unknown timer clock source
+      Error_Handler();
+      break;
+  }
+
+#if defined(STM32H7xx)
+  /* When TIMPRE bit of the RCC_CFGR register is reset,
+   *   if APBx prescaler is 1 or 2 then TIMxCLK = HCLK,
+   *   otherwise TIMxCLK = 2x PCLKx.
+   * When TIMPRE bit in the RCC_CFGR register is set,
+   *   if APBx prescaler is 1,2 or 4, then TIMxCLK = HCLK,
+   *   otherwise TIMxCLK = 4x PCLKx
+   */
+  RCC_PeriphCLKInitTypeDef PeriphClkConfig = {};
+  HAL_RCCEx_GetPeriphCLKConfig(&PeriphClkConfig);
+
+  if (PeriphClkConfig.TIMPresSelection == RCC_TIMPRES_ACTIVATED) {
+    switch (uwAPBxPrescaler) {
+      default:
+      case RCC_APB1_DIV1:
+      case RCC_APB1_DIV2:
+      case RCC_APB1_DIV4:
+      /* case RCC_APB2_DIV1: */
+      case RCC_APB2_DIV2:
+      case RCC_APB2_DIV4:
+        uwTimclock = HAL_RCC_GetHCLKFreq();
+        break;
+      case RCC_APB1_DIV8:
+      case RCC_APB1_DIV16:
+      case RCC_APB2_DIV8:
+      case RCC_APB2_DIV16:
+        uwTimclock *= 4;
+        break;
+    }
+  } else {
+    switch (uwAPBxPrescaler) {
+      default:
+      case RCC_APB1_DIV1:
+      case RCC_APB1_DIV2:
+      /* case RCC_APB2_DIV1: */
+      case RCC_APB2_DIV2:
+        // uwTimclock*=1;
+        uwTimclock = HAL_RCC_GetHCLKFreq();
+        break;
+      case RCC_APB1_DIV4:
+      case RCC_APB1_DIV8:
+      case RCC_APB1_DIV16:
+      case RCC_APB2_DIV4:
+      case RCC_APB2_DIV8:
+      case RCC_APB2_DIV16:
+        uwTimclock *= 2;
+        break;
+    }
+  }
+#else
+  /* When TIMPRE bit of the RCC_DCKCFGR register is reset,
+   *   if APBx prescaler is 1, then TIMxCLK = PCLKx,
+   *   otherwise TIMxCLK = 2x PCLKx.
+   * When TIMPRE bit in the RCC_DCKCFGR register is set,
+   *   if APBx prescaler is 1,2 or 4, then TIMxCLK = HCLK,
+   *   otherwise TIMxCLK = 4x PCLKx
+   */
+#if defined(STM32F4xx) || defined(STM32F7xx)
+#if !defined(STM32F405xx) && !defined(STM32F415xx) &&\
+    !defined(STM32F407xx) && !defined(STM32F417xx)
+  RCC_PeriphCLKInitTypeDef PeriphClkConfig = {};
+  HAL_RCCEx_GetPeriphCLKConfig(&PeriphClkConfig);
+
+  if (PeriphClkConfig.TIMPresSelection == RCC_TIMPRES_ACTIVATED)
+    switch (uwAPBxPrescaler) {
+      default:
+      case RCC_HCLK_DIV1:
+      case RCC_HCLK_DIV2:
+      case RCC_HCLK_DIV4:
+        uwTimclock = HAL_RCC_GetHCLKFreq();
+        break;
+      case RCC_HCLK_DIV8:
+      case RCC_HCLK_DIV16:
+        uwTimclock *= 4;
+        break;
+    } else
+#endif
+#endif
+    switch (uwAPBxPrescaler) {
+      default:
+      case RCC_HCLK_DIV1:
+        // uwTimclock*=1;
+        break;
+      case RCC_HCLK_DIV2:
+      case RCC_HCLK_DIV4:
+      case RCC_HCLK_DIV8:
+      case RCC_HCLK_DIV16:
+        uwTimclock *= 2;
+        break;
+    }
+#endif /* STM32H7xx */
+  return uwTimclock;
+}
+
+#else
 #define PIN_NOT_USED 0xFF
 #define MAX_RELOAD ((1 << 16) - 1) // Currently even 32b timers are used as 16b to have generic behavior
 
@@ -1536,5 +2233,5 @@ extern "C" {
   }
 #endif //TIM22_BASE
 }
-
+#endif
 #endif // HAL_TIM_MODULE_ENABLED

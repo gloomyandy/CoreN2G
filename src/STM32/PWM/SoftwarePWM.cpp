@@ -323,13 +323,14 @@ static void initTimer() noexcept
     //debugPrintf("ST base freq %d setting presacle %d\n", static_cast<int>(SPWMTimer.getTimerClkFreq()), static_cast<int>(preScale));
     SPWMTimer.setPrescaleFactor(preScale);
     SPWMTimer.setOverflow(0xffff, TICK_FORMAT);
-    SPWMTimer.attachInterrupt(SPWM_Handler);
     // init hardware and interrupts
     timerHandle = &(HardwareTimer_Handle[get_timer_index(SPWM_TIMER)]->handle);
     __HAL_TIM_SET_COUNTER(timerHandle, 1);
     SPWMTimer.resume();
     // stop the counter for now
     __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
+    // enable interrupt on timer overflow
+    __HAL_TIM_ENABLE_IT(timerHandle, TIM_IT_UPDATE);
     timerReady = true;
 }
 

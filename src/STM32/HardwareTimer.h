@@ -56,7 +56,7 @@ typedef enum {
   // This mode is very useful for Frequency and Dutycycle measurement
   TIMER_INPUT_FREQ_DUTY_MEASUREMENT,
 
-  TIMER_NOT_USED = 0xFFFF  // This must be the last item of this enum
+  TIMER_NOT_USED = 0xFF  // This must be the last item of this enum
 } TimerModes_t;
 
 typedef enum {
@@ -83,7 +83,35 @@ typedef struct  {
 } HardwareTimerObj_t;
 
 #ifdef __cplusplus
+#if 1
+/* Class --------------------------------------------------------*/
+class HardwareTimer {
+  public:
+    HardwareTimer(TIM_TypeDef *instance);
+    ~HardwareTimer();  // destructor
 
+    void pause(void);  // Pause counter and all output channels
+    void resume(void); // Resume counter and all output channels
+
+    void setPrescaleFactor(uint32_t prescaler); // set prescaler register (which is factor value - 1)
+
+    void setOverflow(uint32_t val, TimerFormat_t format = TICK_FORMAT); // set AutoReload register depending on format provided
+
+    void setCount(uint32_t val, TimerFormat_t format = TICK_FORMAT); // set timer counter to value 'val' depending on format provided
+    uint32_t getCount(TimerFormat_t format = TICK_FORMAT);  // return current counter value of timer depending on format provided
+
+    void setMode(uint32_t channel, TimerModes_t mode, PinName pin = NC); // Configure timer channel with specified mode on specified pin if available
+
+    void setCaptureCompare(uint32_t channel, uint32_t compare, TimerCompareFormat_t format = TICK_COMPARE_FORMAT);  // set Compare register value of specified channel depending on format provided
+
+    uint32_t getTimerClkFreq();  // return timer clock frequency in Hz.
+  private:
+    HardwareTimerObj_t _HardwareTimerObj;
+    uint8_t OCMode[TIMER_CHANNELS];
+    int getChannel(uint32_t channel);
+    void resumeChannel(uint32_t channel);
+};
+#else
 /* Class --------------------------------------------------------*/
 class HardwareTimer {
   public:
@@ -144,7 +172,7 @@ class HardwareTimer {
     bool isComplementaryChannel[TIMER_CHANNELS];
 #endif
 };
-
+#endif
 HardwareTimerObj_t *get_timer_obj(TIM_HandleTypeDef *htim);
 
 extern HardwareTimerObj_t *HardwareTimer_Handle[TIMER_NUM];
