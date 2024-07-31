@@ -324,8 +324,9 @@ static void initTimer() noexcept
     SPWMTimer.setPrescaleFactor(preScale);
     SPWMTimer.setOverflow(0xffff, TICK_FORMAT);
     // init hardware and interrupts
-    timerHandle = &(HardwareTimer_Handle[get_timer_index(SPWM_TIMER)]->handle);
+    timerHandle = SPWMTimer.getHandle();
     __HAL_TIM_SET_COUNTER(timerHandle, 1);
+    NVIC_EnableIRQ(TIM7_IRQn);
     SPWMTimer.resume();
     // stop the counter for now
     __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);

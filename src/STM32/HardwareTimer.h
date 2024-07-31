@@ -20,7 +20,7 @@
   SOFTWARE.
 
   Copyright (c) 2019 STMicroelectronics
-  Modified to support Arduino_Core_STM32
+  Heavily modified for RRF by Andy (c) 2024
 */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
@@ -28,12 +28,11 @@
 #define HARDWARETIMER_H_
 
 /* Includes ------------------------------------------------------------------*/
-#include "timer.h"
 
 #ifdef HAL_TIM_MODULE_ENABLED
-
+#define UNKNOWN_TIMER 0xffff
 #define  TIMER_CHANNELS 4    // channel5 and channel 6 are not considered here has they don't have gpio output and they don't have interrupt
-
+#define INVALID_ID 
 typedef enum {
   TIMER_DISABLED,
   // Output Compare
@@ -74,112 +73,38 @@ typedef enum {
   RESOLUTION_12B_COMPARE_FORMAT  // used for Dutycycle: [0.. 4095]
 } TimerCompareFormat_t;
 
-// This structure is used to be able to get HardwareTimer instance (C++ class)
-// from handler (C structure) specially for interrupt management
-typedef struct  {
-  // Those 2 first fields must remain in this order at the beginning of the structure
-  void    *__this;
-  TIM_HandleTypeDef handle;
-} HardwareTimerObj_t;
-
 #ifdef __cplusplus
-#if 1
 /* Class --------------------------------------------------------*/
 class HardwareTimer {
   public:
-    HardwareTimer(TIM_TypeDef *instance);
-    ~HardwareTimer();  // destructor
+    HardwareTimer(TIM_TypeDef *instance) noexcept;
+    ~HardwareTimer() noexcept;  // destructor
 
-    void pause(void);  // Pause counter and all output channels
-    void resume(void); // Resume counter and all output channels
+    void pause(void) noexcept;  // Pause counter and all output channels
+    void resume(void) noexcept; // Resume counter and all output channels
 
-    void setPrescaleFactor(uint32_t prescaler); // set prescaler register (which is factor value - 1)
+    void setPrescaleFactor(uint32_t prescaler) noexcept; // set prescaler register (which is factor value - 1)
 
-    void setOverflow(uint32_t val, TimerFormat_t format = TICK_FORMAT); // set AutoReload register depending on format provided
+    void setOverflow(uint32_t val, TimerFormat_t format = TICK_FORMAT) noexcept; // set AutoReload register depending on format provided
 
-    void setCount(uint32_t val, TimerFormat_t format = TICK_FORMAT); // set timer counter to value 'val' depending on format provided
-    uint32_t getCount(TimerFormat_t format = TICK_FORMAT);  // return current counter value of timer depending on format provided
+    void setCount(uint32_t val, TimerFormat_t format = TICK_FORMAT) noexcept; // set timer counter to value 'val' depending on format provided
+    uint32_t getCount(TimerFormat_t format = TICK_FORMAT) noexcept;  // return current counter value of timer depending on format provided
 
-    void setMode(uint32_t channel, TimerModes_t mode, PinName pin = NC); // Configure timer channel with specified mode on specified pin if available
+    void setMode(uint32_t channel, TimerModes_t mode, PinName pin = NC) noexcept; // Configure timer channel with specified mode on specified pin if available
 
-    void setCaptureCompare(uint32_t channel, uint32_t compare, TimerCompareFormat_t format = TICK_COMPARE_FORMAT);  // set Compare register value of specified channel depending on format provided
+    void setCaptureCompare(uint32_t channel, uint32_t compare, TimerCompareFormat_t format = TICK_COMPARE_FORMAT) noexcept;  // set Compare register value of specified channel depending on format provided
 
-    uint32_t getTimerClkFreq();  // return timer clock frequency in Hz.
+    uint32_t getTimerClkFreq() noexcept;  // return timer clock frequency in Hz.
+
+    TIM_HandleTypeDef* getHandle() noexcept;
+
+    uint32_t getTimerId() noexcept;
   private:
-    HardwareTimerObj_t _HardwareTimerObj;
+    TIM_HandleTypeDef handle;
     uint8_t OCMode[TIMER_CHANNELS];
     int getChannel(uint32_t channel);
     void resumeChannel(uint32_t channel);
 };
-#else
-/* Class --------------------------------------------------------*/
-class HardwareTimer {
-  public:
-    HardwareTimer(TIM_TypeDef *instance);
-    ~HardwareTimer();  // destructor
-
-    void pause(void);  // Pause counter and all output channels
-    void resume(void); // Resume counter and all output channels
-
-    void setPrescaleFactor(uint32_t prescaler); // set prescaler register (which is factor value - 1)
-    uint32_t getPrescaleFactor();
-
-    void setOverflow(uint32_t val, TimerFormat_t format = TICK_FORMAT); // set AutoReload register depending on format provided
-    uint32_t getOverflow(TimerFormat_t format = TICK_FORMAT); // return overflow depending on format provided
-
-    void setPWM(uint32_t channel, PinName pin, uint32_t frequency, uint32_t dutycycle, void (*PeriodCallback)(HardwareTimer *) = NULL, void (*CompareCallback)(HardwareTimer *) = NULL); // Set all in one command freq in HZ, Duty in percentage. Including both interrup.
-    void setPWM(uint32_t channel, uint32_t pin, uint32_t frequency, uint32_t dutycycle, void (*PeriodCallback)(HardwareTimer *) = NULL, void (*CompareCallback)(HardwareTimer *) = NULL);
-
-
-    void setCount(uint32_t val, TimerFormat_t format = TICK_FORMAT); // set timer counter to value 'val' depending on format provided
-    uint32_t getCount(TimerFormat_t format = TICK_FORMAT);  // return current counter value of timer depending on format provided
-
-    void setMode(uint32_t channel, TimerModes_t mode, PinName pin = NC); // Configure timer channel with specified mode on specified pin if available
-    void setMode(uint32_t channel, TimerModes_t mode, uint32_t pin);
-
-    uint32_t getCaptureCompare(uint32_t channel, TimerCompareFormat_t format = TICK_COMPARE_FORMAT); // return Capture/Compare register value of specified channel depending on format provided
-
-    void setCaptureCompare(uint32_t channel, uint32_t compare, TimerCompareFormat_t format = TICK_COMPARE_FORMAT);  // set Compare register value of specified channel depending on format provided
-
-    //Add interrupt to period update
-    void attachInterrupt(void (*handler)(HardwareTimer *)); // Attach interrupt callback which will be called upon update event (timer rollover)
-    void detachInterrupt();  // remove interrupt callback which was attached to update event
-    //Add interrupt to capture/compare channel
-    void attachInterrupt(uint32_t channel, void (*handler)(HardwareTimer *)); // Attach interrupt callback which will be called upon compare match event of specified channel
-    void detachInterrupt(uint32_t channel);  // remove interrupt callback which was attached to compare match event of specified channel
-
-    void timerHandleDeinit();  // Timer deinitialization
-
-    // Refresh() can only be called after a 1st call to resume() to be sure timer is initialised.
-    // It is usefull while timer is running after some registers update
-    void refresh(void); // Generate update event to force all registers (Autoreload, prescaler, compare) to be taken into account
-
-
-    uint32_t getTimerClkFreq();  // return timer clock frequency in Hz.
-
-    static void captureCompareCallback(TIM_HandleTypeDef *htim); // Generic Caputre and Compare callback which will call user callback
-    static void updateCallback(TIM_HandleTypeDef *htim);  // Generic Update (rollover) callback which will call user callback
-
-  private:
-    TIM_OC_InitTypeDef _channelOC[TIMER_CHANNELS];
-    TIM_IC_InitTypeDef _channelIC[TIMER_CHANNELS];
-    HardwareTimerObj_t _HardwareTimerObj;
-    void (*callbacks[1 + TIMER_CHANNELS])(HardwareTimer *); //Callbacks: 0 for update, 1-4 for channels. (channel5/channel6, if any, doesn't have interrupt)
-
-    int getChannel(uint32_t channel);
-    void resumeChannel(uint32_t channel);
-#if defined(TIM_CCER_CC1NE)
-    bool isComplementaryChannel[TIMER_CHANNELS];
-#endif
-};
-#endif
-HardwareTimerObj_t *get_timer_obj(TIM_HandleTypeDef *htim);
-
-extern HardwareTimerObj_t *HardwareTimer_Handle[TIMER_NUM];
-
-extern timer_index_t get_timer_index(TIM_TypeDef *htim);
-
-extern uint32_t get_timer_id(timer_index_t index);
 
 #endif /* __cplusplus */
 

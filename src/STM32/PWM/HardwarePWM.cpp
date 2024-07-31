@@ -26,6 +26,14 @@ HardwareTimer Timer9(TIM9);
 HardwareTimer Timer10(TIM10);
 HardwareTimer Timer11(TIM11);
 #endif
+static HardwareTimer* PWMTimers[] = {
+                                        &Timer2, &Timer3, &Timer4, &Timer8, &Timer12, &Timer13, &Timer14,
+#if STM32H7
+                                        &Timer15, &Timer16, &Timer17
+#else
+                                        &Timer9, &Timer10, &Timer11
+#endif
+};
 
 HardwarePWM::HardwarePWM() noexcept : timer(nullptr), channel(0)
 {
@@ -50,13 +58,19 @@ HybridPWMBase *HardwarePWM::allocate(Pin pin, uint32_t freq, float value) noexce
     // first find out if we have a timer for this pin
     TIM_TypeDef *instance = (TIM_TypeDef *)pinmap_peripheral(pin, PinMap_PWM);
     if (instance == nullptr) return nullptr;
-    uint32_t index = get_timer_index(instance);
-    //debugPrintf("Trying to use timer index %d id %d\n", index, get_timer_id((timer_index_t)index));
-    // now get the timer object
-    HardwareTimer *t = (HardwareTimer *)(HardwareTimer_Handle[index]->__this);
+    // Find the timer for this pin
+    HardwareTimer *t = nullptr;
+    for(uint32_t i = 0; i < ARRAY_SIZE(PWMTimers); i++)
+    {
+        if (PWMTimers[i]->getHandle()->Instance == instance)
+        {
+            t = PWMTimers[i];
+            break;
+        }
+    }
     if (t == nullptr)
     {
-        debugPrintf("Unable to get hardware timer for pin %x index %d\n", static_cast<int>(pin), static_cast<int>(index));
+        debugPrintf("Unable to get hardware timer for pin %x\n", static_cast<int>(pin));
         return nullptr;
     }
     // Get the channel we need
@@ -101,8 +115,5 @@ void HardwarePWM::setValue(float value) noexcept
 
 void HardwarePWM::appendStatus(const StringRef& reply) noexcept
 {
-    TIM_TypeDef *instance = (TIM_TypeDef *)pinmap_peripheral(pwmPin->pin, PinMap_PWM);
-    uint32_t index = get_timer_index(instance);
-
-    reply.catf(" Tim %d chan %d", static_cast<int>(get_timer_id((timer_index_t)index)), static_cast<int>(channel));
+    reply.catf(" Tim %d chan %d", static_cast<int>(timer->getTimerId()), static_cast<int>(channel));
 }
