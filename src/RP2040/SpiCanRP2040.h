@@ -236,7 +236,7 @@ public:
 
 	void GetAndClearStats(CanDevice::CanStats& dst) noexcept;
 
-	uint16_t ReadTimeStampCounter() noexcept;
+	void ReadTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept;
 
 	uint16_t GetTimeStampPeriod() noexcept
 	{
@@ -269,7 +269,7 @@ private:
 	bool DoSendMessage(TxBufferNumber whichBuffer, volatile CanTxBuffer *buffer) noexcept;
 	bool DoReceiveMessage(RxBufferNumber whichBuffer, volatile CanRxBuffer *buffer) noexcept;
 	bool DoAbortMessage(TxBufferNumber whichBuffer) noexcept;
-	uint32_t DoReadTimeStampCounter() noexcept;
+	void DoReadTimeStampCounter() noexcept;
 	
 	bool busOff;
 
@@ -294,6 +294,7 @@ private:
 	RxFifo rxFifos[NumCanRxFifos];
 	TxFifo txFifo;
 	volatile uint32_t latestTimeStamp;
+	volatile uint32_t latestStepTime;
 	volatile RunState runState;
 	volatile bool abortTx;
 	volatile bool txFifoNotFullInterruptEnabled;

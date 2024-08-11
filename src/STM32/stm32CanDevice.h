@@ -227,14 +227,13 @@ public:
 	void GetAndClearStats(CanDevice::CanStats& dst) noexcept;
 
 	void GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept;
-
-	uint16_t ReadTimeStampCounter() noexcept
 #if STM32H7
+	uint16_t ReadTimeStampCounter() noexcept
 	{
 		return HAL_FDCAN_GetTimestampCounter(&hw);
 	}
 #else
-	;
+	void ReadTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept;
 #endif
 
 #if !SAME70

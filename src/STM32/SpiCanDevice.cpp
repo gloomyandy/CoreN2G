@@ -374,11 +374,12 @@ void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 	}
 }
 
-#if MCP_DEBUG
+//#if MCP_DEBUG
 uint32_t crcErrors = 0;
 uint32_t rollovers = 0;
-#endif
-uint16_t CanDevice::ReadTimeStampCounter() noexcept
+uint32_t maxTime = 0;
+//#endif
+void CanDevice::ReadTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept
 {
 	//debugPrintf("get timestamp\n");
 	SPILocker lock;
@@ -387,16 +388,21 @@ uint16_t CanDevice::ReadTimeStampCounter() noexcept
 	// The timestamp can sometimes be invalid if it is about to roll over when we read it,
 	// or if it has a value that ends in 0x7f or 0x80. We detect these values and read it again
 	// See the product errata and othe device drivers.
-	do {
-		//DRV_CANFDSPI_TimeStampGet(0, &ts);
+	for (;;)
+	{
+		stepTimeStamp = DRV_SPI_GetStepTimerTicks();
 		DRV_CANFDSPI_ReadByteArrayWithCRC(0, cREGADDR_CiTBC, (uint8_t *)&ts, 2, false, &goodCrc);
-#if MCP_DEBUG
-		if (!goodCrc) crcErrors++;
-		if (((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80)) rollovers++;
-#endif
-	} while (!goodCrc || ((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80));
+		uint32_t duration = DRV_SPI_GetStepTimerTicks() - stepTimeStamp;
+		if (duration > maxTime) maxTime = duration;
+		if (!goodCrc) 
+			crcErrors++;
+		else if (((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80)) 
+			rollovers++;
+		else
+			break; 
+	}
 
-	return ts & 0xffff;
+	canTimeStamp = ts;
 }
 
 uint32_t CanDevice::GetErrorRegister() const noexcept
@@ -707,6 +713,8 @@ void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
 		DRV_CANFDSPI_BusDiagnosticsClear(0);	
 	}
 #endif
+	debugPrintf("CRC errors %d rollovers %d max duration %d\n", crcErrors, rollovers, maxTime);
+	crcErrors = rollovers = maxTime = 0;
 	AtomicCriticalSectionLocker lock;
 	dst = stats;
 	stats.Clear();

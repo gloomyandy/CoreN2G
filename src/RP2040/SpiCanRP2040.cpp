@@ -287,13 +287,14 @@ void CanDevice::PollTxEventFifo(TxEventCallbackFunction p_txCallback) noexcept
 }
 #endif
 
-uint16_t CanDevice::ReadTimeStampCounter() noexcept
+void CanDevice::ReadTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept
 {
 	latestTimeStamp = 0xffffffff;
 	while (latestTimeStamp == 0xffffffff)
 	{
 	}
-	return latestTimeStamp & 0xffff;
+	canTimeStamp = latestTimeStamp & 0xffff;
+	stepTimeStamp = latestStepTime;
 }
 
 uint32_t CanDevice::GetErrorRegister() const noexcept
@@ -717,7 +718,7 @@ bool CanDevice::DoAbortMessage(TxBufferNumber whichBuffer) noexcept
 	return false;
 }
 
-uint32_t CanDevice::DoReadTimeStampCounter() noexcept
+void CanDevice::DoReadTimeStampCounter() noexcept
 {
 	uint16_t ts;
 	bool goodCrc;
@@ -725,10 +726,10 @@ uint32_t CanDevice::DoReadTimeStampCounter() noexcept
 	// or if it has a value that ends in 0x7f or 0x80. We detect these values and read it again
 	// See the product errata and othe device drivers.
 	do {
+		latestStepTime = DRV_SPI_GetStepTimerTicks();
 		DRV_CANFDSPI_ReadByteArrayWithCRC(0, cREGADDR_CiTBC, (uint8_t *)&ts, 2, false, &goodCrc);
 	} while (!goodCrc || ((ts & 0xff) >= 0xf0) ||  ((ts & 0xff) == 0x7f) || ((ts & 0xff) == 0x80));
-
-	return ts & 0xffff;
+	latestTimeStamp = ts & 0xffff;
 }
 
 
@@ -780,7 +781,7 @@ uint32_t CanDevice::DoReadTimeStampCounter() noexcept
 			}
 			if (latestTimeStamp == 0xffffffff)
 			{
-				latestTimeStamp = DoReadTimeStampCounter();
+				DoReadTimeStampCounter();
 			}
 			if (pendingInterrupts)
 			{

@@ -38,6 +38,8 @@ void DRV_SPI_Deselect(void);
 //! SPI Read/Write Transfer
 
 int8_t DRV_SPI_TransferData(uint32_t index, uint8_t *SpiTxData, uint8_t *SpiRxData, size_t spiTransferSize);
+
+uint32_t DRV_SPI_GetStepTimerTicks();
 #ifdef __cplusplus  // Provide C++ Compatibility
 }
 #endif
