@@ -45,6 +45,7 @@ class ConfigurableUART : public Stream
 
 public:
 	typedef void (*InterruptCallbackFn)(ConfigurableUART*) noexcept;
+	typedef void (*OnTransmissionEndedFn)(CallbackParameter cp) noexcept;
 	struct Errors
 	{
 		uint32_t uartOverrun,
@@ -77,6 +78,11 @@ public:
     int availableForWrite(void) noexcept;
     size_t canWrite() noexcept;
 
+	void ClearTransmitBuffer() noexcept;
+	void ClearReceiveBuffer() noexcept;
+	void DisableTransmit() noexcept;
+	void EnableTransmit() noexcept;
+
     bool IsConnected() noexcept;
 
     int8_t GetUARTPortNumber() noexcept;
@@ -84,7 +90,8 @@ public:
     void setInterruptPriority(uint32_t priority) noexcept;
     uint32_t getInterruptPriority() noexcept;
 
-    InterruptCallbackFn SetInterruptCallback(InterruptCallbackFn f) noexcept;
+	InterruptCallbackFn SetInterruptCallback(InterruptCallbackFn f) noexcept;
+	OnTransmissionEndedFn SetOnTxEndedCallback(OnTransmissionEndedFn f, CallbackParameter cp) noexcept;
 
 	// Get and clear the errors
 	Errors GetAndClearErrors() noexcept;
@@ -107,12 +114,15 @@ private:
     HAL_StatusTypeDef UART_Transmit_IT() noexcept;
     HAL_StatusTypeDef UART_EndTransmit_IT() noexcept;
     InterruptCallbackFn interruptCallback;
+	OnTransmissionEndedFn onTransmissionEndedFn;
+	CallbackParameter onTransmissionEndedCp;
     USART_TypeDef *uart;
     UART_HandleTypeDef handle;
     PinName pin_tx;
     PinName pin_rx;
     IRQn_Type irq;
     uint8_t prio;
+    bool txEnabled;
     uint8_t rx_buff[SERIAL_RX_BUFFER_SIZE];
     uint8_t tx_buff[SERIAL_TX_BUFFER_SIZE];
     volatile uint32_t rx_tail;

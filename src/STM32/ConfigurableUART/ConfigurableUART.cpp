@@ -22,6 +22,8 @@ ConfigurableUART::ConfigurableUART() noexcept
     uart = nullptr;
     prio = 0;
     txWaitingTask = nullptr;
+    txEnabled = false;
+    onTransmissionEndedFn = nullptr;
 }
 
 
@@ -118,6 +120,7 @@ void ConfigurableUART::begin(uint32_t baud, uint8_t config) noexcept
         rx_tail = 0;
         tx_head = 0;
         tx_tail = 0;
+        txEnabled = true;
         start_rx();
     }
 }
@@ -211,6 +214,10 @@ size_t ConfigurableUART::write(const uint8_t c) noexcept
     if (uart != nullptr)
     {
         uint32_t i = (tx_head + 1) % SERIAL_TX_BUFFER_SIZE;
+        if (i == tx_tail && !txEnabled)
+        {
+            return 0;
+        }
         // If the output buffer is full, there's nothing for it other than to
         // wait for the interrupt handler to empty it a bit
         while (i == tx_tail) 
@@ -279,6 +286,10 @@ size_t ConfigurableUART::write(const uint8_t *buffer, size_t size) noexcept
             size_t len = writeBlock(buffer, size);
             size -= len;
             buffer += len;
+            if (!txEnabled)
+            {
+                break;
+            }
             if (len && !serial_tx_active())
                 start_tx();
             if (size == 0)
@@ -324,14 +335,7 @@ void ConfigurableUART::setInterruptPriority(uint32_t priority) noexcept
 
 uint32_t ConfigurableUART::getInterruptPriority() noexcept
 {
-#if 0
-// FIXME
-    if (uart != nullptr)
-    {
-        return 0;
-    }
-#endif   
-    return 0;
+    return prio;
 }
 
 bool ConfigurableUART::IsConnected() noexcept
@@ -344,16 +348,54 @@ bool ConfigurableUART::IsConnected() noexcept
 // FIXME we should probbaly implement the call back for this!
 ConfigurableUART::InterruptCallbackFn ConfigurableUART::SetInterruptCallback(InterruptCallbackFn f) noexcept
 {
+	AtomicCriticalSectionLocker lock;
 	InterruptCallbackFn ret = interruptCallback;
 	interruptCallback = f;
 	return ret;
 }
 
+ConfigurableUART::OnTransmissionEndedFn ConfigurableUART::SetOnTxEndedCallback(OnTransmissionEndedFn f, CallbackParameter cp) noexcept
+{
+	AtomicCriticalSectionLocker lock;
+	const OnTransmissionEndedFn ret = onTransmissionEndedFn;
+	onTransmissionEndedFn = f;
+	onTransmissionEndedCp = cp;
+	return ret;
+}
+
+void ConfigurableUART::ClearTransmitBuffer() noexcept
+{
+    if (uart != nullptr)
+    {
+        AtomicCriticalSectionLocker lock;
+        tx_tail = tx_head;
+    }
+    flush();
+}
+
+void ConfigurableUART::ClearReceiveBuffer() noexcept
+{
+	AtomicCriticalSectionLocker lock;
+	rx_tail = rx_head;
+}
+
+void ConfigurableUART::DisableTransmit() noexcept
+{
+	txEnabled = false;
+    flush();
+}
+
+void ConfigurableUART::EnableTransmit() noexcept
+{
+	txEnabled = true;
+    start_tx();
+}
+
+
 // Get and clear the errors
 ConfigurableUART::Errors ConfigurableUART::GetAndClearErrors() noexcept
 {
 	Errors errs;
-    flush();
     errs.uartOverrun = 0;
     if  (uart != nullptr)
     {
@@ -873,14 +915,17 @@ inline HAL_StatusTypeDef ConfigurableUART::UART_Receive_IT() noexcept
 
 inline HAL_StatusTypeDef ConfigurableUART::UART_Transmit_IT() noexcept
 {
-    // write the data
+    if (tx_tail != tx_head)
+    {
+        // write the data
 #if STM32H7
-    handle.Instance->TDR = tx_buff[tx_tail];
+        handle.Instance->TDR = tx_buff[tx_tail];
 #else
-    handle.Instance->DR = tx_buff[tx_tail];
+        handle.Instance->DR = tx_buff[tx_tail];
 #endif
-    // update write pointer
-    tx_tail = (tx_tail + 1) % SERIAL_TX_BUFFER_SIZE;
+        // update write pointer
+        tx_tail = (tx_tail + 1) % SERIAL_TX_BUFFER_SIZE;
+    }
     // do we have more to send?
     if (tx_tail == tx_head)
     {
@@ -929,6 +974,10 @@ inline HAL_StatusTypeDef ConfigurableUART::UART_EndTransmit_IT() noexcept
     __HAL_UART_DISABLE_IT(&handle, UART_IT_TC);
     /* Tx process is ended, restore handle.gState to Ready */
     handle.gState = HAL_UART_STATE_READY;
+    if (onTransmissionEndedFn != nullptr)					// if we want callback when the transmitter is empty
+    {
+        onTransmissionEndedFn(onTransmissionEndedCp);	// execute the callback
+    }
     return HAL_OK;
 }
 
