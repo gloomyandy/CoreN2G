@@ -707,14 +707,12 @@ void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
 		CAN_BUS_DIAGNOSTIC bd;
 		DRV_CANFDSPI_BusDiagnosticsGet(0, &bd);
 		debugPrintf("CAN diag tec %d rec %d flags %x tx full %d mode %d B/O %d te %d/%d re %d/%d\n", tec, rec, flags, txBufferFull, DRV_CANFDSPI_OperationModeGet(0), bd.bF.flag.TXBO_ERR, bd.bF.errorCount.DTEC, bd.bF.errorCount.NTEC, bd.bF.errorCount.DREC, bd.bF.errorCount.NREC);
-		debugPrintf("CRC errors %d rollovers %d\n", crcErrors, rollovers);
-		crcErrors = rollovers = 0;
+		debugPrintf("CRC errors %d rollovers %d max duration %d\n", crcErrors, rollovers, maxTime);
+		crcErrors = rollovers = maxTime = 0;
 		txBufferFull = 0;
 		DRV_CANFDSPI_BusDiagnosticsClear(0);	
 	}
 #endif
-	debugPrintf("CRC errors %d rollovers %d max duration %d\n", crcErrors, rollovers, maxTime);
-	crcErrors = rollovers = maxTime = 0;
 	AtomicCriticalSectionLocker lock;
 	dst = stats;
 	stats.Clear();
