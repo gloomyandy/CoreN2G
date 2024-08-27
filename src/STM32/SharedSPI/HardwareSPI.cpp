@@ -414,7 +414,7 @@ static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t
     return status;
 }
 
-#if USE_SSP1
+
 static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
     HAL_SPI_StateTypeDef state = HAL_SPI_GetState(hspi);
@@ -438,7 +438,7 @@ static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t 
     }
     return status;
 }
-#endif
+
 
 static HAL_StatusTypeDef startTransferPolled(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
