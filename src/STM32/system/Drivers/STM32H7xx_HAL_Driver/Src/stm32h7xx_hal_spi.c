@@ -1,3 +1,11 @@
+#if HAL_RRF
+// NOTE: This module contains a number of modifications for use with RRF the primary
+// changes are to clock FF values out when performing SPI read operations (as some devices
+// work better with this than random values) and to optimise the operation for 8 bit only
+// I/O. There is a good chance that this code will not work for any other I/O size.
+#endif
+
+
 /**
   ******************************************************************************
   * @file    stm32h7xx_hal_spi.c
@@ -775,6 +783,9 @@ HAL_StatusTypeDef HAL_SPI_UnRegisterCallback(SPI_HandleTypeDef *hspi, HAL_SPI_Ca
 @endverbatim
   * @{
   */
+#if HAL_RRF
+static const uint32_t   dummyData = 0xffffffff;
+#endif
 
 /**
   * @brief  Transmit an amount of data in blocking mode.
@@ -1023,7 +1034,7 @@ HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *hspi, uint8_t *pData, uint1
 #if HAL_RRF
     // We use a modified versions of TransmitReceive to always clock out 0xff when performing just
     // a read operation. Some devices (like SD cards) work better with this rather than just random data
-    return HAL_SPI_TransmitReceive(hspi, NULL, pData, Size, Timeout);
+    return HAL_SPI_TransmitReceive(hspi, (uint8_t *)&dummyData, pData, Size, Timeout);
 #else
     /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
     return HAL_SPI_TransmitReceive(hspi, pData, pData, Size, Timeout);
@@ -1254,7 +1265,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
   __IO uint16_t *prxdr_16bits = (__IO uint16_t *)(&(hspi->Instance->RXDR));
 #endif /* __GNUC__ */
 #if HAL_RRF
-  uint32_t   dummyData = 0xffffffff;
   uint32_t   txInc;
 #endif
   uint32_t   tickstart;
@@ -1283,12 +1293,8 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
     __HAL_UNLOCK(hspi);
     return errorcode;
   }
-#if HAL_RRF
-// pTxData == NULL means generate dummy data
-  if ((pRxData == NULL) || (Size == 0UL))
-#else
+
   if ((pTxData == NULL) || (pRxData == NULL) || (Size == 0UL))
-#endif
   {
     errorcode = HAL_ERROR;
     __HAL_UNLOCK(hspi);
@@ -1306,11 +1312,9 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
   hspi->pRxBuffPtr  = (uint8_t *)pRxData;
   hspi->RxXferCount = Size;
   hspi->RxXferSize  = Size;
-#if HAL_RRF
-  hspi->pTxBuffPtr  = (pTxData ? (uint8_t *)pTxData : (uint8_t *)&dummyData);
-  txInc = (pTxData) ? sizeof(uint8_t) : 0;
-#else
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
+#if HAL_RRF
+  txInc = (pTxData == (uint8_t *)&dummyData) ? 0 : sizeof(uint8_t);
 #endif
   hspi->TxXferCount = Size;
   hspi->TxXferSize  = Size;
@@ -1448,11 +1452,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
       {
         {
           *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)hspi->pTxBuffPtr);
-#if HAL_RRF
           hspi->pTxBuffPtr += txInc;
-#else
-          hspi->pTxBuffPtr += sizeof(uint8_t);
-#endif
           hspi->TxXferCount--;
           initial_TxXferCount = hspi->TxXferCount;
         }
@@ -1695,8 +1695,14 @@ HAL_StatusTypeDef HAL_SPI_Receive_IT(SPI_HandleTypeDef *hspi, uint8_t *pData, ui
   if ((hspi->Init.Direction == SPI_DIRECTION_2LINES) && (hspi->Init.Mode == SPI_MODE_MASTER))
   {
     hspi->State = HAL_SPI_STATE_BUSY_RX;
+#if HAL_RRF
+    // We use a modified versions of TransmitReceive to always clock out 0xff when performing just
+    // a read operation. Some devices (like SD cards) work better with this rather than just random data
+    return HAL_SPI_TransmitReceive_IT(hspi, (uint8_t *)&dummyData, pData, Size);
+#else
     /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
     return HAL_SPI_TransmitReceive_IT(hspi, pData, pData, Size);
+#endif
   }
 
   /* Process Locked */
@@ -1786,11 +1792,16 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
 {
   HAL_SPI_StateTypeDef  tmp_state;
   HAL_StatusTypeDef errorcode = HAL_OK;
+#if HAL_RRF
+  uint32_t txInc;
+  uint32_t tmp_TxXferCount;
+#else
   uint32_t max_fifo_length = 0UL;
   uint32_t tmp_TxXferCount;
   #if defined (__GNUC__)
   __IO uint16_t *ptxdr_16bits = (__IO uint16_t *)(&(hspi->Instance->TXDR));
   #endif /* __GNUC__ */
+#endif
   uint32_t  tmp_mode;
 
   /* Check Direction parameter */
@@ -1827,6 +1838,9 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   /* Set the transaction information */
   hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
+#if HAL_RRF
+  txInc = (pTxData == (uint8_t *)&dummyData) ? 0 : sizeof(uint8_t);
+#endif
   hspi->TxXferSize  = Size;
   hspi->TxXferCount = Size;
   hspi->pRxBuffPtr  = (uint8_t *)pRxData;
@@ -1857,6 +1871,19 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   /* Enable SPI peripheral */
   __HAL_SPI_ENABLE(hspi);
 
+#if HAL_RRF
+  // Modified version of code to avoid non aligned memory access and fifo
+  // overflow.
+  // Note: We only support 8 bit transfers
+  /* Fill in the TxFIFO */
+  while ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (tmp_TxXferCount != 0UL))
+  {
+    *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)hspi->pTxBuffPtr);
+    hspi->pTxBuffPtr += txInc;
+    hspi->TxXferCount--;
+    tmp_TxXferCount = hspi->TxXferCount;
+  }
+#else
   /* Fill in the TxFIFO */
   while ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (tmp_TxXferCount != 0UL))
   {
@@ -1931,7 +1958,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
       return errorcode;
     }
   }
-
+#endif
   /* Enable EOT, DXP, UDR, OVR, FRE, MODF and TSERF interrupts */
   __HAL_SPI_ENABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF | SPI_IT_TSERF));
 
@@ -3768,7 +3795,14 @@ static void SPI_TxISR_8BIT(SPI_HandleTypeDef *hspi)
 {
   /* Transmit data in 8 Bit mode */
   *(__IO uint8_t *)&hspi->Instance->TXDR = *((uint8_t *)hspi->pTxBuffPtr);
+#if HAL_RRF
+  if (hspi->pTxBuffPtr != (uint8_t *)&dummyData)
+  {
+    hspi->pTxBuffPtr += sizeof(uint8_t);
+  }
+#else
   hspi->pTxBuffPtr += sizeof(uint8_t);
+#endif
   hspi->TxXferCount--;
 
   /* Disable IT if no more data excepted */

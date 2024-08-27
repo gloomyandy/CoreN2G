@@ -1,3 +1,11 @@
+#if HAL_RRF
+// NOTE: This module contains a number of modifications for use with RRF the primary
+// changes are to clock FF values out when performing SPI read operations (as some devices
+// work better with this than random values) and to optimise the operation for 8 bit only
+// I/O. There is a good chance that this code will not work for any other I/O size.
+#endif
+
+
 /**
   ******************************************************************************
   * @file    stm32f4xx_hal_spi.c
@@ -243,7 +251,9 @@ static void SPI_TxISR_16BIT(struct __SPI_HandleTypeDef *hspi);
 static void SPI_RxISR_8BIT(struct __SPI_HandleTypeDef *hspi);
 static void SPI_RxISR_16BIT(struct __SPI_HandleTypeDef *hspi);
 static void SPI_2linesRxISR_8BIT(struct __SPI_HandleTypeDef *hspi);
-#if !HAL_RRF
+#if HAL_RRF
+static void SPI_Noop(struct __SPI_HandleTypeDef *hspi);
+#else
 static void SPI_2linesTxISR_8BIT(struct __SPI_HandleTypeDef *hspi);
 static void SPI_2linesTxISR_16BIT(struct __SPI_HandleTypeDef *hspi);
 #endif
@@ -1381,15 +1391,6 @@ HAL_StatusTypeDef HAL_SPI_Transmit_IT(SPI_HandleTypeDef *hspi, uint8_t *pData, u
   hspi->RxXferCount = 0U;
   hspi->RxISR       = NULL;
 
-  /* Set the function for IT treatment */
-  if (hspi->Init.DataSize > SPI_DATASIZE_8BIT)
-  {
-    hspi->TxISR = SPI_TxISR_16BIT;
-  }
-  else
-  {
-    hspi->TxISR = SPI_TxISR_8BIT;
-  }
 #if HAL_RRF
   // Optimised case for 8 bit data size when running RRF
   if ((Size & 1) == 0)
@@ -1608,7 +1609,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   if ((Size & 1) == 0)
   {
     // Data length is 16 bit multiple, use 16 bit I/O
-    hspi->TxISR     = SPI_2linesRxISR_16BIT;
+    hspi->RxISR     = SPI_2linesRxISR_16BIT;
     if (hspi->State != HAL_SPI_STATE_BUSY_RX)
     {
       val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
@@ -1620,13 +1621,14 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   }
   else
   {
-    hspi->TxISR     = SPI_2linesRxISR_8BIT;
+    hspi->RxISR     = SPI_2linesRxISR_8BIT;
     if (hspi->State != HAL_SPI_STATE_BUSY_RX)
     {
       val =  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
     }
     CLEAR_BIT(hspi->Instance->CR1, SPI_CR1_DFF);
   }
+  hspi->TxISR     = SPI_Noop;
 #else
   /* Set the function for IT treatment */
   if (hspi->Init.DataSize > SPI_DATASIZE_8BIT)
@@ -3212,7 +3214,7 @@ static void SPI_2linesRxISR_8BIT(struct __SPI_HandleTypeDef *hspi)
   {
     /* Disable RXNE  and ERR interrupt */
     __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE);
-    hspi->TxISR = SPI_Noop;
+    hspi->RxISR = SPI_Noop;
     SPI_CloseRxTx_ISR(hspi);
     return;
   }
@@ -3330,7 +3332,7 @@ static void SPI_2linesRxISR_16BIT(struct __SPI_HandleTypeDef *hspi)
   {
     /* Disable RXNE interrupt */
     __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE);
-    hspi->TxISR = SPI_Noop;
+    hspi->RxISR = SPI_Noop;
 
     SPI_CloseRxTx_ISR(hspi);
     return;

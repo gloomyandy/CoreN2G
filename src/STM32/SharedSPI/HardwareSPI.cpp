@@ -28,26 +28,27 @@ point.
 Andy - 6/8/2020
 
 Some notes on SPI I/O operation
-The STM32 supports 3 forms of SPI I/O: polled, interrupt and dma. We make use of all three in different situations:
+The STM32 supports 3 forms of SPI I/O: polled, interrupt and dma. Currently polled operations are no longer used.
+
 polled: can use any memory address (as the cpu does the memory read/write operation), but has high cpu usage especially
-on large long operations. All devices support polled operations and we use them as a fall back case if we are not able
-to access the memory region.
+on large long operations. All devices support polled operations.
 
 interrupt: Can access all memory areas, has lower cpu usage for large, slow operations, but may have higher cpu usage
 for fast/large operations. The use of interrupts at the end of the operation makes it easier to ensure that there
 is a minimal gap between the end of the operation and cs being released (this is important on the MCP151xFD SPI CAN device,
-due to errors in the chip). At the moment we only support this mode on SPI1 on the F4 (as an alternative to dma operation).
-On the F4 we use a modified HAL and a custom interrupt handler.
+due to errors in the chip). This mode is now supported by all devices, we use a customized HAL to provide sending dummy
+0xff values when performing read operations. We have also optimised the code on the F4 version. Note that interrupt based
+I/O is not really fast enough currently for use when talking to the RRF WiFi interface as this operates at 20MHz and higher.
 
 dma: This mode may not be able to access all memory areas, but it has the lowest cpu overhead for large operations.
-It is the prefered operating mode when available.
+It is the prefered operating mode when available. If a memory areas can not be accessed by DMA or if the operation is
+very short we fall back to using an iterrupt based version. 
 
 */
 #if USE_SSP1 || USE_SSP2 || USE_SSP3 || USE_SSP4 || USE_SSP5 || USE_SSP6
 // Create SPI devices the actual configuration is set later
 #if STM32H7
 // On the H7 we need to make sure that and dma address is within a none cached memory area
-// FIXME if the buffer is in the D1 none cached area this test will fail.
 extern uint32_t _nocache_ram_start;
 extern uint32_t _nocache_ram_end;
 extern uint32_t _nocache2_ram_start;
@@ -68,10 +69,10 @@ HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_REQUEST_SPI3_RX
 HardwareSPI HardwareSPI::SSP4(SPI4, SPI4_IRQn, DMA1_Stream1, DMA_REQUEST_SPI4_RX, DMA1_Stream1_IRQn, DMA1_Stream2, DMA_REQUEST_SPI4_TX, DMA1_Stream2_IRQn);
 #endif
 #if USE_SSP5
-HardwareSPI HardwareSPI::SSP5(SPI5);
+HardwareSPI HardwareSPI::SSP5(SPI5, SPI5_IRQn);
 #endif
 #if USE_SSP6
-HardwareSPI HardwareSPI::SSP6(SPI6);
+HardwareSPI HardwareSPI::SSP6(SPI6, SPI6_IRQn);
 #endif
 #else
 extern uint8_t _sccmram;
@@ -117,6 +118,11 @@ extern "C" void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
     s->transferActive = false;
     if (s->callback) s->callback(s);
 }    
+extern "C" void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi) noexcept
+{
+    debugPrintf("SPI error %x\n", (unsigned)HAL_SPI_GetError(hspi));
+}    
+
 
 #if USE_SSP2
 extern "C" void DMA1_Stream3_IRQHandler()
@@ -205,13 +211,11 @@ extern "C" void SPI6_IRQHandler()
 #else
 
 #if USE_SSP1
-extern "C" void HAL_SPI_IT_IRQHandler(SPI_HandleTypeDef *hspi);
 extern "C" void SPI1_IRQHandler()
 {
-    HAL_SPI_IT_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+    HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
 }
 #endif
-
 #endif
 
 static inline void flushTxFifo(SPI_HandleTypeDef *sspDevice) noexcept
@@ -221,7 +225,7 @@ static inline void flushTxFifo(SPI_HandleTypeDef *sspDevice) noexcept
 
 static inline void flushRxFifo(SPI_HandleTypeDef *hspi) noexcept
 {
-    while (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_RXNE))
+   while (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_RXNE))
     {
         /* read the received data */
 #if STM32H7
@@ -234,7 +238,7 @@ static inline void flushRxFifo(SPI_HandleTypeDef *hspi) noexcept
 
 void HardwareSPI::flushRx() noexcept
 {
-    flushRxFifo(&spi.handle);
+   flushRxFifo(&spi.handle);
 }
 
 // Disable the device and flush any data from the fifos
@@ -244,6 +248,7 @@ void HardwareSPI::disable() noexcept
     {
         if (ioType == SpiIoType::dma)
             HAL_SPI_DMAStop(&(spi.handle));
+            //HAL_SPI_Abort_IT(&(spi.handle));
         flushRxFifo(&spi.handle);
         spi_deinit(&spi);
         initComplete = false;
@@ -326,7 +331,7 @@ void HardwareSPI::configureDevice(uint32_t deviceMode, uint32_t bits, uint32_t c
     {
         if (initComplete)
         {
-            if (ioType == SpiIoType::dma)
+           if (ioType == SpiIoType::dma)
                 HAL_SPI_DMAStop(&(spi.handle));
             spi_deinit(&spi);
         }
@@ -396,18 +401,14 @@ static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t
     HAL_StatusTypeDef status;    
     if (rx_data == nullptr)
     {
-        Cache::FlushBeforeDMASend(tx_data, len);
         status = HAL_SPI_Transmit_DMA(hspi, (uint8_t *)tx_data, len);
     }
     else if (tx_data == nullptr)
     {
-        Cache::FlushBeforeDMAReceive(rx_data, len);
         status = HAL_SPI_Receive_DMA(hspi, rx_data, len);
     }
     else
     {
-        Cache::FlushBeforeDMASend(tx_data, len);
-        Cache::FlushBeforeDMAReceive(rx_data, len);
         status = HAL_SPI_TransmitReceive_DMA(hspi, (uint8_t *)tx_data, rx_data, len);
     }
     return status;
@@ -454,7 +455,7 @@ static HAL_StatusTypeDef startTransferPolled(SPI_HandleTypeDef *hspi, const uint
     return status;
 }
 
-void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete) noexcept
+void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete, size_t minDMALen) noexcept
 {
     callback = ioComplete;
     transferActive = true;
@@ -462,20 +463,21 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
     switch (ioType)
     {
     case SpiIoType::dma:
-        if (CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
+        if (len >= minDMALen && CAN_USE_DMA(tx_data, len) && CAN_USE_DMA(rx_data, len))
         {
             status = startTransferDMA(&(spi.handle), tx_data, rx_data, len);
-            break;
         }
-        // fall through!
+        else
+        {
+            status = startTransferIT(&(spi.handle), tx_data, rx_data, len);
+        }
+        break;
     case SpiIoType::polled:
         status = startTransferPolled(&(spi.handle), tx_data, rx_data, len);
         break;
-#if USE_SSP1
     case SpiIoType::interrupt:
         status = startTransferIT(&(spi.handle), tx_data, rx_data, len);
         break;
-#endif
     default:
         debugPrintf("Warning invalid SPI I/O type %d used\n", (int)ioType);
     }
@@ -513,7 +515,7 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
     csPin = cs;
 #ifdef RTOS
     waitingTask = TaskBase::GetCallerTaskHandle();
-    startTransfer(tx_data, rx_data, len, transferComplete);
+    startTransfer(tx_data, rx_data, len, transferComplete, minDMAThreshold);
     while (transferActive)
     {
         if (!TaskBase::TakeIndexed(NotifyIndices::HardwareSpi, SPITimeoutMillis))
@@ -541,7 +543,6 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
         stopTransfer();
     }
 #endif
-    if (ioType == SpiIoType::dma && rx_data != nullptr) Cache::InvalidateAfterDMAReceive(rx_data, len);
     csPin = NoPin;
     if (cs != NoPin) fastDigitalWriteHigh(cs);
     return ret;
