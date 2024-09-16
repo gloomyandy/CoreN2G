@@ -120,7 +120,9 @@ extern "C" void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
 }    
 extern "C" void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi) noexcept
 {
-    debugPrintf("SPI error %x\n", (unsigned)HAL_SPI_GetError(hspi));
+    // Note: We may see underrun errors being reported here. This is usual when the RRF WiFi module
+    // aborts an SPI transfer before it is complete.
+    //debugPrintf("SPI error %x\n", (unsigned)HAL_SPI_GetError(hspi));
 }    
 
 
