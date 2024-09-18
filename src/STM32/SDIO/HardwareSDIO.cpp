@@ -123,8 +123,8 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
     __HAL_RCC_SDMMC1_FORCE_RESET();
     __HAL_RCC_SDMMC1_RELEASE_RESET();
     hsd.Instance = SDMMC1;
-    hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
-    hsd.Init.ClockDiv = 2;
+    hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
+    hsd.Init.ClockDiv = SDMMC_NSpeed_CLK_DIV;
 #else
     __HAL_RCC_SDIO_FORCE_RESET();
     __HAL_RCC_SDIO_RELEASE_RESET();
