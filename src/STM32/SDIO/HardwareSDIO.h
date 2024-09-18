@@ -36,7 +36,7 @@ public:
     uint8_t WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t NumOfBlocks, uint32_t Timeout) noexcept;
     uint8_t Erase(uint32_t StartAddr, uint32_t EndAddr) noexcept;
     uint8_t GetCardState(void) noexcept;
-    void GetCardInfo(HAL_SD_CardInfoTypeDef *CardInfo) noexcept;
+    uint32_t GetCardInfo(HAL_SD_CardInfoTypeDef *CardInfo) noexcept;
     uint8_t IsDetected(void) noexcept;
     static HardwareSDIO SDIO1;
 

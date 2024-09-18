@@ -123,8 +123,8 @@ uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
     __HAL_RCC_SDMMC1_FORCE_RESET();
     __HAL_RCC_SDMMC1_RELEASE_RESET();
     hsd.Instance = SDMMC1;
-    hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
-    hsd.Init.ClockDiv = 2;
+    hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
+    hsd.Init.ClockDiv = SDMMC_NSpeed_CLK_DIV;
 #else
     __HAL_RCC_SDIO_FORCE_RESET();
     __HAL_RCC_SDIO_RELEASE_RESET();
@@ -182,6 +182,7 @@ void HardwareSDIO::InitPins(NvicPriority priority) noexcept
   */
 uint8_t HardwareSDIO::Init() noexcept
 {
+  debugPrintf("Init SDIO\n");
   uint8_t sd_state = MSD_OK;
   /* Check if the SD card is plugged in the slot */
   if (IsDetected() != SD_PRESENT) {
@@ -370,12 +371,13 @@ uint8_t HardwareSDIO::GetCardState(void) noexcept
 /**
   * @brief  Get SD information about specific SD card.
   * @param  CardInfo: Pointer to HAL_SD_CardInfoTypedef structure
-  * @retval None
+  * @retval clock frequency
   */
-void HardwareSDIO::GetCardInfo(HAL_SD_CardInfoTypeDef *CardInfo) noexcept
+uint32_t HardwareSDIO::GetCardInfo(HAL_SD_CardInfoTypeDef *CardInfo) noexcept
 {
   /* Get SD card Information */
   HAL_SD_GetCardInfo(&hsd, CardInfo);
+  return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SDMMC)/(2*hsd.Init.ClockDiv);
 }
 
 
