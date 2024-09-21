@@ -38,7 +38,7 @@
 #define SERIAL_7O2 0x3C
 #define SERIAL_8O2 0x3E
 
-
+#define ConfigurableUART AsyncSerial
 
 class ConfigurableUART : public Stream
 {
