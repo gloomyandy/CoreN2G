@@ -8,9 +8,11 @@
 #ifndef SRC_SERIALCDC__TUSB_H_
 #define SRC_SERIALCDC__TUSB_H_
 
+#if SUPPORT_USB
+
 #include <Core.h>
 
-#if SUPPORT_USB && CORE_USES_TINYUSB
+#if CORE_USES_TINYUSB
 
 #include "Stream.h"
 #include <General/RingBuffer.h>
@@ -55,5 +57,5 @@ private:
 };
 
 #endif
-
+#endif
 #endif /* SRC_SERIALCDC__TUSB_H_ */

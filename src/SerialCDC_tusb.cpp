@@ -5,9 +5,11 @@
  *      Author: David
  */
 
+#if SUPPORT_USB
+
 #include "SerialCDC_tusb.h"
 
-#if SUPPORT_USB && CORE_USES_TINYUSB
+#if CORE_USES_TINYUSB
 
 #if RP2040
 # define PICO_MUTEX_ENABLE_SDK120_COMPATIBILITY		0
@@ -200,6 +202,8 @@ extern "C" void tud_cdc_rx_cb(uint8_t itf) noexcept
 {
 	(void) itf;
 }
+
+#endif
 
 #endif
 
