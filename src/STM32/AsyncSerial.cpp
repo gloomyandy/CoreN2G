@@ -2,22 +2,22 @@
 #if USE_UART0 || USE_UART1 || USE_UART2
 #include <CoreImp.h>
 #include <CoreNotifyIndices.h>
-#include "ConfigurableUART.h"
+#include "AsyncSerial.h"
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 #if USE_UART0
-TASKMEM ConfigurableUART UART_Slot0;
+TASKMEM AsyncSerial UART_Slot0;
 #endif
 #if USE_UART1
-TASKMEM ConfigurableUART UART_Slot1;
+TASKMEM AsyncSerial UART_Slot1;
 #endif
 #if USE_UART2
-TASKMEM ConfigurableUART UART_Slot2;
+TASKMEM AsyncSerial UART_Slot2;
 #endif
 
 
 
-ConfigurableUART::ConfigurableUART() noexcept
+AsyncSerial::AsyncSerial() noexcept
 {
     uart = nullptr;
     prio = 0;
@@ -27,12 +27,12 @@ ConfigurableUART::ConfigurableUART() noexcept
 }
 
 
-int8_t ConfigurableUART::GetUARTPortNumber() noexcept
+int8_t AsyncSerial::GetUARTPortNumber() noexcept
 {
     return get_port_number();
 }
 
-bool ConfigurableUART::Configure(Pin rx, Pin tx) noexcept
+bool AsyncSerial::Configure(Pin rx, Pin tx) noexcept
 {
     //Find the UART based on the confgured Pins
     void* rxDev = pinmap_peripheral(rx, PinMap_UART_RX);
@@ -47,7 +47,7 @@ bool ConfigurableUART::Configure(Pin rx, Pin tx) noexcept
     return false;    
 }
 
-void ConfigurableUART::begin(uint32_t baud, uint8_t config) noexcept
+void AsyncSerial::begin(uint32_t baud, uint8_t config) noexcept
 {
     uint32_t databits = 0;
     uint32_t stopbits = 0;
@@ -125,12 +125,12 @@ void ConfigurableUART::begin(uint32_t baud, uint8_t config) noexcept
     }
 }
 
-void ConfigurableUART::begin(uint32_t baud) noexcept
+void AsyncSerial::begin(uint32_t baud) noexcept
 {
     begin(baud, SERIAL_8N1);
 }
 
-void ConfigurableUART::end(void) noexcept
+void AsyncSerial::end(void) noexcept
 {
     if (uart != nullptr)
     {
@@ -144,7 +144,7 @@ void ConfigurableUART::end(void) noexcept
     }
 }
 
-int ConfigurableUART::read(void) noexcept
+int AsyncSerial::read(void) noexcept
 {
     if (uart != nullptr)
     {
@@ -164,7 +164,7 @@ int ConfigurableUART::read(void) noexcept
     return -1;
 }
 
-int ConfigurableUART::peek(void) noexcept
+int AsyncSerial::peek(void) noexcept
 {
     if (uart != nullptr)
     {
@@ -181,7 +181,7 @@ int ConfigurableUART::peek(void) noexcept
     return -1;
 }
 
-int ConfigurableUART::available(void) noexcept
+int AsyncSerial::available(void) noexcept
 {
     if (uart != nullptr)
     {
@@ -190,7 +190,7 @@ int ConfigurableUART::available(void) noexcept
     return 0;
 }
 
-int ConfigurableUART::availableForWrite(void) noexcept
+int AsyncSerial::availableForWrite(void) noexcept
 {
     if (uart != nullptr)
     {
@@ -200,7 +200,7 @@ int ConfigurableUART::availableForWrite(void) noexcept
 }
 
 
-size_t ConfigurableUART::canWrite() noexcept
+size_t AsyncSerial::canWrite() noexcept
 {
     if (uart != nullptr)
     {
@@ -209,7 +209,7 @@ size_t ConfigurableUART::canWrite() noexcept
     return 0;
 }
 
-size_t ConfigurableUART::write(const uint8_t c) noexcept
+size_t AsyncSerial::write(const uint8_t c) noexcept
 {
     if (uart != nullptr)
     {
@@ -244,7 +244,7 @@ size_t ConfigurableUART::write(const uint8_t c) noexcept
 }
 
 
-size_t ConfigurableUART::writeBlock(const uint8_t *buffer, size_t size) noexcept
+size_t AsyncSerial::writeBlock(const uint8_t *buffer, size_t size) noexcept
 {
     uint32_t head = tx_head;
     uint32_t tail = tx_tail;
@@ -276,7 +276,7 @@ size_t ConfigurableUART::writeBlock(const uint8_t *buffer, size_t size) noexcept
     return toCopy;
 }
 
-size_t ConfigurableUART::write(const uint8_t *buffer, size_t size) noexcept
+size_t AsyncSerial::write(const uint8_t *buffer, size_t size) noexcept
 {
     if (uart != nullptr)
     {
@@ -307,7 +307,7 @@ size_t ConfigurableUART::write(const uint8_t *buffer, size_t size) noexcept
     return size;
 }
 
-void ConfigurableUART::flush(void) noexcept
+void AsyncSerial::flush(void) noexcept
 {
     if (uart != nullptr)
     {
@@ -324,7 +324,7 @@ void ConfigurableUART::flush(void) noexcept
 }
 
 
-void ConfigurableUART::setInterruptPriority(uint32_t priority) noexcept
+void AsyncSerial::setInterruptPriority(uint32_t priority) noexcept
 {
     prio = priority;
     if (uart != nullptr)
@@ -333,12 +333,12 @@ void ConfigurableUART::setInterruptPriority(uint32_t priority) noexcept
     }
 }
 
-uint32_t ConfigurableUART::getInterruptPriority() noexcept
+uint32_t AsyncSerial::getInterruptPriority() noexcept
 {
     return prio;
 }
 
-bool ConfigurableUART::IsConnected() noexcept
+bool AsyncSerial::IsConnected() noexcept
 {
     if (uart != nullptr) return true;
     return false;
@@ -346,7 +346,7 @@ bool ConfigurableUART::IsConnected() noexcept
 
 
 // FIXME we should probbaly implement the call back for this!
-ConfigurableUART::InterruptCallbackFn ConfigurableUART::SetInterruptCallback(InterruptCallbackFn f) noexcept
+AsyncSerial::InterruptCallbackFn AsyncSerial::SetInterruptCallback(InterruptCallbackFn f) noexcept
 {
 	AtomicCriticalSectionLocker lock;
 	InterruptCallbackFn ret = interruptCallback;
@@ -354,7 +354,7 @@ ConfigurableUART::InterruptCallbackFn ConfigurableUART::SetInterruptCallback(Int
 	return ret;
 }
 
-ConfigurableUART::OnTransmissionEndedFn ConfigurableUART::SetOnTxEndedCallback(OnTransmissionEndedFn f, CallbackParameter cp) noexcept
+AsyncSerial::OnTransmissionEndedFn AsyncSerial::SetOnTxEndedCallback(OnTransmissionEndedFn f, CallbackParameter cp) noexcept
 {
 	AtomicCriticalSectionLocker lock;
 	const OnTransmissionEndedFn ret = onTransmissionEndedFn;
@@ -363,7 +363,7 @@ ConfigurableUART::OnTransmissionEndedFn ConfigurableUART::SetOnTxEndedCallback(O
 	return ret;
 }
 
-void ConfigurableUART::ClearTransmitBuffer() noexcept
+void AsyncSerial::ClearTransmitBuffer() noexcept
 {
     if (uart != nullptr)
     {
@@ -373,19 +373,19 @@ void ConfigurableUART::ClearTransmitBuffer() noexcept
     flush();
 }
 
-void ConfigurableUART::ClearReceiveBuffer() noexcept
+void AsyncSerial::ClearReceiveBuffer() noexcept
 {
 	AtomicCriticalSectionLocker lock;
 	rx_tail = rx_head;
 }
 
-void ConfigurableUART::DisableTransmit() noexcept
+void AsyncSerial::DisableTransmit() noexcept
 {
 	txEnabled = false;
     flush();
 }
 
-void ConfigurableUART::EnableTransmit() noexcept
+void AsyncSerial::EnableTransmit() noexcept
 {
 	txEnabled = true;
     start_tx();
@@ -393,7 +393,7 @@ void ConfigurableUART::EnableTransmit() noexcept
 
 
 // Get and clear the errors
-ConfigurableUART::Errors ConfigurableUART::GetAndClearErrors() noexcept
+AsyncSerial::Errors AsyncSerial::GetAndClearErrors() noexcept
 {
 	Errors errs;
     errs.uartOverrun = 0;
@@ -450,9 +450,9 @@ typedef enum {
     UART_NUM
 } index_t;
 
-static ConfigurableUART *handlers[UART_NUM] = {nullptr};
+static AsyncSerial *handlers[UART_NUM] = {nullptr};
 
-void ConfigurableUART::init(uint32_t baudrate, uint32_t databits, uint32_t parity, uint32_t stopbits) noexcept
+void AsyncSerial::init(uint32_t baudrate, uint32_t databits, uint32_t parity, uint32_t stopbits) noexcept
 {
     UART_HandleTypeDef *huart = &(handle);
     uint8_t index = 0;
@@ -658,7 +658,7 @@ void ConfigurableUART::init(uint32_t baudrate, uint32_t databits, uint32_t parit
     HAL_NVIC_EnableIRQ(irq);
 }
 
-void ConfigurableUART::deinit() noexcept
+void AsyncSerial::deinit() noexcept
 {
     /* Reset UART and disable clock */
     HAL_NVIC_DisableIRQ(irq);
@@ -767,7 +767,7 @@ void ConfigurableUART::deinit() noexcept
 
 }
 
-int8_t ConfigurableUART::get_port_number() noexcept
+int8_t AsyncSerial::get_port_number() noexcept
 {
 #if defined(USART1_BASE)
     if (uart == USART1) {
@@ -843,18 +843,18 @@ int8_t ConfigurableUART::get_port_number() noexcept
     return -1;
 }
 
-uint8_t ConfigurableUART::serial_rx_active() noexcept
+uint8_t AsyncSerial::serial_rx_active() noexcept
 {
     return ((HAL_UART_GetState(&handle) & HAL_UART_STATE_BUSY_RX) == HAL_UART_STATE_BUSY_RX);
 }
 
-uint8_t ConfigurableUART::serial_tx_active() noexcept
+uint8_t AsyncSerial::serial_tx_active() noexcept
 {
     return ((HAL_UART_GetState(&handle) & HAL_UART_STATE_BUSY_TX) == HAL_UART_STATE_BUSY_TX);
 }
 
 
-void ConfigurableUART::start_rx() noexcept
+void AsyncSerial::start_rx() noexcept
 {
     /* Exit if a reception is already on-going */
     if (serial_rx_active()) {
@@ -863,30 +863,30 @@ void ConfigurableUART::start_rx() noexcept
     HAL_UART_Receive_IT(&handle, &(rx_buff[0]), SERIAL_RX_BUFFER_SIZE);
 }
 
-void ConfigurableUART::start_tx() noexcept
+void AsyncSerial::start_tx() noexcept
 {
     if (!serial_tx_active() && tx_tail != tx_head) {
         HAL_UART_Transmit_IT(&handle, &tx_buff[tx_tail], 1);
     }
 }
 
-void ConfigurableUART::set_interrupt_priority( uint32_t priority) noexcept
+void AsyncSerial::set_interrupt_priority( uint32_t priority) noexcept
 {
     HAL_NVIC_SetPriority(irq, priority, 0);
 }
 
 
-uint32_t ConfigurableUART::rx_available() noexcept
+uint32_t AsyncSerial::rx_available() noexcept
 {
     return ((uint32_t)(rx_head - rx_tail)) % SERIAL_RX_BUFFER_SIZE;
 }
 
-uint32_t ConfigurableUART::tx_available() noexcept
+uint32_t AsyncSerial::tx_available() noexcept
 {
     return ((uint32_t)(tx_tail + SERIAL_TX_BUFFER_SIZE - 1 - tx_head)) % SERIAL_TX_BUFFER_SIZE;
 }
 
-inline void ConfigurableUART::UART_ErrorCallback() noexcept
+inline void AsyncSerial::UART_ErrorCallback() noexcept
 {
     /* Restart receive interrupt after any error */
     hw_error++;
@@ -895,7 +895,7 @@ inline void ConfigurableUART::UART_ErrorCallback() noexcept
     }
 }
 
-inline HAL_StatusTypeDef ConfigurableUART::UART_Receive_IT() noexcept
+inline HAL_StatusTypeDef AsyncSerial::UART_Receive_IT() noexcept
 {
 #if STM32H7
     uint8_t val = (uint8_t)(handle.Instance->RDR & (uint8_t)0x00FF);
@@ -913,7 +913,7 @@ inline HAL_StatusTypeDef ConfigurableUART::UART_Receive_IT() noexcept
     return HAL_OK;
 }
 
-inline HAL_StatusTypeDef ConfigurableUART::UART_Transmit_IT() noexcept
+inline HAL_StatusTypeDef AsyncSerial::UART_Transmit_IT() noexcept
 {
     if (tx_tail != tx_head)
     {
@@ -947,7 +947,7 @@ inline HAL_StatusTypeDef ConfigurableUART::UART_Transmit_IT() noexcept
     return HAL_OK;
 }
 
-inline HAL_StatusTypeDef ConfigurableUART::UART_EndTransmit_IT() noexcept
+inline HAL_StatusTypeDef AsyncSerial::UART_EndTransmit_IT() noexcept
 {
     // has more data arrived while we waited?
     if (tx_tail != tx_head)
@@ -981,7 +981,7 @@ inline HAL_StatusTypeDef ConfigurableUART::UART_EndTransmit_IT() noexcept
     return HAL_OK;
 }
 
-void ConfigurableUART::UART_IRQHandler() noexcept
+void AsyncSerial::UART_IRQHandler() noexcept
 {
 #if STM32H7
     uint32_t isrflags = READ_REG(handle.Instance->ISR);
