@@ -182,7 +182,6 @@ void HardwareSDIO::InitPins(NvicPriority priority) noexcept
   */
 uint8_t HardwareSDIO::Init() noexcept
 {
-  debugPrintf("Init SDIO\n");
   uint8_t sd_state = MSD_OK;
   /* Check if the SD card is plugged in the slot */
   if (IsDetected() != SD_PRESENT) {
@@ -377,7 +376,11 @@ uint32_t HardwareSDIO::GetCardInfo(HAL_SD_CardInfoTypeDef *CardInfo) noexcept
 {
   /* Get SD card Information */
   HAL_SD_GetCardInfo(&hsd, CardInfo);
-  return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SDMMC)/(2*hsd.Init.ClockDiv);
+#if STM32H7
+  return HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_SDMMC)/(hsd.Init.ClockDiv == 0 ? 1 : 2*hsd.Init.ClockDiv);
+#else
+  return (48*1000000)/(hsd.Init.ClockBypass == SDIO_CLOCK_BYPASS_ENABLE ? 1 : hsd.Init.ClockDiv + 2);
+#endif
 }
 
 
