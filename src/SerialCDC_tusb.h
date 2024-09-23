@@ -8,11 +8,9 @@
 #ifndef SRC_SERIALCDC__TUSB_H_
 #define SRC_SERIALCDC__TUSB_H_
 
-#if SUPPORT_USB
-
 #include <Core.h>
 
-#if CORE_USES_TINYUSB
+#if SUPPORT_USB && CORE_USES_TINYUSB
 
 #include "Stream.h"
 #include <General/RingBuffer.h>
@@ -55,7 +53,5 @@ private:
 	volatile uint32_t getIndex;
 #endif
 };
-
-#endif
 #endif
 #endif /* SRC_SERIALCDC__TUSB_H_ */
