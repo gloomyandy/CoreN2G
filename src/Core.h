@@ -130,10 +130,12 @@ extern "C" {
 # define STM32H7			0
 # define STM32F4			0
 #endif
+#if !defined(CORE_USES_TINYUSB)
 #if SAME70 || RP2040 || SAME5x
 # define CORE_USES_TINYUSB		1
 #else
 # define CORE_USES_TINYUSB		0
+#endif
 #endif
 
 #include <inttypes.h>					// for PRIu32 etc.

@@ -16,21 +16,26 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _USBSERIAL_H_
-#define _USBSERIAL_H_
+#ifndef _SerialCDC_H_
+#define _SerialCDC_H_
+#if SUPPORT_USB
+#if CORE_USES_TINYUSB
 
-#if defined (USBCON) && defined(USBD_USE_CDC) && SUPPORT_USB
+#include <SerialCDC_tusb.h>
+
+#else
 #include "Stream.h"
 #include <General/RingBuffer.h>
 //#include "usbd_core.h"
 
 //================================================================================
 // Serial over CDC
-class USBSerial : public Stream {
+class SerialCDC : public Stream {
   public:
     void begin(void) noexcept;
     void begin(uint32_t) noexcept;
     void begin(uint32_t, uint8_t) noexcept;
+    void Start(Pin VBusPin) noexcept;
     void end(void) noexcept;
 
     virtual int available(void) noexcept;
@@ -69,5 +74,6 @@ class USBSerial : public Stream {
     };
 };
 
-#endif /* USBCON */
-#endif /* _USBSERIAL_H_ */
+#endif /* !TINYUSB */
+#endif /* SUPPORT_USB */
+#endif /* _SerialCDC_H_ */
