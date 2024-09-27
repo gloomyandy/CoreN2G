@@ -345,7 +345,7 @@ void CoreUsbInit(NvicPriority priority) noexcept
   USB_OTG_HS->GUSBCFG &= ~USB_OTG_GUSBCFG_FHMOD;
   USB_OTG_HS->GUSBCFG |= USB_OTG_GUSBCFG_FDMOD;
 HAL_PWREx_EnableUSBVoltageDetector();
-HAL_NVIC_EnableIRQ(OTG_IRQn);
+//HAL_NVIC_EnableIRQ(OTG_IRQn);
 #else
 # error Unsupported processor
 #endif
@@ -454,7 +454,7 @@ extern "C" void USB_3_Handler(void)
 
 extern "C" void OTG_HS_IRQHandler(void)
 {
-  tud_int_handler(1);
+  tud_int_handler(0);
 }
 
 #endif
