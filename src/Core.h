@@ -17,9 +17,15 @@
 
 #include <ecv_duet3d.h>
 
-// Branch prediction macros. Must be defined before we include the part-specifi files, else some of them will define it in an unhelpful manner.
-#define likely(x)		__builtin_expect(!!(x), 1)
-#define unlikely(x)		__builtin_expect(!!(x), 0)
+// Branch prediction macros. Must be defined before we include the part-specific files, else some of them will define it in an unhelpful manner.
+#ifdef __ECV__
+// Using __builtin_expect involves implicit type conversions so define these differently for eCv
+# define likely(x)		(x)
+# define unlikely(x)	(x)
+#else
+# define likely(x)		__builtin_expect(!!(x), 1)
+# define unlikely(x)	__builtin_expect(!!(x), 0)
+#endif
 
 #if defined(__SAME54P20A__) || defined(__SAME51P20A__)
 # include <same54.h>
@@ -442,7 +448,7 @@ static inline __attribute__((__always_inline__)) void IrqRestore(irqflags_t flag
 }
 
 /**
- * @brief Return true if a character is one of the digits 0 thru 9
+ * @brief Return true if a character is one of the digits 0 thru 9 (type-correct version of isdigit)
  *
  * @param c the character to test
  * @return True iff the character is a digit
@@ -452,6 +458,27 @@ static inline bool isDigit(char c) noexcept
 	return isdigit((int)c) != 0;
 }
 
+/**
+ * @brief Return true if a character is a letter (type-correct version of isalpha)
+ *
+ * @param c the character to test
+ * @return True iff the character is a digit
+ */
+static inline bool isAlpha(char c) noexcept
+{
+	return isalpha((int)c) != 0;
+}
+
+/**
+ * @brief Return true if a character is a letter or digit (type-correct version of isalnum)
+ *
+ * @param c the character to test
+ * @return True iff the character is a digit
+ */
+static inline bool isAlnum(char c) noexcept
+{
+	return isalnum((int)c) != 0;
+}
 /**
  * @brief Test whether we are in an interrupt service routine or exception handler
  *
