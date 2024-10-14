@@ -44,27 +44,24 @@ constexpr unsigned int NumTotalPins = 30;				// RP2040 goes up to GPIO29
 #endif
 
 #if STM32
-inline uint32_t GpioPortNumber(Pin p) { return STM_PORT(p);}
-inline constexpr uint32_t GpioPinNumber(Pin p) { return STM_PIN(p); }
-inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)STM_GPIO_PIN(p); }
+inline uint32_t GpioPortNumber(Pin p) noexcept { return STM_PORT(p);}
+inline constexpr uint32_t GpioPinNumber(Pin p) noexcept { return STM_PIN(p); }
+inline constexpr uint32_t GpioMask(Pin p) noexcept { return (uint32_t)STM_GPIO_PIN(p); }
 #elif RP2040
 
 inline constexpr Pin GpioPin(unsigned int n) noexcept { return n; }
-inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)1 << p; }
+inline constexpr uint32_t GpioMask(Pin p) noexcept { return (uint32_t)1 << p; }
 
 #else
 
-inline uint32_t GpioPortNumber(Pin p) { return p >> 5; }
-inline constexpr uint32_t GpioPinNumber(Pin p) { return p & 0x1F; }
-inline constexpr uint32_t GpioMask(Pin p) { return (uint32_t)1 << GpioPinNumber(p); }
-#endif
+inline uint32_t GpioPortNumber(Pin p) noexcept { return p >> 5; }
+inline constexpr uint32_t GpioPinNumber(Pin p) noexcept { return p & 0x1F; }
+inline constexpr uint32_t GpioMask(Pin p) noexcept { return (uint32_t)1 << GpioPinNumber(p); }
 
 #if SAME70 || SAM4E || SAM4S
-inline Pio *GpioPort(Pin p) { return (Pio*)((uint32_t)PIOA + GpioPortNumber(p) * 0x200); }
+inline Pio *GpioPort(Pin p) noexcept { return (Pio*)((uint32_t)PIOA + GpioPortNumber(p) * 0x200); }
 #endif
 
-#if !STM32
-#if !RP2040
 /**
  * @brief Return the global pin number for a Port A pin
  *
@@ -119,6 +116,8 @@ inline constexpr Pin PortEPin(unsigned int n) noexcept { return 128+n; }
 
 #endif	// !RP2040
 
+#if !STM32
+
 /**
  * @brief Pin function numbers for calls to SetPinFunction
  *
@@ -159,7 +158,8 @@ void SetDriveStrength(Pin p, unsigned int strength) noexcept;
  * @param p The pin number
  */
 void ClearPinFunction(Pin p) noexcept;
-#endif
+#endif // !STM32
+
 // Enable or disable the pullup[ resistor
 void SetPullup(Pin p, bool on) noexcept;
 
