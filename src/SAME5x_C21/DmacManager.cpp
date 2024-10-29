@@ -22,10 +22,10 @@
 constexpr NvicPriority TempNvicPriorityDMA = 2;			// temporary DMA interrupt priority, low enough to allow FreeRTOS system calls
 
 // Descriptors for all used DMAC channels
-alignas(16) static DmacDescriptor descriptor_section[NumDmaChannelsSupported];
+alignas(16) __attribute__((section(".DmaBuffers"))) static DmacDescriptor descriptor_section[NumDmaChannelsSupported];
 
 // Write back descriptors for all used DMAC channels
-alignas(16) static DmacDescriptor write_back_section[NumDmaChannelsSupported];
+alignas(16) __attribute__((section(".DmaBuffers"))) static DmacDescriptor write_back_section[NumDmaChannelsSupported];
 
 // Array containing callbacks for DMAC channels
 static DmaCallbackFunction dmaChannelCallbackFunctions[NumDmaChannelsSupported];
@@ -97,6 +97,7 @@ void DmacManager::SetSourceAddress(const uint8_t channel, const volatile void *c
 	descriptor_section[channel].SRCADDR.reg = reinterpret_cast<uint32_t>(src);
 }
 
+// Caution: SetDataLength must be called up AFTER setting up source sand destination addresses!
 void DmacManager::SetDataLength(const uint8_t channel, const uint32_t amount) noexcept
 {
 	const uint8_t beat_size = descriptor_section[channel].BTCTRL.bit.BEATSIZE;
@@ -112,6 +113,7 @@ void DmacManager::SetDataLength(const uint8_t channel, const uint32_t amount) no
 	}
 
 	descriptor_section[channel].BTCNT.reg = amount;
+	descriptor_section[channel].DESCADDR.reg = 0;
 }
 
 void DmacManager::SetTriggerSource(uint8_t channel, DmaTrigSource source) noexcept

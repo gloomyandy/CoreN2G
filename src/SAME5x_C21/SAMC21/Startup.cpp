@@ -19,9 +19,12 @@ extern uint32_t _erelocate;
 extern uint32_t _szero;
 extern uint32_t _ezero;
 
+extern uint32_t _sDmaBuffers;					// defined in linker script
+extern uint32_t _eDmaBuffers;					// defined in linker script
+
 #if SUPPORT_CAN
-extern uint32_t _sCanMessage;
-extern uint32_t _eCanMessage;
+extern uint32_t _sCanMessage;				// defined in linker script
+extern uint32_t _eCanMessage;				// defined in linker script
 #endif
 
 extern "C" void __libc_init_array() noexcept;
@@ -49,6 +52,12 @@ extern "C" [[noreturn]] void Reset_Handler() noexcept
 
 	// Clear the zero segment
 	for (pDest = &_szero; pDest < &_ezero; )
+	{
+		*pDest++ = 0;
+	}
+
+	// Clear the DMA state segment
+	for (pDest = &_sDmaBuffers; pDest < &_eDmaBuffers; )
 	{
 		*pDest++ = 0;
 	}
