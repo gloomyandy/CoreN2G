@@ -35,8 +35,10 @@ static void InitClocks() noexcept;
 /**
  * \brief This is the code that gets called on processor reset.
  * To initialize the device, and call the main() routine.
+ * CAUTION: if the optimisation level of this function is set to high then strange things happen, e.g. incorrect DMA from the ADC.
+ * Best keep the code as short as possible until initialisation is complete.
  */
-extern "C" [[noreturn]] void Reset_Handler() noexcept
+extern "C" [[noreturn]] __attribute__((__optimize__ ("-fno-tree-loop-distribute-patterns","-Os"))) void Reset_Handler() noexcept
 {
 	// Initialize the relocate segment
 	uint32_t *pSrc = &_etext;
@@ -96,7 +98,7 @@ extern "C" [[noreturn]] void Reset_Handler() noexcept
 	while (1) { }
 }
 
-static void InitClocks() noexcept
+static __attribute__((__optimize__ ("-Os"))) void InitClocks() noexcept
 {
 	// Set the number of flash wait states
 	hri_nvmctrl_set_CTRLB_RWS_bf(NVMCTRL, 2);							// 2 wait states needed at clock frequencies >38MHz
