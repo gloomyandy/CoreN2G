@@ -1018,7 +1018,7 @@ extern unsigned int AppGetXoscNumber() noexcept;
  * @param p Pin number
  * @return Pointer to the pin table entry for that pin, or nullptr if the pin does not exist
  */
-extern const PinDescriptionBase *AppGetPinDescription(Pin p) noexcept;
+extern const PinDescriptionBase *_ecv_from _ecv_null AppGetPinDescription(Pin p) noexcept;
 
 #if SAME5x
 
@@ -1027,6 +1027,20 @@ extern const PinDescriptionBase *AppGetPinDescription(Pin p) noexcept;
  * @return Frequency in Hz
  */
 extern uint32_t AppGetSdhcClockSpeed() noexcept;
+
+/**
+ * @brief Set the Quality of Service requirement for CPU accesses to SRAM.
+ * 0 = Background (no sensitive operation)
+ * 1 = Sensitive Bandwidth
+ * 2 = Sensitive Latency
+ * 3 = Critical Latency
+ * The reset value is 3. If a master is configured with QoS level DISABLE (0x0) or LOW (0x1) there will be a minimum latency of one cycle for the RAM access.
+ */
+
+static inline void SetCpuQos(uint32_t qos) noexcept
+{
+	*reinterpret_cast<uint32_t*>(0x4100C11C) = qos;
+}
 
 #endif
 #endif
