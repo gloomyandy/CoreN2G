@@ -414,7 +414,7 @@ static inline __attribute__((always_inline)) void IrqDisable() noexcept
 	__disable_irq();
 }
 
-typedef uint32_t irqflags_t;	///< Type used to indicate whether interrupts were enabled/should be enabled. It stores the original value of PRIMASK.
+typedef uint32_t coreIrqflags_t;	///< Type used to indicate whether interrupts were enabled/should be enabled. It stores the original value of PRIMASK.
 
 /**
  * @brief Test whether interrupts are enabled
@@ -431,9 +431,9 @@ static inline __attribute__((always_inline)) bool IsIrqEnabled() noexcept
  *
  * @return The initial interrupts enabled state
  */
-static inline __attribute__((always_inline)) irqflags_t IrqSave() noexcept
+static inline __attribute__((always_inline)) coreIrqflags_t IrqSave() noexcept
 {
-	const irqflags_t flags = __get_PRIMASK();
+	const coreIrqflags_t flags = __get_PRIMASK();
 	__disable_irq();
 	return flags;
 }
@@ -444,7 +444,7 @@ static inline __attribute__((always_inline)) irqflags_t IrqSave() noexcept
  * @param flags Value to convert
  * @return Converted value
  */
-static inline __attribute__((always_inline)) bool IsIrqEnabledFlags(irqflags_t flags) noexcept
+static inline __attribute__((always_inline)) bool IsIrqEnabledInFlags(coreIrqflags_t flags) noexcept
 {
 	return (flags & 0x01) == 0;
 }
@@ -454,7 +454,7 @@ static inline __attribute__((always_inline)) bool IsIrqEnabledFlags(irqflags_t f
  *
  * @param flags The original interrupts enabled state returned by a call to IrqSave
  */
-static inline __attribute__((__always_inline__)) void IrqRestore(irqflags_t flags) noexcept
+static inline __attribute__((__always_inline__)) void IrqRestore(coreIrqflags_t flags) noexcept
 {
 	__set_PRIMASK(flags);
 }

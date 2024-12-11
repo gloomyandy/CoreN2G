@@ -307,7 +307,7 @@ public:
 	}
 
 private:
-	irqflags_t flags;
+	coreIrqflags_t flags;
 };
 
 #if SAME5x || SAM4E || SAM4S || SAME70 || STM32		// SAMC21 doesn't support these
@@ -315,7 +315,7 @@ private:
 // Functions to change the base priority, to shut out interrupts up to a priority level
 
 // Get the base priority and shut out interrupts lower than or equal to a specified priority
-inline uint32_t ChangeBasePriority(uint32_t prio)
+inline uint32_t ChangeBasePriority(uint32_t prio) noexcept
 {
 	const uint32_t oldPrio = __get_BASEPRI();
 	__set_BASEPRI_MAX(prio << (8 - __NVIC_PRIO_BITS));
@@ -323,13 +323,13 @@ inline uint32_t ChangeBasePriority(uint32_t prio)
 }
 
 // Restore the base priority following a call to ChangeBasePriority
-inline void RestoreBasePriority(uint32_t prio)
+inline void RestoreBasePriority(uint32_t prio) noexcept
 {
 	__set_BASEPRI(prio);
 }
 
 // Set the base priority when we are not interested in the existing value i.e. definitely in non-interrupt code
-inline void SetBasePriority(uint32_t prio)
+inline void SetBasePriority(uint32_t prio) noexcept
 {
 	__set_BASEPRI(prio << (8 - __NVIC_PRIO_BITS));
 }

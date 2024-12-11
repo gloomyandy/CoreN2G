@@ -447,7 +447,7 @@ uint32_t millis() noexcept
 
 uint64_t millis64() noexcept
 {
-	const irqflags_t flags = IrqSave();
+	const auto flags = IrqSave();
 	const uint64_t ret = g_ms_ticks;			// take a copy with interrupts disabled to guard against rollover while we read it
 	IrqRestore(flags);
 	return ret;

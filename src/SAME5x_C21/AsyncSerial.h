@@ -56,10 +56,10 @@ public:
 	void end() noexcept;
 	void setInterruptPriority(uint32_t rxPrio, uint32_t txAndErrorPrio) const noexcept;
 
-	InterruptCallbackFn SetInterruptCallback(InterruptCallbackFn f) noexcept;
+	InterruptCallbackFn _ecv_null SetInterruptCallback(InterruptCallbackFn _ecv_null f) noexcept;
 
 #if SAME5x
-	OnTransmissionEndedFn SetOnTxEndedCallback(OnTransmissionEndedFn f, CallbackParameter cp) noexcept;
+	OnTransmissionEndedFn _ecv_null SetOnTxEndedCallback(OnTransmissionEndedFn _ecv_null f, CallbackParameter cp) noexcept;
 #endif
 
 #if 0
@@ -93,8 +93,8 @@ private:
     OnEndFn onEnd;
 
 #if SAME5x
-	OnTransmissionEndedFn onTransmissionEndedFn;
-	CallbackParameter onTransmissionEndedCp;
+	OnTransmissionEndedFn _ecv_null onTransmissionEndedFn;
+	CallbackParameter _ecv_null onTransmissionEndedCp;
 #endif
 
 	Errors errors;

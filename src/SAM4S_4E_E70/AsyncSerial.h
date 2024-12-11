@@ -91,8 +91,8 @@ public:
 	void setInterruptPriority(uint32_t priority) noexcept;
 	uint32_t getInterruptPriority() noexcept;
 
-	InterruptCallbackFn SetInterruptCallback(InterruptCallbackFn f) noexcept;
-	OnTransmissionEndedFn SetOnTxEndedCallback(OnTransmissionEndedFn f, CallbackParameter cp) noexcept;
+	InterruptCallbackFn _ecv_null SetInterruptCallback(InterruptCallbackFn _ecv_null f) noexcept;
+	OnTransmissionEndedFn _ecv_null SetOnTxEndedCallback(OnTransmissionEndedFn _ecv_null f, CallbackParameter cp) noexcept;
 
 	// Get and clear the errors
 	Errors GetAndClearErrors() noexcept;
@@ -111,10 +111,10 @@ protected:
 #ifdef RTOS
 	volatile TaskHandle txWaitingTask;
 #endif
-	InterruptCallbackFn interruptCallback;
+	InterruptCallbackFn _ecv_null interruptCallback;
 	OnBeginFn onBegin;
 	OnEndFn onEnd;
-	OnTransmissionEndedFn onTransmissionEndedFn;
+	OnTransmissionEndedFn _ecv_null onTransmissionEndedFn;
 	CallbackParameter onTransmissionEndedCp;
 	Errors errors;
 

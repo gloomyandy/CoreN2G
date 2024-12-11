@@ -321,17 +321,17 @@ void AsyncSerial::IrqHandler() noexcept
 	}
 }
 
-AsyncSerial::InterruptCallbackFn AsyncSerial::SetInterruptCallback(InterruptCallbackFn f) noexcept
+AsyncSerial::InterruptCallbackFn _ecv_null AsyncSerial::SetInterruptCallback(InterruptCallbackFn _ecv_null f) noexcept
 {
-	const InterruptCallbackFn ret = interruptCallback;
+	const InterruptCallbackFn _ecv_null ret = interruptCallback;
 	interruptCallback = f;
 	return ret;
 }
 
-AsyncSerial::OnTransmissionEndedFn AsyncSerial::SetOnTxEndedCallback(OnTransmissionEndedFn f, CallbackParameter cp) noexcept
+AsyncSerial::OnTransmissionEndedFn _ecv_null AsyncSerial::SetOnTxEndedCallback(OnTransmissionEndedFn _ecv_null f, CallbackParameter cp) noexcept
 {
 	AtomicCriticalSectionLocker lock;
-	const OnTransmissionEndedFn ret = onTransmissionEndedFn;
+	const OnTransmissionEndedFn _ecv_null ret = onTransmissionEndedFn;
 	onTransmissionEndedFn = f;
 	onTransmissionEndedCp = cp;
 	return ret;
