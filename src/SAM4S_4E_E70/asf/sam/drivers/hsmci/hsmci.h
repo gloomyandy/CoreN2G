@@ -200,7 +200,7 @@ uint32_t hsmci_get_speed(void) noexcept;
 typedef void (*hsmciIdleFunc_t)(uint32_t, uint32_t) noexcept;
 
 // Set the idle function and return the old one
-hsmciIdleFunc_t hsmci_set_idle_func(hsmciIdleFunc_t) noexcept;
+hsmciIdleFunc_t _ecv_null hsmci_set_idle_func(hsmciIdleFunc_t _ecv_null) noexcept;
 
 #endif
 

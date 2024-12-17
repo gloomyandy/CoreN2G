@@ -49,7 +49,7 @@ public:
 	TwoWire(Twi *p_twi, void(*begin_cb)(void) noexcept) noexcept;
 
 	void BeginMaster(uint32_t p_clockFrequency) noexcept;
-	size_t Transfer(uint16_t address, uint8_t *buffer, size_t numToWrite, size_t numToRead, WaitForStatusFunc statusWaitFunc = DefaultWaitForStatusFunc) noexcept;
+	size_t Transfer(uint16_t address, uint8_t *_ecv_array buffer, size_t numToWrite, size_t numToRead, WaitForStatusFunc statusWaitFunc = DefaultWaitForStatusFunc) noexcept;
 	ErrorCounts GetErrorCounts(bool clear) noexcept;
 
 	static uint32_t DefaultWaitForStatusFunc(Twi *twi, uint32_t bitsToWaitFor) noexcept;

@@ -9,7 +9,6 @@
  */
 
 #include <Core.h>
-#include <sys/stat.h>
 #include <cerrno>
 #include <new>
 
@@ -40,19 +39,19 @@ const char *heapLimit = (const char*)&__StackLimit;
 # define SystemStackSize	(1024)
 #endif
 
-const char *sysStackLimit = (const char*)&_estack - SystemStackSize;
-const char *heapLimit = (const char*)&_estack - SystemStackSize;
+const char *_ecv_array sysStackLimit = (const char *_ecv_array)&_estack - SystemStackSize;
+const char *_ecv_array heapLimit = (const char *_ecv_array)&_estack - SystemStackSize;
 
 #endif
 
-char *heapTop = &_end;
+char *_ecv_array heapTop = (char *_ecv_array)&_end;
 
 /**
  * \brief Replacement of C library of _sbrk
  */
 extern "C" void * _sbrk(ptrdiff_t incr) noexcept
 {
-	char *newHeap = heapTop + incr;
+	char *_ecv_array newHeap = heapTop + incr;
 	if (newHeap <= heapLimit)
 	{
 		void * const prev_heap = heapTop;
@@ -80,7 +79,7 @@ void *CoreAllocPermanent(size_t sz, std::align_val_t align) noexcept
 	}
 	// if we do not have any CCMRAM available try "normal ram"
 #endif
-	char * const newHeapLimit = reinterpret_cast<char *>(reinterpret_cast<uint32_t>(heapLimit - sz) & ~((uint32_t)align - 1));
+	char *_ecv_array const newHeapLimit = reinterpret_cast<char *_ecv_array>(reinterpret_cast<uint32_t>(heapLimit - sz) & ~((uint32_t)align - 1));
 	if (newHeapLimit < heapTop)
 	{
 		OutOfMemoryHandler();
@@ -92,9 +91,9 @@ void *CoreAllocPermanent(size_t sz, std::align_val_t align) noexcept
 /**
  * \brief Replacement of C library of link
  */
-extern "C" int link(char *old, char *_new) noexcept
+extern "C" int link(char *_old, char *_new) noexcept
 {
-	(void)old, (void)_new;
+	(void)_old, (void)_new;
 	return -1;
 }
 
@@ -105,17 +104,6 @@ extern "C" int _close(int file) noexcept
 {
 	(void)file;
 	return -1;
-}
-
-/**
- * \brief Replacement of C library of _fstat
- */
-extern "C" int _fstat(int file, struct stat *st) noexcept
-{
-	(void)file;
-	st->st_mode = S_IFCHR;
-
-	return 0;
 }
 
 /**

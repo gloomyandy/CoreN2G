@@ -19,9 +19,9 @@
 #include <General/SimpleMath.h>
 
 // Exported memory control variables. These are defined in file syscalls.h which must be included by exactly one client file.
-extern char *heapTop;
-extern const char *heapLimit;
-extern const char *sysStackLimit;
+extern char *_ecv_array heapTop;
+extern const char *_ecv_array heapLimit;
+extern const char *_ecv_array sysStackLimit;
 
 // Define NumTotalPins as the pin number at and beyond which it is not safe to access the corresponding port registers on this processor family.
 // This may be greater than the number of I/O pins actually on the particular device we are running on.
@@ -272,6 +272,12 @@ inline bool memeqi32(const int32_t *_ecv_array dst, const int32_t *_ecv_array sr
 // memcmp for float arrays
 // Returns true if the arrays are equal
 bool memeqf(const float *_ecv_array dst, const float *_ecv_array src, size_t numWords) noexcept;
+
+// memset for float arrays
+void memsetf(float *_ecv_array dst, float val, size_t numWords) noexcept;
+
+// memset for int32_t arrays
+void memseti32(int32_t *_ecv_array dst, int32_t val, size_t numWords) noexcept;
 
 // Get the stack pointer
 #ifdef __ECV__

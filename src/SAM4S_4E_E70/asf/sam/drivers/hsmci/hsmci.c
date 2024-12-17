@@ -245,10 +245,10 @@ uint32_t hsmci_get_speed()
 	return hsmciClock/2;            // HSMCI interface is 4 bits wide, so divide by 2 to get bytes/sec
 }
 
-static hsmciIdleFunc_t hsmciIdleFunc = NULL;
+static hsmciIdleFunc_t _ecv_null hsmciIdleFunc = NULL;
 
 // Set the idle function and return the old one
-hsmciIdleFunc_t hsmci_set_idle_func(hsmciIdleFunc_t p)
+hsmciIdleFunc_t _ecv_null hsmci_set_idle_func(hsmciIdleFunc_t _ecv_null p)
 {
        hsmciIdleFunc_t ret = hsmciIdleFunc;
        hsmciIdleFunc = p;

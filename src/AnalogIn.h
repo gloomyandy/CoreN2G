@@ -45,6 +45,10 @@ namespace AnalogIn
 	constexpr unsigned int AdcBits = 14;
 #elif RP2040
 	constexpr unsigned int AdcBits = 12;
+#elif SAME70
+	static constexpr unsigned int AdcBits = 14;
+#else
+	static constexpr unsigned int AdcBits = 12;
 #endif
 
 #ifdef RTOS
@@ -125,13 +129,7 @@ namespace LegacyAnalogIn
 	void AnalogInEnableChannel(AnalogChannelNumber channel, bool enable) noexcept;
 
 	// Return the number of bits provided by a call to AnalogInReadChannel
-#if SAME70
-	static constexpr unsigned int AdcBits = 14;
-#elif STM32
-	static constexpr unsigned int AdcBits = 14;
-#else
-	static constexpr unsigned int AdcBits = 12;
-#endif
+	static constexpr unsigned int AdcBits = AnalogIn::AdcBits;
 
 	// Read the most recent result from a channel
 	uint16_t AnalogInReadChannel(AnalogChannelNumber channel) noexcept;
@@ -171,7 +169,7 @@ namespace LegacyAnalogIn
 #ifdef RTOS
 
 // This function is for backwards compatibility with CoreNG
-inline uint16_t AnalogInReadChannel(AdcInput adcin)
+inline uint16_t AnalogInReadChannel(AdcInput adcin) noexcept
 {
 #if SAME70 || SAM4E || SAM4S || STM32
 	return LegacyAnalogIn::AnalogInReadChannel(adcin);
@@ -181,7 +179,7 @@ inline uint16_t AnalogInReadChannel(AdcInput adcin)
 }
 
 // This function is for backwards compatibility with CoreNG
-inline void AnalogInEnableChannel(AdcInput adcin, bool enable)
+inline void AnalogInEnableChannel(AdcInput adcin, bool enable) noexcept
 {
 #if SAME70 || SAM4E || SAM4S || STM32
 	LegacyAnalogIn::AnalogInEnableChannel(adcin, enable);
