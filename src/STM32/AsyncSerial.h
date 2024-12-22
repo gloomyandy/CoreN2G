@@ -103,14 +103,10 @@ private:
     void start_tx() noexcept;
     void set_interrupt_priority(uint32_t priority) noexcept;
     int8_t get_port_number() noexcept;
-    uint8_t serial_tx_active() noexcept;
-    uint8_t serial_rx_active() noexcept;
     uint32_t rx_available() noexcept;
     uint32_t tx_available() noexcept;
-    void UART_ErrorCallback() noexcept;
     HAL_StatusTypeDef UART_Receive_IT() noexcept;
-    HAL_StatusTypeDef UART_Transmit_IT() noexcept;
-    HAL_StatusTypeDef UART_EndTransmit_IT() noexcept;
+    HAL_StatusTypeDef UART_Transmit_IT(uint32_t isrflags) noexcept;
     InterruptCallbackFn interruptCallback;
 	OnTransmissionEndedFn onTransmissionEndedFn;
 	CallbackParameter onTransmissionEndedCp;
@@ -133,6 +129,7 @@ private:
 #endif
 
     uint32_t rx_full;
+    uint32_t rx_overrun;
     uint32_t hw_error;
 };
 

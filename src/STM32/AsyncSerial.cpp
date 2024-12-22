@@ -136,9 +136,7 @@ void AsyncSerial::end(void) noexcept
     {
         // wait for transmission of outgoing data
         flush();
-
         deinit();
-
         // clear any received data
         rx_head = rx_tail = 0;
     }
@@ -213,31 +211,31 @@ size_t AsyncSerial::write(const uint8_t c) noexcept
 {
     if (uart != nullptr)
     {
-        uint32_t i = (tx_head + 1) % SERIAL_TX_BUFFER_SIZE;
-        if (i == tx_tail && !txEnabled)
+        for(;;)
         {
-            return 0;
-        }
-        // If the output buffer is full, there's nothing for it other than to
-        // wait for the interrupt handler to empty it a bit
-        while (i == tx_tail) 
-        {
-            // nop, the interrupt handler will free up space for us
+            uint32_t i = (tx_head + 1) % SERIAL_TX_BUFFER_SIZE;
+            if (i != tx_tail)
+            {
+                tx_buff[tx_head] = c;
+                tx_head = i;
+                if (txEnabled)
+                {
+                    start_tx();
+                }
+                break;
+            }
+            if (!txEnabled)
+            {
+                return 0;
+            }
 #ifdef RTOS
             txWaitingTask = RTOSIface::GetCurrentTask();
+#endif
+            start_tx();
+#ifdef RTOS
             TaskBase::TakeIndexed(NotifyIndices::UartTx, 50);
 #endif
         }
-
-        tx_buff[tx_head] = c;
-        tx_head = i;
-
-        if (!serial_tx_active()) 
-        {
-            start_tx();
-        }
-
-        return 1;
     }
 
     return 1;
@@ -280,24 +278,27 @@ size_t AsyncSerial::write(const uint8_t *buffer, size_t size) noexcept
 {
     if (uart != nullptr)
     {
-        size_t ret = size;
+        size_t ret = 0;
         for(;;)
         {
             size_t len = writeBlock(buffer, size);
             size -= len;
             buffer += len;
+            ret += len;
             if (!txEnabled)
             {
                 break;
             }
-            if (len && !serial_tx_active())
-                start_tx();
             if (size == 0)
             {
+                start_tx();
                 break;
             }
 #ifdef RTOS
             txWaitingTask = RTOSIface::GetCurrentTask();
+#endif
+            start_tx();
+#ifdef RTOS
             TaskBase::TakeIndexed(NotifyIndices::UartTx, 50);
 #endif
         }
@@ -317,9 +318,11 @@ void AsyncSerial::flush(void) noexcept
             // nop, the interrupt handler will free up space for us
         }
         // and for the hardware to complete sending
-        while (serial_tx_active()) 
-        {
-        }
+#if STM32H7
+        while((READ_REG(handle.Instance->ISR) & UART_FLAG_TXE) == 0) {}
+#else
+        while((READ_REG(handle.Instance->SR) & UART_FLAG_TXE) == 0) {}
+#endif
    }
 }
 
@@ -348,19 +351,19 @@ bool AsyncSerial::IsConnected() noexcept
 // FIXME we should probbaly implement the call back for this!
 AsyncSerial::InterruptCallbackFn AsyncSerial::SetInterruptCallback(InterruptCallbackFn f) noexcept
 {
-	AtomicCriticalSectionLocker lock;
-	InterruptCallbackFn ret = interruptCallback;
-	interruptCallback = f;
-	return ret;
+    AtomicCriticalSectionLocker lock;
+    InterruptCallbackFn ret = interruptCallback;
+    interruptCallback = f;
+    return ret;
 }
 
 AsyncSerial::OnTransmissionEndedFn AsyncSerial::SetOnTxEndedCallback(OnTransmissionEndedFn f, CallbackParameter cp) noexcept
 {
-	AtomicCriticalSectionLocker lock;
-	const OnTransmissionEndedFn ret = onTransmissionEndedFn;
-	onTransmissionEndedFn = f;
-	onTransmissionEndedCp = cp;
-	return ret;
+    AtomicCriticalSectionLocker lock;
+    const OnTransmissionEndedFn ret = onTransmissionEndedFn;
+    onTransmissionEndedFn = f;
+    onTransmissionEndedCp = cp;
+    return ret;
 }
 
 void AsyncSerial::ClearTransmitBuffer() noexcept
@@ -375,19 +378,19 @@ void AsyncSerial::ClearTransmitBuffer() noexcept
 
 void AsyncSerial::ClearReceiveBuffer() noexcept
 {
-	AtomicCriticalSectionLocker lock;
-	rx_tail = rx_head;
+    AtomicCriticalSectionLocker lock;
+    rx_tail = rx_head;
 }
 
 void AsyncSerial::DisableTransmit() noexcept
 {
-	txEnabled = false;
     flush();
+    txEnabled = false;
 }
 
 void AsyncSerial::EnableTransmit() noexcept
 {
-	txEnabled = true;
+    txEnabled = true;
     start_tx();
 }
 
@@ -395,18 +398,19 @@ void AsyncSerial::EnableTransmit() noexcept
 // Get and clear the errors
 AsyncSerial::Errors AsyncSerial::GetAndClearErrors() noexcept
 {
-	Errors errs;
-    errs.uartOverrun = 0;
+    Errors errs;
     if  (uart != nullptr)
     {
         errs.bufferOverrun = rx_full;
         errs.framing = hw_error;
-        hw_error = rx_full = 0;
+        errs.uartOverrun = rx_overrun;
+        hw_error = rx_full = rx_overrun = 0;
     }
     else
     {
         errs.bufferOverrun = 0;
         errs.framing = 0;
+        errs.uartOverrun = 0;
     }
 	return errs;
 }
@@ -465,7 +469,7 @@ void AsyncSerial::init(uint32_t baudrate, uint32_t databits, uint32_t parity, ui
         debugPrintf("ERROR: at least one UART pin has no peripheral\n");
         return;
     }
-    hw_error = rx_full = 0;
+    hw_error = rx_full = rx_overrun = 0;
  
     /*
      * Get the peripheral name (USART1, USART2, ...) from the pin
@@ -843,31 +847,15 @@ int8_t AsyncSerial::get_port_number() noexcept
     return -1;
 }
 
-uint8_t AsyncSerial::serial_rx_active() noexcept
-{
-    return ((HAL_UART_GetState(&handle) & HAL_UART_STATE_BUSY_RX) == HAL_UART_STATE_BUSY_RX);
-}
-
-uint8_t AsyncSerial::serial_tx_active() noexcept
-{
-    return ((HAL_UART_GetState(&handle) & HAL_UART_STATE_BUSY_TX) == HAL_UART_STATE_BUSY_TX);
-}
-
-
 void AsyncSerial::start_rx() noexcept
 {
-    /* Exit if a reception is already on-going */
-    if (serial_rx_active()) {
-        return;
-    }
-    HAL_UART_Receive_IT(&handle, &(rx_buff[0]), SERIAL_RX_BUFFER_SIZE);
+    __HAL_UART_ENABLE_IT(&handle, UART_IT_RXNE);
+    __HAL_UART_ENABLE_IT(&handle, UART_IT_ERR);    
 }
 
 void AsyncSerial::start_tx() noexcept
 {
-    if (!serial_tx_active() && tx_tail != tx_head) {
-        HAL_UART_Transmit_IT(&handle, &tx_buff[tx_tail], 1);
-    }
+    __HAL_UART_ENABLE_IT(&handle, UART_IT_TXE);
 }
 
 void AsyncSerial::set_interrupt_priority( uint32_t priority) noexcept
@@ -884,15 +872,6 @@ uint32_t AsyncSerial::rx_available() noexcept
 uint32_t AsyncSerial::tx_available() noexcept
 {
     return ((uint32_t)(tx_tail + SERIAL_TX_BUFFER_SIZE - 1 - tx_head)) % SERIAL_TX_BUFFER_SIZE;
-}
-
-inline void AsyncSerial::UART_ErrorCallback() noexcept
-{
-    /* Restart receive interrupt after any error */
-    hw_error++;
-    if (!serial_rx_active()) {
-        HAL_UART_Receive_IT(&handle, &(rx_buff[rx_head]), 1);
-    }
 }
 
 inline HAL_StatusTypeDef AsyncSerial::UART_Receive_IT() noexcept
@@ -913,11 +892,11 @@ inline HAL_StatusTypeDef AsyncSerial::UART_Receive_IT() noexcept
     return HAL_OK;
 }
 
-inline HAL_StatusTypeDef AsyncSerial::UART_Transmit_IT() noexcept
+inline HAL_StatusTypeDef AsyncSerial::UART_Transmit_IT(uint32_t isrflags) noexcept
 {
     if (tx_tail != tx_head)
     {
-        // write the data
+        // We have data to send
 #if STM32H7
         handle.Instance->TDR = tx_buff[tx_tail];
 #else
@@ -925,58 +904,40 @@ inline HAL_StatusTypeDef AsyncSerial::UART_Transmit_IT() noexcept
 #endif
         // update write pointer
         tx_tail = (tx_tail + 1) % SERIAL_TX_BUFFER_SIZE;
+#if RTOS
+        if (txWaitingTask != nullptr && tx_available() >= SERIAL_TX_BUFFER_SIZE/2)
+        {
+            TaskBase::GiveFromISR(txWaitingTask, NotifyIndices::UartTx);
+            txWaitingTask = nullptr;
+        }
+#endif
     }
-    // do we have more to send?
-    if (tx_tail == tx_head)
+    else
     {
+        // no data left
         /* Disable the UART Transmit empty Interrupt */
         __HAL_UART_DISABLE_IT(&handle, UART_IT_TXE);
-
-        /* Enable the UART Transmit Complete Interrupt */
-        __HAL_UART_ENABLE_IT(&handle, UART_IT_TC);
-    }
-#if RTOS
-    if (txWaitingTask != nullptr && tx_available() >= SERIAL_TX_BUFFER_SIZE/2)
-    {
-        TaskBase::GiveFromISR(txWaitingTask, NotifyIndices::UartTx);
-        txWaitingTask = nullptr;
-    }
-#endif
-
-
-    return HAL_OK;
-}
-
-inline HAL_StatusTypeDef AsyncSerial::UART_EndTransmit_IT() noexcept
-{
-    // has more data arrived while we waited?
-    if (tx_tail != tx_head)
-    {
-        // Yes so send the data
-#if STM32H7
-        handle.Instance->TDR = tx_buff[tx_tail];
-#else
-        handle.Instance->DR = tx_buff[tx_tail];
-#endif
-        // update write pointer
-        tx_tail = (tx_tail + 1) % SERIAL_TX_BUFFER_SIZE;
-        // do we have more to send?
-        if (tx_tail != tx_head)
+        if (onTransmissionEndedFn != nullptr)					// if we want callback when the transmitter is empty
         {
-            /* Enable the UART Transmit empty Interrupt */
-            __HAL_UART_ENABLE_IT(&handle, UART_IT_TXE);
-            __HAL_UART_DISABLE_IT(&handle, UART_IT_TC);
+            if ((isrflags & UART_FLAG_TC) != RESET)
+            {
+                /* Disable the UART Transmit Complete Interrupt */
+                __HAL_UART_DISABLE_IT(&handle, UART_IT_TC);
+                onTransmissionEndedFn(onTransmissionEndedCp);	// execute the callback
+            }
+            else
+            {
+                /* Enable the UART Transmit Complete Interrupt */
+                __HAL_UART_ENABLE_IT(&handle, UART_IT_TC);
+            }
         }
-        return HAL_OK;
-    }
-    // No data left to send
-    /* Disable the UART Transmit Complete Interrupt */
-    __HAL_UART_DISABLE_IT(&handle, UART_IT_TC);
-    /* Tx process is ended, restore handle.gState to Ready */
-    handle.gState = HAL_UART_STATE_READY;
-    if (onTransmissionEndedFn != nullptr)					// if we want callback when the transmitter is empty
-    {
-        onTransmissionEndedFn(onTransmissionEndedCp);	// execute the callback
+#if RTOS
+        if (txWaitingTask != nullptr)
+        {
+            TaskBase::GiveFromISR(txWaitingTask, NotifyIndices::UartTx);
+            txWaitingTask = nullptr;
+        }
+#endif
     }
     return HAL_OK;
 }
@@ -990,132 +951,86 @@ void AsyncSerial::UART_IRQHandler() noexcept
     uint32_t isrflags = READ_REG(handle.Instance->SR);
     uint32_t errorflags = (isrflags & (uint32_t)(UART_FLAG_PE | UART_FLAG_FE | UART_FLAG_ORE | UART_FLAG_NE));
 #endif
-    uint32_t cr1its = READ_REG(handle.Instance->CR1);
-    uint32_t cr3its         = READ_REG(handle.Instance->CR3);
 
-    /* If no error occurs */
-    if (errorflags == RESET)
+    if ((isrflags & UART_FLAG_RXNE) != RESET)
     {
-        /* UART in mode Receiver -------------------------------------------------*/
-        if (((isrflags & UART_FLAG_RXNE) != RESET) && ((cr1its & USART_CR1_RXNEIE) != RESET))
-        {
-            UART_Receive_IT();
-            return;
-        }
+        UART_Receive_IT();
     }
 
     /* If some errors occur */
 // FIXME: This is a mess different flags on H7/F4
 #if STM32H7
-    if ((errorflags != 0U)
-            && ((((cr3its & (USART_CR3_RXFTIE | USART_CR3_EIE)) != 0U) || ((cr1its & (USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_RTOIE)) != 0U))))
+    if (errorflags != RESET)
     {
         /* UART parity error interrupt occurred -------------------------------------*/
-        if (((isrflags & USART_ISR_PE) != 0U) && ((cr1its & USART_CR1_PEIE) != 0U))
+        if ((isrflags & USART_ISR_PE) != 0U)
         {
             __HAL_UART_CLEAR_FLAG(&handle, UART_CLEAR_PEF);
-            handle.ErrorCode |= HAL_UART_ERROR_PE;
         }
 
         /* UART frame error interrupt occurred --------------------------------------*/
-        if (((isrflags & USART_ISR_FE) != 0U) && ((cr3its & USART_CR3_EIE) != 0U))
+        if ((isrflags & USART_ISR_FE) != 0U)
         {
             __HAL_UART_CLEAR_FLAG(&handle, UART_CLEAR_FEF);
-            handle.ErrorCode |= HAL_UART_ERROR_FE;
-        }
+            hw_error++;
+         }
 
         /* UART noise error interrupt occurred --------------------------------------*/
-        if (((isrflags & USART_ISR_NE) != 0U) && ((cr3its & USART_CR3_EIE) != 0U))
+        if ((isrflags & USART_ISR_NE) != 0U)
         {
             __HAL_UART_CLEAR_FLAG(&handle, UART_CLEAR_NEF);
-            handle.ErrorCode |= HAL_UART_ERROR_NE;
-        }
+            hw_error++;
+         }
 
         /* UART Over-Run interrupt occurred -----------------------------------------*/
-        if (((isrflags & USART_ISR_ORE) != 0U) && (((cr1its & USART_CR1_RXNEIE_RXFNEIE) != 0U) || ((cr3its & (USART_CR3_RXFTIE | USART_CR3_EIE)) != 0U)))
+        if ((isrflags & USART_ISR_ORE) != 0U)
         {
             __HAL_UART_CLEAR_FLAG(&handle, UART_CLEAR_OREF);
-            handle.ErrorCode |= HAL_UART_ERROR_ORE;
+            rx_overrun++;
         }
 
         /* UART Receiver Timeout interrupt occurred ---------------------------------*/
-        if (((isrflags & USART_ISR_RTOF) != 0U) && ((cr1its & USART_CR1_RTOIE) != 0U))
+        if ((isrflags & USART_ISR_RTOF) != 0U)
         {
             __HAL_UART_CLEAR_FLAG(&handle, UART_CLEAR_RTOF);
-            handle.ErrorCode |= HAL_UART_ERROR_RTO;
         }
-
-        /* Call UART Error Call back function if need be ----------------------------*/
-        if (handle.ErrorCode != HAL_UART_ERROR_NONE)
-        {
-            /* UART in mode Receiver --------------------------------------------------*/
-            if (((isrflags & USART_ISR_RXNE_RXFNE) != 0U)
-                    && (((cr1its & USART_CR1_RXNEIE_RXFNEIE) != 0U)
-                            || ((cr3its & USART_CR3_RXFTIE) != 0U)))
-            {
-                UART_Receive_IT();
-            }
-            // record error and restart
-            UART_ErrorCallback();
-            handle.ErrorCode = HAL_UART_ERROR_NONE;
-        }
-        return;
     }
 #else
     /* If some errors occur */
-    if ((errorflags != RESET) && (((cr3its & USART_CR3_EIE) != RESET) || ((cr1its & (USART_CR1_RXNEIE | USART_CR1_PEIE)) != RESET)))
+    if (errorflags != RESET)
     {
         /* UART parity error interrupt occurred ----------------------------------*/
-        if (((isrflags & USART_SR_PE) != RESET) && ((cr1its & USART_CR1_PEIE) != RESET))
+        if ((isrflags & USART_SR_PE) != RESET)
         {
-            handle.ErrorCode |= HAL_UART_ERROR_PE;
+            __HAL_UART_CLEAR_PEFLAG(&handle);
         }
 
         /* UART noise error interrupt occurred -----------------------------------*/
-        if (((isrflags & USART_SR_NE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
+        if ((isrflags & USART_SR_NE) != RESET)
         {
-            handle.ErrorCode |= HAL_UART_ERROR_NE;
+            __HAL_UART_CLEAR_NEFLAG(&handle);
+            hw_error++;
         }
 
         /* UART frame error interrupt occurred -----------------------------------*/
-        if (((isrflags & USART_SR_FE) != RESET) && ((cr3its & USART_CR3_EIE) != RESET))
+        if ((isrflags & USART_SR_FE) != RESET)
         {
-            handle.ErrorCode |= HAL_UART_ERROR_FE;
-        }
+            __HAL_UART_CLEAR_FEFLAG(&handle);
+            hw_error++;
+         }
 
         /* UART Over-Run interrupt occurred --------------------------------------*/
-        if (((isrflags & USART_SR_ORE) != RESET) && (((cr1its & USART_CR1_RXNEIE) != RESET) || ((cr3its & USART_CR3_EIE) != RESET)))
+        if ((isrflags & USART_SR_ORE) != RESET)
         {
-            handle.ErrorCode |= HAL_UART_ERROR_ORE;
+            __HAL_UART_CLEAR_OREFLAG(&handle);
+            rx_overrun++;
         }
-
-        /* Call UART Error Call back function if need be --------------------------*/
-        if (handle.ErrorCode != HAL_UART_ERROR_NONE)
-        {
-            /* UART in mode Receiver -----------------------------------------------*/
-            if (((isrflags & USART_SR_RXNE) != RESET) && ((cr1its & USART_CR1_RXNEIE) != RESET))
-            {
-                UART_Receive_IT();
-            }
-
-            // record error and restart
-            UART_ErrorCallback();
-            handle.ErrorCode = HAL_UART_ERROR_NONE;
-        }
-        return;
     } /* End if some error occurs */
 #endif
     /* UART in mode Transmitter ------------------------------------------------*/
-    if (((isrflags & UART_FLAG_TXE) != RESET) && ((cr1its & USART_CR1_TXEIE) != RESET))
+    if (((isrflags & UART_FLAG_TXE) != RESET) && txEnabled)
     {
-        UART_Transmit_IT();
-        return;
-    }
-
-    /* UART in mode Transmitter end --------------------------------------------*/
-    if (((isrflags & UART_FLAG_TC) != RESET) && ((cr1its & USART_CR1_TCIE) != RESET))
-    {
-        UART_EndTransmit_IT();
+        UART_Transmit_IT(isrflags);
         return;
     }
 }
