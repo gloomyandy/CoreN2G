@@ -29,7 +29,11 @@ typedef uint8_t CanAddress;			///< A type that represents the 7-bit CAN address 
 typedef uint32_t NvicPriority;		///< A type that represents an interrupt priority
 typedef uint8_t ExintNumber;		///< A type that represents an EXINT number (used on SAME5x/SAMC21 only)
 typedef uint8_t EventNumber;		///< A type that represents an event number (used on SAME5x/SAMC21 only)
+
+#ifndef FLOAT16_T_DEFINED
+# define FLOAT16_T_DEFINED
 typedef __fp16 float16_t;			///< A 16-bit floating point type
+#endif
 
 #if STM32
 static const Pin NoPin = NC;		///< A number that represents no I/O pin

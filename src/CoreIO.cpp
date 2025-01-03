@@ -640,6 +640,7 @@ void memsetf(float *_ecv_array dst, float val, size_t numWords) noexcept
 	while (numWords != 0)
 	{
 		*dst++ = val;
+		--numWords;
 	}
 }
 
@@ -649,6 +650,7 @@ void memseti32(int32_t *_ecv_array dst, int32_t val, size_t numWords) noexcept
 	while (numWords != 0)
 	{
 		*dst++ = val;
+		--numWords;
 	}
 }
 

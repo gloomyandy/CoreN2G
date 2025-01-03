@@ -1100,7 +1100,7 @@ typedef U8                  Byte;       //!< 8-bit unsigned integer.
  * @param[out] data Pointer to the 8 Byte array to be updated with 64-Bit value
  * @ingroup apiPalApi
  */
-static inline void convert_64_bit_to_byte_array(uint64_t value, uint8_t *data)
+static inline void convert_64_bit_to_byte_array(uint64_t value, uint8_t data[8])
 {
     uint8_t val_index = 0;
 
@@ -1118,21 +1118,21 @@ static inline void convert_64_bit_to_byte_array(uint64_t value, uint8_t *data)
  * @param[out] data Pointer to the 2 Byte array to be updated with 16-Bit value
  * @ingroup apiPalApi
  */
-static inline void convert_16_bit_to_byte_array(uint16_t value, uint8_t *data)
+static inline void convert_16_bit_to_byte_array(uint16_t value, uint8_t data[2])
 {
     data[0] = value & 0xFF;
     data[1] = (value >> 8) & 0xFF;
 }
 
 /* Converts a 16-Bit value into a 2 Byte array */
-static inline void convert_spec_16_bit_to_byte_array(uint16_t value, uint8_t *data)
+static inline void convert_spec_16_bit_to_byte_array(uint16_t value, uint8_t data[2])
 {
     data[0] = value & 0xFF;
     data[1] = (value >> 8) & 0xFF;
 }
 
 /* Converts a 16-Bit value into a 2 Byte array */
-static inline void convert_16_bit_to_byte_address(uint16_t value, uint8_t *data)
+static inline void convert_16_bit_to_byte_address(uint16_t value, uint8_t data[2])
 {
     data[0] = value & 0xFF;
     data[1] = (value >> 8) & 0xFF;
@@ -1146,13 +1146,13 @@ static inline void convert_16_bit_to_byte_address(uint16_t value, uint8_t *data)
  * @return 16-Bit value
  * @ingroup apiPalApi
  */
-static inline uint16_t convert_byte_array_to_16_bit(uint8_t *data)
+static inline uint16_t convert_byte_array_to_16_bit(const uint8_t data[2])
 {
     return (data[0] | ((uint16_t)data[1] << 8));
 }
 
 /* Converts a 8 Byte array into a 32-Bit value */
-static inline uint32_t convert_byte_array_to_32_bit(uint8_t *data)
+static inline uint32_t convert_byte_array_to_32_bit(const uint8_t data[4])
 {
 	union
 	{
@@ -1175,7 +1175,7 @@ static inline uint32_t convert_byte_array_to_32_bit(uint8_t *data)
  * @return 64-Bit value
  * @ingroup apiPalApi
  */
-static inline uint64_t convert_byte_array_to_64_bit(uint8_t *data)
+static inline uint64_t convert_byte_array_to_64_bit(const uint8_t data[8])
 {
     union
     {
