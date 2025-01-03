@@ -93,6 +93,10 @@ void WS2812::Configure(Pin p_pin, bool p_isRgbw) noexcept
 	{
 		pin = p_pin;
 		isRgbw = p_isRgbw;
+		if (pin == NoPin)
+		{
+			return;
+		}
 		// make sure previous I/O is complete
 		while (dma_channel_is_busy(dmaChan)) { }
 
