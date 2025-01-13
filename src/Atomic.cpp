@@ -52,6 +52,24 @@ extern "C" bool __atomic_compare_exchange_1(volatile void *ptr, void *expected, 
 	return ret;
 }
 
+extern "C" uint16_t __atomic_exchange_2(volatile void *ptr, uint16_t desired, int memorder) noexcept
+{
+	const auto flags = IrqSave();
+	const uint16_t ret = *(volatile uint16_t*)ptr;
+	*(volatile uint16_t*)ptr = desired;
+	IrqRestore(flags);
+	return ret;
+}
+
+extern "C" uint16_t __atomic_fetch_or_2(volatile void *ptr, uint16_t val, int memorder) noexcept
+{
+	const auto flags = IrqSave();
+	const uint16_t ret = *(volatile uint16_t*)ptr;
+	*(volatile uint16_t*)ptr = ret | val;
+	IrqRestore(flags);
+	return ret;
+}
+
 extern "C" unsigned int __atomic_fetch_or_4(volatile void *ptr, unsigned int val, int memorder) noexcept
 {
 	const auto flags = IrqSave();

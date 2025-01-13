@@ -36,8 +36,10 @@ enum class InterruptMode : uint8_t
 };
 
 void InitialiseExints() noexcept;
-bool attachInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param) noexcept;
-void detachInterrupt(Pin pin) noexcept;
+bool AttachPinInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param, bool enable = true) noexcept;
+void DetachPinInterrupt(Pin pin) noexcept;
+void EnablePinInterrupt(Pin pin) noexcept;
+void DisablePinInterrupt(Pin pin) noexcept;
 ExintNumber AttachEvent(Pin pin, InterruptMode mode, bool enableFilter) noexcept;
 void DetachEvent(Pin pin) noexcept;
 

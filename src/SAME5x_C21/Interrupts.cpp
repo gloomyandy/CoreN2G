@@ -71,7 +71,7 @@ void InitialiseExints() noexcept
 }
 
 // Attach an interrupt to the specified pin returning true if successful
-bool attachInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param) noexcept
+bool AttachPinInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param, bool enable) noexcept
 {
 	const PinDescriptionBase * const pinDesc = AppGetPinDescription(pin);
 	if (pinDesc == nullptr)
@@ -118,8 +118,10 @@ bool attachInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode m
 		EIC->CTRLA.reg |= EIC_CTRLA_ENABLE;
 		hri_eic_wait_for_sync(EIC, EIC_SYNCBUSY_ENABLE);
 
-		// Enable interrupt
-		EIC->INTENSET.reg = 1ul << exint;
+		if (enable)
+		{
+			EIC->INTENSET.reg = 1ul << exint;
+		}
 	}
 
 #if SAME5x
@@ -133,7 +135,7 @@ bool attachInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode m
 	return true;
 }
 
-void detachInterrupt(Pin pin) noexcept
+void DetachPinInterrupt(Pin pin) noexcept
 {
 	const PinDescriptionBase * const pinDesc = AppGetPinDescription(pin);
 	if (pinDesc != nullptr)
@@ -167,6 +169,32 @@ void detachInterrupt(Pin pin) noexcept
 			ClearPinFunction(pin);
 
 			exintCallbacks[exint].func = nullptr;
+		}
+	}
+}
+
+void EnablePinInterrupt(Pin pin) noexcept
+{
+	const PinDescriptionBase * const pinDesc = AppGetPinDescription(pin);
+	if (pinDesc != nullptr)
+	{
+		const ExintNumber exint = pinDesc->exintNumber;
+		if (exint < 16)
+		{
+			EIC->INTENSET.reg = 1ul << exint;
+		}
+	}
+}
+
+void DisablePinInterrupt(Pin pin) noexcept
+{
+	const PinDescriptionBase * const pinDesc = AppGetPinDescription(pin);
+	if (pinDesc != nullptr)
+	{
+		const ExintNumber exint = pinDesc->exintNumber;
+		if (exint < 16)
+		{
+			EIC->INTENCLR.reg = 1ul << exint;
 		}
 	}
 }

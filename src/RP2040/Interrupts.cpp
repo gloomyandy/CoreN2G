@@ -24,6 +24,7 @@ struct InterruptCallback
 {
 	StandardCallbackFunction func;
 	CallbackParameter param;
+	uint8_t mask;
 
 	InterruptCallback() : func(nullptr) { }
 };
@@ -44,7 +45,7 @@ static void __initialize()
 }
 
 // Attach an interrupt to the specified pin returning true if successful
-bool attachInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param) noexcept
+bool AttachPinInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param, bool enable) noexcept
 {
 	if (pin >= NumCallbacks)
 	{
@@ -65,41 +66,44 @@ bool attachInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode m
 	pinCallbacks[pin].param = param;
 
 	// Configure the interrupt mode
+	uint8_t mask;
 	switch(mode)
 	{
-	case InterruptMode::change:
-		gpio_set_irq_enabled(pin, 0x0c, true);
-		break;
-
-	case InterruptMode::low:
-		gpio_set_irq_enabled(pin, 0x01, true);
-		break;
-
-	case InterruptMode::high:
-		gpio_set_irq_enabled(pin, 0x02, true);
-		break;
-
-	case InterruptMode::falling:
-		gpio_set_irq_enabled(pin, 0x04, true);
-		break;
-
-	case InterruptMode::rising:
-		gpio_set_irq_enabled(pin, 0x08, true);
-		break;
-
-	default:
-		break;
+	case InterruptMode::change:		mask = 0x0C; break;
+	case InterruptMode::low:		mask = 0x01; break;
+	case InterruptMode::high:		mask = 0x02; break;
+	case InterruptMode::falling:	mask = 0x04; break;
+	case InterruptMode::rising:		mask = 0x08; break;
+	default:						mask = 0x00; break;
 	}
 
+	pinCallbacks[pin].mask = mask;
+	gpio_set_irq_enabled(pin, mask, enabled);
 	return true;
 }
 
-void detachInterrupt(Pin pin) noexcept
+void DetachPinInterrupt(Pin pin) noexcept
 {
 	if (pin < NumCallbacks)
 	{
 		gpio_set_irq_enabled(pin, 0x0F, false);
 		pinCallbacks[pin].func = nullptr;
+	}
+}
+
+void EnablePinInterrupt(Pin pin) noexcept
+{
+	if (pin < NumCallbacks)
+	{
+		gpio_set_irq_enabled(pin, pinCallbacks[pin].mask, true);
+	}
+}
+
+void DisablePinInterrupt(Pin pin) noexcept
+{
+	if (pin < NumCallbacks)
+	{
+		gpio_set_irq_enabled(pin, pinCallbacks[pin].mask, false);
 	}
 }
 

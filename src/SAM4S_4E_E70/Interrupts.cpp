@@ -79,7 +79,7 @@ static void __initialize() noexcept
 }
 
 // Attach an interrupt to the specified pin returning true if successful
-bool attachInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param) noexcept
+bool AttachPinInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param, bool enable) noexcept
 {
 	const PinDescriptionBase * const pinDesc = AppGetPinDescription(pin);
 	if (pinDesc == nullptr || pin >= NumPins)
@@ -146,13 +146,16 @@ bool attachInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMode m
 	if (mode != InterruptMode::none)
 	{
 		pio->PIO_IFER = mask;		// enable glitch filter on this pin
-		pio->PIO_IER = mask;		// enable interrupt on this pin
+		if (enable)
+		{
+			pio->PIO_IER = mask;	// enable interrupt on this pin
+		}
 	}
 
 	return true;
 }
 
-void detachInterrupt(Pin pin) noexcept
+void DetachPinInterrupt(Pin pin) noexcept
 {
 	const PinDescriptionBase * const pinDesc = AppGetPinDescription(pin);
 	if (pinDesc != nullptr && pin < NumPins)
@@ -162,6 +165,28 @@ void detachInterrupt(Pin pin) noexcept
 		const uint32_t mask = GpioMask(pin);
 
 		// Disable interrupt
+		pio->PIO_IDR = mask;
+	}
+}
+
+void EnablePinInterrupt(Pin pin) noexcept
+{
+	const PinDescriptionBase * const pinDesc = AppGetPinDescription(pin);
+	if (pinDesc != nullptr && pin < NumPins)
+	{
+		Pio * const pio = GpioPort(pin);
+		const uint32_t mask = GpioMask(pin);
+		pio->PIO_IER = mask;
+	}
+}
+
+void DisablePinInterrupt(Pin pin) noexcept
+{
+	const PinDescriptionBase * const pinDesc = AppGetPinDescription(pin);
+	if (pinDesc != nullptr && pin < NumPins)
+	{
+		Pio * const pio = GpioPort(pin);
+		const uint32_t mask = GpioMask(pin);
 		pio->PIO_IDR = mask;
 	}
 }
