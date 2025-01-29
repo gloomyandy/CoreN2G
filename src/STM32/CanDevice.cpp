@@ -148,8 +148,10 @@ void CanDevice::CanStats::Clear() noexcept
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_BUS_OFF, 0);
 	HAL_FDCAN_EnableTxDelayCompensation(&dev.hw);
+#ifdef RTOS
 	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][0]);
 	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][1]);
+#endif
 	return &dev;
 }
 
@@ -279,8 +281,8 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 	else
 	{
 		const unsigned int bufferIndex = (unsigned int)whichBuffer - (unsigned int)TxBufferNumber::buffer0;
-		const uint32_t trigMask = (uint32_t)1 << bufferIndex;
 #ifdef RTOS
+		const uint32_t trigMask = (uint32_t)1 << bufferIndex;
 		bufferFree = HAL_FDCAN_IsTxBufferMessagePending(&hw, trigMask) == 0;
 		if (!bufferFree && timeout != 0)
 		{
@@ -518,8 +520,8 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			// Check for a received message and wait if necessary
 			// We assume that not more than 32 dedicated receive buffers have been configured, so we only need to look at the NDAT1 register
 			const uint32_t bufferNumber = (unsigned int)whichBuffer - (unsigned int)RxBufferNumber::buffer0;
-			const uint32_t ndatMask = (uint32_t)1 << bufferNumber;
 #ifdef RTOS
+			const uint32_t ndatMask = (uint32_t)1 << bufferNumber;
 			if (HAL_FDCAN_IsRxBufferMessageAvailable(&hw, bufferNumber) == 0)
 			{
 				if (timeout == 0)
