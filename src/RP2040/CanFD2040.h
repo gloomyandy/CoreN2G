@@ -191,7 +191,7 @@ private:
 
 	// Pending interrupts, each in a separate word to avoid race conditions
 	volatile bool rxInterruptPending[NumCanRxFifos];									// one interrupt per receive fifo
-	volatile bool txFifoNotFullInterruptPending;
+	volatile bool txFifoNotFullInterruptPending[NumCanTxFifos];
 
 	// Transmit buffer
 	static constexpr size_t MaxTxMessageBits = ((41 + (64 * 8)) * 5)/4					// max frame length before the stuff count and CRC, including SOF

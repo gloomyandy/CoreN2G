@@ -29,7 +29,8 @@ inline uint32_t CanDevice::GetRxBufferSize() const noexcept { return sizeof(CanR
 inline uint32_t CanDevice::GetTxBufferSize() const noexcept { return sizeof(CanTxBufferHeader)/sizeof(uint32_t) + (64 >> 2); }
 inline CanRxBufferHeader *CanDevice::GetRxFifo0Buffer(uint32_t index) const noexcept { return (CanRxBufferHeader*)(rx0Fifo + (index * GetRxBufferSize())); }
 inline CanRxBufferHeader *CanDevice::GetRxFifo1Buffer(uint32_t index) const noexcept { return (CanRxBufferHeader*)(rx1Fifo + (index * GetRxBufferSize())); }
-inline CanTxBufferHeader *CanDevice::GetTxBuffer(uint32_t index) const noexcept { return (CanTxBufferHeader*)(txBuffers + (index * GetTxBufferSize())); }
+inline CanTxBufferHeader *CanDevice::GetTxFifo0Buffer(uint32_t index) const noexcept { return (CanTxBufferHeader*)(tx0Fifo + (index * GetTxBufferSize())); }
+inline CanTxBufferHeader *CanDevice::GetTxFifo1Buffer(uint32_t index) const noexcept { return (CanTxBufferHeader*)(tx1Fifo + (index * GetTxBufferSize())); }
 
 // Virtual registers, shared between the two cores
 VirtualCanRegisters virtualRegs;
@@ -69,10 +70,10 @@ void CanDevice::CanStats::Clear() noexcept
 	memStart += (p_config.rxFifo0Size + 1) * p_config.GetRxBufferSize();
 	dev.rx1Fifo = memStart;
 	memStart += (p_config.rxFifo1Size + 1) * p_config.GetRxBufferSize();
-	dev.rxBuffers = memStart;
-	memStart += p_config.numRxBuffers * p_config.GetRxBufferSize();
-	memStart += p_config.GetTxEventFifoMemSize();
-	dev.txBuffers = memStart;
+	dev.tx0Fifo = memStart;
+	memStart += (p_config.txFifo0Size + 1) * p_config.GetTxBufferSize();
+	dev.tx1Fifo = memStart;
+	memStart += (p_config.txFifo1Size + 1) * p_config.GetTxBufferSize();
 
 	dev.stats.Clear();
 
@@ -108,8 +109,10 @@ void CanDevice::DoHardwareInit() noexcept
 	virtualRegs.rxFifos[0].buffers = reinterpret_cast<volatile CanRxBuffer*>(rx0Fifo);	// address
 	virtualRegs.rxFifos[1].size = config->rxFifo1Size + 1;								// number of entries
 	virtualRegs.rxFifos[1].buffers = reinterpret_cast<volatile CanRxBuffer*>(rx1Fifo);	// address
-	virtualRegs.txFifo.size = config->txFifoSize + 1;									// number of entries
-	virtualRegs.txFifo.buffers = reinterpret_cast<CanTxBuffer*>(txBuffers);				// address of transmit fifo - we have no dedicated Tx buffers
+	virtualRegs.txFifos[0].size = config->txFifo0Size + 1;								// number of entries
+	virtualRegs.txFifos[0].buffers = reinterpret_cast<CanTxBuffer*>(tx0Fifo);			// address of transmit fifo0 - we have no dedicated Tx buffers
+	virtualRegs.txFifos[1].size = config->txFifo1Size + 1;								// number of entries
+	virtualRegs.txFifos[1].buffers = reinterpret_cast<CanTxBuffer*>(tx1Fifo);			// address of transmit fifo1 - we have no dedicated Tx buffers
 	virtualRegs.numShortFilterElements = config->numShortFilterElements;				// number of short filter elements
 	virtualRegs.shortFiltersAddr = rxStdFilter;											// short filter start address
 	virtualRegs.numExtendedFilterElements = config->numExtendedFilterElements;			// number of extended filter elements
@@ -170,34 +173,35 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 #endif
 
 	bool bufferFree;
-	const unsigned int bufferIndex = virtualRegs.txFifo.putIndex;
+	VirtualCanRegisters::TxFifo& fifo = virtualRegs.txFifos[(unsigned int)whichBuffer];
+	const unsigned int bufferIndex = fifo.putIndex;
 	unsigned int nextTxFifoPutIndex = bufferIndex + 1;
-	if (nextTxFifoPutIndex == virtualRegs.txFifo.size)
+	if (nextTxFifoPutIndex == fifo.size)
 	{
 		nextTxFifoPutIndex = 0;
 	}
 
 #ifdef RTOS
-	bufferFree = nextTxFifoPutIndex != virtualRegs.txFifo.getIndex;
+	bufferFree = nextTxFifoPutIndex != fifo.getIndex;
 	if (!bufferFree && timeout != 0)
 	{
 		txTaskWaiting[(unsigned int)whichBuffer] = TaskBase::GetCallerTaskHandle();
-		virtualRegs.txFifoNotFullInterruptEnabled = true;
+		virtualRegs.txFifoNotFullInterruptEnabled[(unsigned int)whichBuffer] = true;
 
-		bufferFree = nextTxFifoPutIndex != virtualRegs.txFifo.getIndex;
+		bufferFree = nextTxFifoPutIndex != fifo.getIndex;
 		// In the following, when we call TaskBase::Take() the Move task sometimes gets woken up early by by the DDA ring
 		// Therefore we loop calling Take() until either the call times out or the buffer is free
 		while (!bufferFree)
 		{
 			const bool timedOut = !TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout);
-			bufferFree = nextTxFifoPutIndex != virtualRegs.txFifo.getIndex;
+			bufferFree = nextTxFifoPutIndex != fifo.getIndex;
 			if (timedOut)
 			{
 				break;
 			}
 		}
 		txTaskWaiting[(unsigned int)whichBuffer] = nullptr;
-		virtualRegs.txFifoNotFullInterruptEnabled = false;
+		virtualRegs.txFifoNotFullInterruptEnabled[(unsigned int)whichBuffer] = false;
 	}
 #else
 	do
@@ -298,9 +302,10 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 {
 	uint32_t cancelledId = 0;
 	const bool bufferFree = IsSpaceAvailable(whichBuffer, timeout);
-	const unsigned int bufferIndex = virtualRegs.txFifo.putIndex;
+	VirtualCanRegisters::TxFifo& fifo = virtualRegs.txFifos[(unsigned int)whichBuffer];
+	const unsigned int bufferIndex = fifo.putIndex;
 	unsigned int nextTxFifoPutIndex = bufferIndex + 1;
-	if (nextTxFifoPutIndex == virtualRegs.txFifo.size)
+	if (nextTxFifoPutIndex == fifo.size)
 	{
 		nextTxFifoPutIndex = 0;
 	}
@@ -309,11 +314,12 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 	{
 		// Retrieve details of the packet we are about to cancel
 		unsigned int cancelledIndex = nextTxFifoPutIndex + 1;
-		if (cancelledIndex == virtualRegs.txFifo.size)
+		if (cancelledIndex == fifo.size)
 		{
 			cancelledIndex = 0;
 		}
-		cancelledId = GetTxBuffer(cancelledIndex)->T0.bit.ID;
+		const CanTxBufferHeader *const buf = (whichBuffer == TxBufferNumber::fifo1) ? GetTxFifo1Buffer(cancelledIndex) : GetTxFifo0Buffer(cancelledIndex);
+		cancelledId = buf->T0.bit.ID;
 
 		// Cancel transmission of the oldest packet
 		virtualRegs.cancelTransmission = true;
@@ -321,11 +327,12 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		{
 			delay(1);
 		}
-		while (nextTxFifoPutIndex == virtualRegs.txFifo.getIndex);
+		while (nextTxFifoPutIndex == fifo.getIndex);
 	}
 
-	CopyMessageForTransmit(buffer, GetTxBuffer(bufferIndex));
-	virtualRegs.txFifo.putIndex = nextTxFifoPutIndex;
+	CanTxBufferHeader *const tbuf = (whichBuffer == TxBufferNumber::fifo1) ? GetTxFifo1Buffer(bufferIndex) : GetTxFifo0Buffer(bufferIndex);
+	CopyMessageForTransmit(buffer, tbuf);
+	fifo.putIndex = nextTxFifoPutIndex;
 	return cancelledId;
 }
 
@@ -617,9 +624,13 @@ void CanDevice::Interrupt() noexcept
 		}
 
 		// Test whether any messages have been transmitted
-		if (ir & VirtualCanRegisters::txFifoNotFull)
+		if (ir & VirtualCanRegisters::txFifo0NotFull)
 		{
 			TaskBase::GiveFromISR(txTaskWaiting[(unsigned int)TxBufferNumber::fifo], NotifyIndices::CanDevice);
+		}
+		if (ir & VirtualCanRegisters::txFifo1NotFull)
+		{
+			TaskBase::GiveFromISR(txTaskWaiting[(unsigned int)TxBufferNumber::fifo1], NotifyIndices::CanDevice);
 		}
 	}
 }

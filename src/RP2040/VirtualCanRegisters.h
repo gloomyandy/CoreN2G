@@ -43,7 +43,7 @@ struct CanRxBufferHeader
 		uint32_t val; /*!< Type used for register access */
 	} R1;
 
-	const volatile uint32_t *GetDataPointer() const volatile { return (volatile uint32_t*)this + (sizeof(*this)/sizeof(uint32_t)); }
+	const volatile uint32_t *GetDataPointer() const volatile noexcept { return (volatile uint32_t*)this + (sizeof(*this)/sizeof(uint32_t)); }
 };
 
 struct CanRxBuffer : public CanRxBufferHeader
@@ -82,7 +82,7 @@ struct CanTxBufferHeader
 		uint32_t val; /*!< Type used for register access */
 	} T1;
 
-	volatile uint32_t *GetDataPointer() volatile { return (volatile uint32_t*)this + (sizeof(*this)/sizeof(uint32_t)); }
+	volatile uint32_t *GetDataPointer() volatile noexcept { return (volatile uint32_t*)this + (sizeof(*this)/sizeof(uint32_t)); }
 };
 
 struct CanTxBuffer : public CanTxBufferHeader
@@ -95,7 +95,8 @@ struct CanTxBuffer : public CanTxBufferHeader
 	};
 };
 
-static constexpr size_t NumCanRxFifos = 2;
+constexpr size_t NumCanRxFifos = 2;
+constexpr size_t NumCanTxFifos = 2;
 
 struct CanErrorCounts
 {
@@ -146,7 +147,7 @@ struct VirtualCanRegisters
 	};
 
 	RxFifo rxFifos[NumCanRxFifos];
-	TxFifo txFifo;
+	TxFifo txFifos[NumCanTxFifos];
 
 	// The following configuration registers are written by the main processor while CAN is disabled, and never changed while CAN is enabled
 	volatile unsigned int numShortFilterElements;
@@ -157,8 +158,8 @@ struct VirtualCanRegisters
 	// The following are written only by CAN
 	CanErrorCounts errors;
 
-	// The following are written only by the main processor
-	volatile bool txFifoNotFullInterruptEnabled;
+	// The following are written only by proc 0
+	volatile bool txFifoNotFullInterruptEnabled[NumCanTxFifos];
 	volatile bool cancelTransmission;
 	volatile bool canEnabled;										// CAN enable/disable flag, set by main proc to enable CAN after writing other registers, cleared by main proc to disable CAN
 	volatile bool clearErrorCounts;
@@ -171,20 +172,26 @@ struct VirtualCanRegisters
 	// Bit assignments in the pseudo-interrupt message received by the main processor via the inter-processor fifo from the CAN processor
 	static constexpr uint32_t recdFifo0 = 0x01;						// message received in fifo0
 	static constexpr uint32_t recdFifo1 = 0x02;						// message received in fifo1
-	static constexpr uint32_t txFifoNotFull = 0x08;					// space has been made in the transmit fifo
+	static constexpr uint32_t txFifo0NotFull = 0x08;				// space has been made in transmit fifo 0
+	static constexpr uint32_t txFifo1NotFull = 0x10;				// space has been made in transmit fifo 1
 
 	static_assert(recdFifo1 == recdFifo0 << 1);						// the code assumes we can shift recdFifo0 left by the fifo number
+	static_assert(txFifo1NotFull == txFifo0NotFull << 1);			// the code assumes we can shift txFifo0NotFull left by the fifo number
 
 	// Disable CAN and initialise the virtual registers
 	void Init() noexcept
 	{
 		canEnabled = false;
-		cancelTransmission = txFifoNotFullInterruptEnabled = clearErrorCounts = false;
+		cancelTransmission = clearErrorCounts = false;
 		for (RxFifo& fifo : rxFifos)
 		{
 			fifo.Clear();
 		}
-		txFifo.Clear();
+		for (size_t i = 0; i < NumCanTxFifos; ++i)
+		{
+			txFifos[i].Clear();
+			txFifoNotFullInterruptEnabled[i] = false;
+		}
 		errors.Clear();
 	}
 };

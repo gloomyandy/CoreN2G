@@ -673,7 +673,10 @@ void CanFD2040::Entry(VirtualCanRegisters *p_regs) noexcept
     	{
     		irq = false;
     	}
-		txFifoNotFullInterruptPending = false;
+    	for (volatile bool& irq : txFifoNotFullInterruptPending)
+    	{
+    		irq = false;
+    	}
 
 		// Flag the transmitter as idle and no message prepared
 		txStuffedWords = 0;
@@ -724,10 +727,13 @@ void CanFD2040::Entry(VirtualCanRegisters *p_regs) noexcept
    						pendingIrqs |= VirtualCanRegisters::recdFifo0 << i;
    					}
    				}
-   				if (txFifoNotFullInterruptPending)
+   				for (unsigned int i = 0; i < NumCanTxFifos; ++i)
    				{
-   					txFifoNotFullInterruptPending = false;
-   					pendingIrqs |= VirtualCanRegisters::txFifoNotFull;
+					if (txFifoNotFullInterruptPending[i])
+					{
+						txFifoNotFullInterruptPending[i] = false;
+						pendingIrqs |= VirtualCanRegisters::txFifo0NotFull << i;
+					}
    				}
    				if (pendingIrqs != 0)
    				{
@@ -743,11 +749,20 @@ void CanFD2040::Entry(VirtualCanRegisters *p_regs) noexcept
 // Set up a message ready to be transmitted
 void CanFD2040::TryPopulateTransmitBuffer() noexcept
 {
-	VirtualCanRegisters::TxFifo& fifo = regs->txFifo;
-	uint32_t getIndex = fifo.getIndex;
-	if (getIndex != fifo.putIndex)
+	// We prioritise fifo1 over fifo0 because our client code send high priority messages through fifo1.
+	// We could compare the message priorities at the head of each FIFO instead
+	unsigned int fifoNumber = 1;
+	VirtualCanRegisters::TxFifo *fifo = &regs->txFifos[1];
+	uint32_t getIndex = fifo->getIndex;
+	if (getIndex == fifo->putIndex)
 	{
-		const volatile CanTxBuffer *const txBuf = &regs->txFifo.buffers[getIndex];
+		fifoNumber = 0;
+		fifo = &regs->txFifos[0];
+		getIndex = fifo->getIndex;
+	}
+	if (getIndex != fifo->putIndex)
+	{
+		const volatile CanTxBuffer *const txBuf = &fifo->buffers[getIndex];
 		txId = txBuf->T0.bit.ID;
 		txDlc = txBuf->T1.bit.DLC;
 
@@ -843,15 +858,15 @@ void CanFD2040::TryPopulateTransmitBuffer() noexcept
 
 		// Now that we have copied the message to our local buffer, we can free up the fifo slot
 		++getIndex;
-		if (getIndex == fifo.size)
+		if (getIndex == fifo->size)
 		{
 			getIndex = 0;
 		}
-		fifo.getIndex = getIndex;
+		fifo->getIndex = getIndex;
 
-		if (regs->txFifoNotFullInterruptEnabled)
+		if (regs->txFifoNotFullInterruptEnabled[fifoNumber])
 		{
-			txFifoNotFullInterruptPending = true;
+			txFifoNotFullInterruptPending[fifoNumber] = true;
 		}
 	}
 }

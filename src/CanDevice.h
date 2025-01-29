@@ -67,7 +67,9 @@ public:
 	enum class TxBufferNumber : uint32_t
 	{
 		fifo = 0,
-#if !RP2040
+#if RP2040
+		fifo1 = 1									// high priority fifo
+#else
 		buffer0, buffer1, buffer2, buffer3, buffer4, buffer5,
 #endif
 	};
@@ -78,10 +80,12 @@ public:
 		unsigned int dataSize = 64;											// must be one of: 8, 12, 16, 20, 24, 32, 48, 64
 #if RP2040
 		unsigned int numTxBuffers = 0;
+		unsigned int txFifo0Size = 4;
+		unsigned int txFifo1Size = 2;
 #else
 		unsigned int numTxBuffers = 2;
-#endif
 		unsigned int txFifoSize = 4;
+#endif
 		unsigned int numRxBuffers = 0;
 		unsigned int rxFifo0Size = 16;
 		unsigned int rxFifo1Size = 16;
@@ -165,7 +169,7 @@ public:
 			return
 #if RP2040
 				// The RP2040 implementation wastes one slot in each FIFO and has no dedicated buffers
-				  (txFifoSize + 1) * GetTxBufferSize()
+				  (txFifo0Size + txFifo1Size + 2) * GetTxBufferSize()
 				+ (rxFifo0Size + rxFifo1Size + 2) * GetRxBufferSize()
 #else
 				  (numTxBuffers + txFifoSize) * GetTxBufferSize()
@@ -304,11 +308,12 @@ private:
 	uint32_t GetTxBufferSize() const noexcept;
 	CanRxBufferHeader *GetRxFifo0Buffer(uint32_t index) const noexcept;
 	CanRxBufferHeader *GetRxFifo1Buffer(uint32_t index) const noexcept;
-#if !RP2040
+#if RP2040
+	CanTxBufferHeader *GetTxFifo0Buffer(uint32_t index) const noexcept;
+	CanTxBufferHeader *GetTxFifo1Buffer(uint32_t index) const noexcept;
+#else
 	CanRxBufferHeader *GetRxBuffer(uint32_t index) const noexcept;
-#endif
 	CanTxBufferHeader *GetTxBuffer(uint32_t index) const noexcept;
-#if !RP2040
 	TxEvent *GetTxEvent(uint32_t index) const noexcept;
 #endif
 
@@ -330,11 +335,14 @@ private:
 	uint32_t statusMask;
 
 	const Config *config;										//!< Configuration parameters
-	volatile uint32_t *rx0Fifo;									//!< Receive message fifo start
-	volatile uint32_t *rx1Fifo;									//!< Receive message fifo start
+	volatile uint32_t *rx0Fifo;									//!< Receive message fifo 0 start
+	volatile uint32_t *rx1Fifo;									//!< Receive message fifo 1 start
+#if RP2040
+	uint32_t *tx0Fifo;											//!< Transmit message fifo 0 start
+	uint32_t *tx1Fifo;											//!< Transmit message fifo 1 start
+#else
 	volatile uint32_t *rxBuffers;								//!< Receive direct buffers start
 	uint32_t *txBuffers;										//!< Transmit direct buffers start (the Tx fifo buffers follow them)
-#if !RP2040
 	TxEvent *txEventFifo;										//!< Transfer event fifo
 #endif
 	CanStandardMessageFilterElement *rxStdFilter;				//!< Standard filter List
@@ -348,7 +356,11 @@ private:
 
 # ifdef RTOS
 	// The following are all declared volatile because we care about when they are written
+#  if RP2040
+	volatile TaskHandle txTaskWaiting[NumCanTxFifos];			// tasks waiting for each Tx buffer to become free, first entry is for the Tx FIFO
+#  else
 	volatile TaskHandle txTaskWaiting[MaxTxBuffers + 1];		// tasks waiting for each Tx buffer to become free, first entry is for the Tx FIFO
+#  endif
 	volatile TaskHandle rxTaskWaiting[MaxRxBuffers + 2];		// tasks waiting for each Rx buffer to receive a message, first 2 entries are for the fifos
 	std::atomic<uint32_t> rxBuffersWaiting;						// which buffers tasks are waiting on
 # endif
