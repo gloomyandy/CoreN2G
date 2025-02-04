@@ -47,6 +47,7 @@ struct CanTxBuffer
 };
 
 static constexpr size_t NumCanRxFifos = 2;
+static constexpr size_t NumCanTxFifos = 2;
 
 struct RxFifo
 {
@@ -69,6 +70,7 @@ struct TxFifo
 	volatile uint32_t putIndex;						// only written by proc 0
 #if RTOS
 	volatile TaskHandle waitingTask;
+	volatile bool NotFullInterruptEnabled;
 #endif
 
 	void Clear() noexcept { getIndex = 0; putIndex = 0; }
@@ -79,13 +81,13 @@ class CanDevice
 public:
 	enum class RxBufferNumber : uint32_t
 	{
-		fifo0 = 2, fifo1,
+		fifo0 = 3, fifo1,
 		none = 0xFFFF
 	};
 
 	enum class TxBufferNumber : uint32_t
 	{
-		fifo = 1
+		fifo = 1, fifo1
 	};
 
 
@@ -94,7 +96,8 @@ public:
 	{
 		unsigned int dataSize = 64;											// must be one of: 8, 12, 16, 20, 24, 32, 48, 64
 		unsigned int numTxBuffers = 0;
-		unsigned int txFifoSize = 4;
+		unsigned int txFifo0Size = 4;
+		unsigned int txFifo1Size = 2;
 		unsigned int numRxBuffers = 0;
 		unsigned int rxFifo0Size = 16;
 		unsigned int rxFifo1Size = 16;
@@ -115,7 +118,7 @@ public:
 		constexpr bool IsValid() const noexcept
 		{
 			return ValidDataSize()
-				&& numTxBuffers + txFifoSize <= 32							// maximum total Tx buffers supported is 32
+				&& numTxBuffers + txFifo0Size + txFifo1Size <= 32			// maximum total Tx buffers supported is 32
 				&& numTxBuffers <= MaxTxBuffers								// our code only allows 31 buffers + the FIFO
 				&& numRxBuffers <= MaxRxBuffers								// the peripheral supports up to 64 buffers but our code only allows 30 buffers + the two FIFOs
 				&& rxFifo0Size <= 64										// max 64 entries per receive FIFO
@@ -159,7 +162,7 @@ public:
 		{
 			return
 				// The RP2040 implementation wastes one slot in each FIFO and has no dedicated buffers
-				  (txFifoSize + 1) * GetTxBufferSize()
+				  (txFifo0Size + txFifo1Size + 2) * GetTxBufferSize()
 				+ (rxFifo0Size + rxFifo1Size + 2) * GetRxBufferSize();
 
 		}
@@ -283,21 +286,22 @@ private:
 	bool useFDMode;
 	volatile uint32_t *rx0Fifo;									//!< Receive message fifo start
 	volatile uint32_t *rx1Fifo;									//!< Receive message fifo start
-	volatile uint32_t *txBuffers;								//!< Transmit direct buffers start (the Tx fifo buffers follow them)
+	volatile uint32_t *tx0Fifo;
+	volatile uint32_t *tx1Fifo;
 
 	// Following are used to communicate between the two cores
 #if RTOS
-	static constexpr uint32_t txFifoNotFull = 0x80000000;
+	static constexpr uint32_t txFifo0NotFull = 0x80000000;
+	static constexpr uint32_t txFifo1NotFull = 0x40000000;
 	static constexpr uint32_t rxFifo0NotEmpty = 0x1;
 	static constexpr uint32_t rxFifo1NotEmpty = 0x2;
 #endif
 	RxFifo rxFifos[NumCanRxFifos];
-	TxFifo txFifo;
+	TxFifo txFifos[NumCanTxFifos];
 	volatile uint32_t latestTimeStamp;
 	volatile uint32_t latestStepTime;
 	volatile RunState runState;
-	volatile bool abortTx;
-	volatile bool txFifoNotFullInterruptEnabled;
+	volatile bool abortTx[NumCanTxFifos];
 
 	friend void Core1Entry() noexcept;
 

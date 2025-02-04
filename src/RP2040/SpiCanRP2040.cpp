@@ -132,6 +132,17 @@ void CanDevice::CanStats::Clear() noexcept
 		debugPrintf("SPI CAN Failed to set txf chan config\n");
 		return nullptr;
 	}
+	DRV_CANFDSPI_TransmitChannelConfigureObjectReset(&txf);
+	txf.FifoSize = 2 - 1;
+	txf.PayLoadSize = CAN_PLSIZE_64;
+	txf.TxAttempts = 3;
+	txf.TxPriority = 0;
+	status = DRV_CANFDSPI_TransmitChannelConfigure(0, (CAN_FIFO_CHANNEL)(TxBufferNumber::fifo1), &txf);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set txf chan config\n");
+		return nullptr;
+	}
 	// RX fifos
 	CAN_RX_FIFO_CONFIG rxc;
 	DRV_CANFDSPI_ReceiveChannelConfigureObjectReset(&rxc);
@@ -184,7 +195,9 @@ void CanDevice::CanStats::Clear() noexcept
 	memStart += (p_config.rxFifo0Size + 1) * p_config.GetRxBufferSize();
 	devices[0].rx1Fifo = memStart;
 	memStart += (p_config.rxFifo1Size + 1) * p_config.GetRxBufferSize();
-	devices[0].txBuffers = memStart;
+	devices[0].tx0Fifo = memStart;
+	memStart += (p_config.txFifo0Size + 1) * p_config.GetTxBufferSize();
+	devices[0].tx1Fifo = memStart;
 	devices[0].DoHardwareInit();
 	return &devices[0];
 }
@@ -193,14 +206,17 @@ void CanDevice::CanStats::Clear() noexcept
 void CanDevice::DoHardwareInit() noexcept
 {
 	runState = RunState::disabled;
-	abortTx = false;
+	abortTx[0] = false;
+	abortTx[1] = false;
 	latestTimeStamp = 0;
 	rxFifos[0].size = config->rxFifo0Size + 1;								// number of entries
 	rxFifos[0].buffers = reinterpret_cast<volatile CanRxBuffer*>(rx0Fifo);	// address
 	rxFifos[1].size = config->rxFifo1Size + 1;								// number of entries
 	rxFifos[1].buffers = reinterpret_cast<volatile CanRxBuffer*>(rx1Fifo);	// address
-	txFifo.size = config->txFifoSize + 1;									// number of entries
-	txFifo.buffers = reinterpret_cast<volatile CanTxBuffer*>(txBuffers);				// address of transmit fifo - we have no dedicated Tx buffers
+	txFifos[0].size = config->txFifo0Size + 1;								// number of entries
+	txFifos[0].buffers = reinterpret_cast<volatile CanTxBuffer*>(tx0Fifo);	// address
+	txFifos[1].size = config->txFifo1Size + 1;								// number of entries
+	txFifos[1].buffers = reinterpret_cast<volatile CanTxBuffer*>(tx1Fifo);	// address
 	if (!core1Initialised)
 	{
 		multicore_reset_core1();
@@ -305,39 +321,40 @@ uint32_t CanDevice::GetErrorRegister() const noexcept
 // Return true if space is available to send using this buffer or FIFO
 bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) noexcept
 {
-	const unsigned int bufferIndex = txFifo.putIndex;
+	TxFifo& fifo = txFifos[(uint32_t)whichBuffer - (uint32_t)TxBufferNumber::fifo];
+	const unsigned int bufferIndex = fifo.putIndex;
 	unsigned int nextTxFifoPutIndex = bufferIndex + 1;
-	if (nextTxFifoPutIndex == txFifo.size)
+	if (nextTxFifoPutIndex == fifo.size)
 	{
 		nextTxFifoPutIndex = 0;
 	}
-	bool bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
+	bool bufferFree = nextTxFifoPutIndex != fifo.getIndex;
 
 #ifdef RTOS
 	if (!bufferFree && timeout != 0)
 	{
-		txFifo.waitingTask = TaskBase::GetCallerTaskHandle();
-		txFifoNotFullInterruptEnabled = true;
-		bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
+		fifo.waitingTask = TaskBase::GetCallerTaskHandle();
+		fifo.NotFullInterruptEnabled = true;
+		bufferFree = nextTxFifoPutIndex != fifo.getIndex;
 		// In the following, when we call TaskBase::Take() the Move task sometimes gets woken up early by by the DDA ring
 		// Therefore we loop calling Take() until either the call times out or the buffer is free
 		while (!bufferFree)
 		{
 			const bool timedOut = !TaskBase::TakeIndexed(NotifyIndices::CanDevice, timeout);
-			bufferFree = nextTxFifoPutIndex != txFifo.getIndex;
+			bufferFree = nextTxFifoPutIndex != fifo.getIndex;
 			if (timedOut)
 			{
 				break;
 			}
 		}
-		txFifo.waitingTask = nullptr;
-		txFifoNotFullInterruptEnabled = false;
+		fifo.waitingTask = nullptr;
+		fifo.NotFullInterruptEnabled = false;
 	}
 #else
 	uint32_t start = millis();
 	do
 	{
-		bufferFree = nextTxFifoPutIndex != txFifoGetIndex;
+		bufferFree = nextTxFifoPutIndex != fifo.getIndex;
 	} while (!bufferFree && millis() - start < timeout);
 #endif
 	return bufferFree;
@@ -355,58 +372,65 @@ static const uint8_t BytesToDLC[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 10, 
 // On return the caller must free or re-use the buffer.
 uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
-	uint32_t cancelledId = 0;
-	const unsigned int bufferIndex = txFifo.putIndex;
-	unsigned int nextTxFifoPutIndex = bufferIndex + 1;
-	if (nextTxFifoPutIndex == txFifo.size)
+	uint32_t idx = ((uint32_t)whichBuffer - (uint32_t)TxBufferNumber::fifo);
+	if (idx < NumCanTxFifos)
 	{
-		nextTxFifoPutIndex = 0;
-	}
-	if (!IsSpaceAvailable(whichBuffer, timeout))
-	{
-		// Retrieve details of the packet we are about to cancel
-		unsigned int cancelledIndex = nextTxFifoPutIndex + 1;
-		if (cancelledIndex == txFifo.size)
+		// Check for a received message and wait if necessary
+		TxFifo& fifo = txFifos[idx];
+		uint32_t cancelledId = 0;
+		const unsigned int bufferIndex = fifo.putIndex;
+		unsigned int nextTxFifoPutIndex = bufferIndex + 1;
+		if (nextTxFifoPutIndex == fifo.size)
 		{
-			cancelledIndex = 0;
+			nextTxFifoPutIndex = 0;
 		}
-		cancelledId = txFifo.buffers->txObj.bF.id.EID | (txFifo.buffers->txObj.bF.id.SID << 18);
-		// Cancel transmission of the oldest packet
-		abortTx = true;
-		do
+		if (!IsSpaceAvailable(whichBuffer, timeout))
 		{
-			delay(1);
+			// Retrieve details of the packet we are about to cancel
+			unsigned int cancelledIndex = nextTxFifoPutIndex + 1;
+			if (cancelledIndex == fifo.size)
+			{
+				cancelledIndex = 0;
+			}
+			cancelledId = fifo.buffers->txObj.bF.id.EID | (fifo.buffers->txObj.bF.id.SID << 18);
+			// Cancel transmission of the oldest packet
+			abortTx[idx] = true;
+			do
+			{
+				delay(1);
+			}
+			while (nextTxFifoPutIndex == fifo.getIndex);
+			txBufferFull++;
 		}
-		while (nextTxFifoPutIndex == txFifo.getIndex);
-		txBufferFull++;
-	}
-	{
-		volatile CAN_TX_MSGOBJ& txObj = txFifo.buffers[bufferIndex].txObj;
-		txObj.word[0] = 0;
-		txObj.word[1] = 0;
-		txObj.bF.id.EID = buffer->id.GetWholeId();
-		txObj.bF.id.SID = buffer->id.GetWholeId() >> 18;
-		txObj.bF.ctrl.IDE = buffer->extId;
-		txObj.bF.ctrl.FDF = buffer->fdMode;
-		txObj.bF.ctrl.BRS = buffer->useBrs;
-		txObj.bF.ctrl.RTR = buffer->remote;
-		if (buffer->reportInFifo)
-			txObj.bF.ctrl.SEQ = buffer->marker;
-		else
-			txObj.bF.ctrl.SEQ = 0;
-		uint32_t dataLen = buffer->dataLength;
-		uint32_t dlcLen = BytesToDLC[dataLen];
-		txObj.bF.ctrl.DLC = dlcLen;
-		dlcLen = DLCtoBytes[dlcLen];
-		while (dataLen < dlcLen)
 		{
-			buffer->msg.raw[dataLen++] = 0;				// zero fill up to the CANFD buffer length
+			volatile CAN_TX_MSGOBJ& txObj = fifo.buffers[bufferIndex].txObj;
+			txObj.word[0] = 0;
+			txObj.word[1] = 0;
+			txObj.bF.id.EID = buffer->id.GetWholeId();
+			txObj.bF.id.SID = buffer->id.GetWholeId() >> 18;
+			txObj.bF.ctrl.IDE = buffer->extId;
+			txObj.bF.ctrl.FDF = buffer->fdMode;
+			txObj.bF.ctrl.BRS = buffer->useBrs;
+			txObj.bF.ctrl.RTR = buffer->remote;
+			if (buffer->reportInFifo)
+				txObj.bF.ctrl.SEQ = buffer->marker;
+			else
+				txObj.bF.ctrl.SEQ = 0;
+			uint32_t dataLen = buffer->dataLength;
+			uint32_t dlcLen = BytesToDLC[dataLen];
+			txObj.bF.ctrl.DLC = dlcLen;
+			dlcLen = DLCtoBytes[dlcLen];
+			while (dataLen < dlcLen)
+			{
+				buffer->msg.raw[dataLen++] = 0;				// zero fill up to the CANFD buffer length
+			}
+			memcpy((void *)(fifo.buffers[bufferIndex].data), buffer->msg.raw, dlcLen);
+			fifo.putIndex = nextTxFifoPutIndex;
+			stats.messagesQueuedForSending++;
 		}
-		memcpy((void *)(txFifo.buffers[bufferIndex].data), buffer->msg.raw, dlcLen);
-		txFifo.putIndex = nextTxFifoPutIndex;
-		stats.messagesQueuedForSending++;
+		return cancelledId;
 	}
-	return cancelledId;
+	return 0xffffffff;
 }
 
 void CanDevice::CopyHeader(CanMessageBuffer *buffer, CAN_RX_MSGOBJ *hdr) noexcept
@@ -561,9 +585,13 @@ void CanDevice::Interrupt() noexcept
 		}
 
 		// Test whether any messages have been transmitted
-		if (ir & txFifoNotFull)
+		if (ir & txFifo0NotFull)
 		{
-			TaskBase::GiveFromISR(txFifo.waitingTask, NotifyIndices::CanDevice);
+			TaskBase::GiveFromISR(txFifos[0].waitingTask, NotifyIndices::CanDevice);
+		}
+		if (ir & txFifo1NotFull)
+		{
+			TaskBase::GiveFromISR(txFifos[1].waitingTask, NotifyIndices::CanDevice);
 		}
 	}
 }
@@ -757,25 +785,28 @@ void CanDevice::DoReadTimeStampCounter() noexcept
 					pendingInterrupts |= (1 << rx);
 				}
 			}
-			if (abortTx)
+			for(size_t tx = 0; tx < NumCanTxFifos; tx++)
 			{
-				DoAbortMessage(TxBufferNumber::fifo);
-				abortTx = false;
-			}
-			{
-				TxFifo& fifo = txFifo;
-				uint32_t getIndex = fifo.getIndex;
-				if (getIndex != fifo.putIndex && DoSendMessage(TxBufferNumber::fifo, &fifo.buffers[getIndex]))
+				if (abortTx[tx])
 				{
-					getIndex = getIndex + 1;
-					if (getIndex == fifo.size)
+					DoAbortMessage((TxBufferNumber)(tx + (uint32_t)TxBufferNumber::fifo));
+					abortTx[tx] = false;
+				}
+				{
+					TxFifo& fifo = txFifos[tx];
+					uint32_t getIndex = fifo.getIndex;
+					if (getIndex != fifo.putIndex && DoSendMessage((TxBufferNumber)(tx + (uint32_t)TxBufferNumber::fifo), &fifo.buffers[getIndex]))
 					{
-						getIndex = 0;
-					}
-					fifo.getIndex = getIndex;
-					if (txFifoNotFullInterruptEnabled)
-					{
-						pendingInterrupts |= txFifoNotFull;
+						getIndex = getIndex + 1;
+						if (getIndex == fifo.size)
+						{
+							getIndex = 0;
+						}
+						fifo.getIndex = getIndex;
+						if (fifo.NotFullInterruptEnabled)
+						{
+							pendingInterrupts |= txFifo0NotFull >> tx;
+						}
 					}
 				}
 			}
