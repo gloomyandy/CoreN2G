@@ -7,7 +7,13 @@
  * 
  * On the RP2040 this operation is split into two parts. The main part runs on core 0 and performs higher
  * level operations and initialisation. The lower level functions (which talk to the MCP251XFD during
- * normal operations) run on core 1. 
+ * normal operations) run on core 1. This implementation emulates the original "picocan" code and thus
+ * has limited functionality compared to that used on mainboards, it is probably on suitable without
+ * modification for use on expansion boards.
+ * 
+ * A note on debug. By default most RP2040 based toolboards will redirect debug output over CAN-FD. This
+ * can obviously be a problem when trying to debug CAN-FD! For this reason it is best to re-configure
+ * boards under test to send debug via USB or UART.
  */
 
 #include "CanDevice.h"
