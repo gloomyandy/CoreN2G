@@ -119,10 +119,14 @@ void TmcUartInterface::Init(Pin uartPin, uint32_t baudRate, uint8_t p_firstDmaCh
 }
 
 // This is called before every transaction, so don't completely initialise everything
-void TmcUartInterface::ResetUart() noexcept
+void TmcUartInterface::ResetUart(Pin uartPin, uint32_t baudRate) noexcept
 {
 	pio_sm_set_enabled(pio_hw, tmcStateMachineNumber, false);					// disable state machine
 	pio_sm_clear_fifos(pio_hw, tmcStateMachineNumber);							// clear Tx and Rx fifos
+	if (uartPin != NoPin)
+	{
+    	uart_tx_program_init(pio_hw, tmcStateMachineNumber, tmcProgramOffset, uartPin, baudRate);
+	}
 	pio_sm_restart(pio_hw, tmcStateMachineNumber);								// reset the state
 	pio_sm_exec(pio_hw, tmcStateMachineNumber, tmcProgramOffset);				// force state machine to start from the beginning of the program
 }

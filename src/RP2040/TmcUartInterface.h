@@ -21,7 +21,7 @@ namespace TmcUartInterface
 	typedef void (*TmcUartCallbackFn)(CallbackParameter, DmaCallbackReason reason) noexcept;
 
 	void Init(Pin uartPin, uint32_t baudRate, uint8_t p_firstDmaChan) noexcept;
-	void ResetUart() noexcept;
+	void ResetUart(Pin uartPin = NoPin, uint32_t baudRate = 0) noexcept;
 	void ResetDMA() noexcept;
 	void SetDmaData(const volatile uint8_t* txData, unsigned int numTxBytes, volatile uint8_t* rxData, unsigned int numRxBytes) noexcept;
 	void StartTransfer(TmcUartCallbackFn callbackFn) noexcept;
