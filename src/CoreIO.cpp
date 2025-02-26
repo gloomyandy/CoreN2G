@@ -40,7 +40,7 @@ static IWDG_HandleTypeDef wdHandle;
 #endif
 
 #if STM32
-void SetPinMode(Pin pin, enum PinMode ulMode, uint32_t debounceCutoff = 0) noexcept
+void SetPinMode(Pin pin, enum PinMode ulMode, bool debounce) noexcept
 {
     if(pin == NoPin) return;
     switch (ulMode)
