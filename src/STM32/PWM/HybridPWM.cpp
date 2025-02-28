@@ -41,7 +41,7 @@ HybridPWMPin* HybridPWMPin::allocate(Pin pin, float value) noexcept
     ret->pwm = nullptr;
     ret->freq = 0;
     // set initial state
-    pinMode(pin, (value < 0.5) ? OUTPUT_LOW : OUTPUT_HIGH);
+    SetPinMode(pin, (value < 0.5) ? OUTPUT_LOW : OUTPUT_HIGH);
     // grab the hardware if we can
     //ret->pwm = HybridPWMBase::allocate(ret, pin, 0, value);
     return ret;
@@ -49,7 +49,7 @@ HybridPWMPin* HybridPWMPin::allocate(Pin pin, float value) noexcept
 
 void HybridPWMPin::free() noexcept
 {
-    pinMode(pin, OUTPUT_LOW);
+    SetPinMode(pin, OUTPUT_LOW);
     if (pwm) pwm->free();
     pin = NoPin;
     freq = 0;
@@ -90,7 +90,7 @@ void HybridPWMPin::set(float value, uint32_t freq) noexcept
         if (pwm) 
             pwm->setValue(value);
         else
-            pinMode(pin, (value < 0.5) ? OUTPUT_LOW : OUTPUT_HIGH);
+            SetPinMode(pin, (value < 0.5) ? OUTPUT_LOW : OUTPUT_HIGH);
         this->value = value;
     }
 }

@@ -5,6 +5,7 @@
 #ifndef SRC_HYBRIDPWM_H_
 #define SRC_HYBRIDPWM_H_
 #include "Core.h"
+#include "CoreIO.h"
 #include "General/StringRef.h"
 #include "HardwareTimer.h"
 constexpr uint32_t MaxPWMChannels = 16;

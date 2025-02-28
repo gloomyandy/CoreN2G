@@ -60,9 +60,9 @@ void SoftwareSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bi
         else
             delay = NanosecondsToCycles(targetCycleNanos - timingCycleNanos)/2;
         //debugPrintf("SSPI mode %x bitrate %d target %d fast %d slow %d timing %d delay %d\n", clockMode, bitRate, targetCycleNanos, fastCycleNanos, slowCycleNanos, timingCycleNanos, delay );
-        pinMode(miso, INPUT_PULLUP);
-        pinMode(mosi, OUTPUT_HIGH);
-        pinMode(sck, (mode & 2 ? OUTPUT_HIGH : OUTPUT_LOW));
+        SetPinMode(miso, INPUT_PULLUP, false);
+        SetPinMode(mosi, OUTPUT_HIGH);
+        SetPinMode(sck, (mode & 2 ? OUTPUT_HIGH : OUTPUT_LOW));
         if (miso != NoPin) pin_speed(miso, GPIO_SPEED_FREQ_LOW);
         if (mosi != NoPin) pin_speed(mosi, GPIO_SPEED_FREQ_LOW);
         if (sck != NoPin) pin_speed(sck, GPIO_SPEED_FREQ_LOW);

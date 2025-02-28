@@ -393,7 +393,7 @@ void SoftwarePWM::setValue(Pin pin, float value) noexcept
 {
     if (period == 0)
     {
-        pinMode(pin, (value < 0.5) ? OUTPUT_LOW : OUTPUT_HIGH);
+        SetPinMode(pin, (value < 0.5) ? OUTPUT_LOW : OUTPUT_HIGH);
         return;
     }
     uint32_t onTime = (uint32_t)(period * value);
@@ -407,7 +407,7 @@ void SoftwarePWM::setValue(Pin pin, float value) noexcept
             disable(channel);
             channel = -1;
         }
-        pinMode(pin, OUTPUT_LOW);
+        SetPinMode(pin, OUTPUT_LOW);
     }
     else if (onTime == period)
     {
@@ -417,7 +417,7 @@ void SoftwarePWM::setValue(Pin pin, float value) noexcept
             channel = -1;
         }
         //debugPrintf("pin %d chan %d on\n", pin, channel);
-        pinMode(pin, OUTPUT_HIGH);
+        SetPinMode(pin, OUTPUT_HIGH);
 
     }
     else
