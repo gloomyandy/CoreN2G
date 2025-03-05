@@ -9,7 +9,9 @@
 #define SRC_FLASH_H_
 
 #include <CoreIO.h>
-
+#if STM32
+#include <stm32Flash.h>
+#else
 namespace Flash
 {
 	bool Init() noexcept;
@@ -43,5 +45,5 @@ namespace Flash
 }
 
 extern "C" uint32_t GetFlashSize_C() noexcept;
-
+#endif
 #endif /* SRC_FLASH_H_ */
