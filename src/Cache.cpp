@@ -422,6 +422,40 @@ uint32_t Cache::GetHitCount() noexcept
 #endif
 
 #endif	// SAM4E || SAME70 || SAME5x
+#if STM32
+void Cache::FlushECC(void *ptr, int bytes) noexcept
+{
+	// On some mcus we need to flush write to RAM before doing a reset if we want to read
+	// that data after the reset.
+#if STM32H7
+	uint32_t addr = (uint32_t)ptr;
+	/* Check if accessing AXI SRAM => 64-bit words*/
+	if(addr >= 0x24000000 && addr < 0x24080000){
+		volatile uint64_t temp;
+		volatile uint64_t* flush_ptr = (uint64_t*) (addr & 0xFFFFFFF8);
+		uint64_t *end_ptr = (uint64_t*) ((addr+bytes) & 0xFFFFFFF8) + 1;
+
+		do{
+			temp = *flush_ptr;
+			*flush_ptr = temp;
+			flush_ptr++;
+		}while(flush_ptr != end_ptr);
+	}
+	/* Otherwise 32-bit words */
+	else {
+		volatile uint32_t temp;
+		volatile uint32_t* flush_ptr = (uint32_t*) (addr & 0xFFFFFFFC);
+		uint32_t *end_ptr = (uint32_t*) ((addr+bytes) & 0xFFFFFFFC) + 1;
+
+		do{
+			temp = *flush_ptr;
+			*flush_ptr = temp;
+			flush_ptr++;
+		}while(flush_ptr != end_ptr);
+	}
+#endif
+}
+#endif
 
 // Entry points that can be called from ASF C code
 void CacheFlushBeforeDMAReceive(const volatile void *start, size_t length) noexcept { Cache::FlushBeforeDMAReceive(start, length); }

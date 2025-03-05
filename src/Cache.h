@@ -21,7 +21,9 @@ namespace Cache
 	inline void FlushBeforeDMAReceive(const volatile void *start, size_t length) noexcept { Flush(start, length); }
 	inline void InvalidateAfterDMAReceive(const volatile void *start, size_t length) noexcept { Invalidate(start, length); }
 	inline void FlushBeforeDMASend(const volatile void *start, size_t length) noexcept { Flush(start, length); }
-
+#if STM32
+	void FlushECC(void *ptr, int bytes) noexcept;
+#endif
 #if SAM4E || SAME5x
 	uint32_t GetHitCount() noexcept;
 #endif

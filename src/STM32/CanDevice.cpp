@@ -482,7 +482,7 @@ bool CanDevice::ReceiveMessage(RxBufferNumber whichBuffer, uint32_t timeout, Can
 			{
 				if (timeout == 0)
 				{
-					debugPrintf("Fifo 1 timeout\n");
+					//debugPrintf("Fifo 1 timeout\n");
 					return false;
 				}
 				TaskBase::ClearCurrentTaskNotifyCount(NotifyIndices::CanDevice);
