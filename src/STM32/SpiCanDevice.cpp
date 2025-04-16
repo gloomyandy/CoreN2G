@@ -379,7 +379,7 @@ uint32_t crcErrors = 0;
 uint32_t rollovers = 0;
 uint32_t maxTime = 0;
 //#endif
-void CanDevice::ReadTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept
+void CanDevice::ReadTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) const noexcept
 {
 	//debugPrintf("get timestamp\n");
 	SPILocker lock;
@@ -667,7 +667,7 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 	}
 }
 
-void CanDevice::GetLocalCanTiming(CanTiming &timing) noexcept
+void CanDevice::GetLocalCanTiming(CanTiming &timing) const noexcept
 {
 }
 

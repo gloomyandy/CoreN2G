@@ -233,7 +233,7 @@ public:
 	void SetExtendedFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
 		pre(index < NumShortFilterElements);
 
-	void GetLocalCanTiming(CanTiming& timing) noexcept;
+	void GetLocalCanTiming(CanTiming& timing) const noexcept;
 
 	void SetLocalCanTiming(const CanTiming& timing) noexcept;
 

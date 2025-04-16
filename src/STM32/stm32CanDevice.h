@@ -220,7 +220,7 @@ public:
 	void SetExtendedFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
 		pre(index < NumShortFilterElements);
 
-	void GetLocalCanTiming(CanTiming& timing) noexcept;
+	void GetLocalCanTiming(CanTiming& timing) const noexcept;
 
 	void SetLocalCanTiming(const CanTiming& timing) noexcept;
 
@@ -228,16 +228,16 @@ public:
 
 	void GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept;
 #if STM32H7
-	uint16_t ReadTimeStampCounter() noexcept
+	uint16_t ReadTimeStampCounter() const noexcept
 	{
-		return HAL_FDCAN_GetTimestampCounter(&hw);
+		return HAL_FDCAN_GetTimestampCounter((FDCAN_HandleTypeDef*)&hw);
 	}
 #else
-	void ReadTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept;
+	void ReadTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) const noexcept;
 #endif
 
 #if !SAME70
-	uint16_t GetTimeStampPeriod() noexcept
+	uint16_t GetTimeStampPeriod() const noexcept
 	{
 		return bitPeriod;
 	}
