@@ -519,7 +519,7 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 	}
 }
 
-void CanDevice::GetLocalCanTiming(CanTiming &timing) noexcept
+void CanDevice::GetLocalCanTiming(CanTiming &timing) const noexcept
 {
 #if 1
 	timing.SetDefaults_1Mb();
