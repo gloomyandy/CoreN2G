@@ -32,7 +32,16 @@ enum class InterruptMode : uint8_t
 	high,
 	change,
 	falling,
-	rising
+	rising,
+
+#if SAME5x
+	debounce = 0x80,
+	lowWithDebounce = low | debounce,
+	highWithDebounce = high | debounce,
+	changeWithDebounce = change | debounce,
+	fallingWithDebounce = falling | debounce,
+	risingWithDebounce = rising | debounce,
+#endif
 };
 
 void InitialiseExints() noexcept;
@@ -46,6 +55,9 @@ void DetachEvent(Pin pin) noexcept;
 #if STM32
 void initInterruptPins() noexcept;
 Pin getAttachedPin(uint32_t id) noexcept;
+#endif
+#if SAME5x
+bool ReadDebouncedPin(Pin pin) noexcept;			// read the pin state after it has passed through the interrupt debouncer
 #endif
 
 #endif /* SRC_HARDWARE_PININTERRUPTS_H_ */
