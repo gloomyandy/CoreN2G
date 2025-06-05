@@ -19,6 +19,8 @@
 // On devices without a built in CAN-FD module we use an external SPI based device based on the MCP251XFD
 
 // Note that this implementation is very basic and provides just enough functionality to support RRF.
+// It does not currently support the changing of timing parmeters.
+// Buffer/Queue allocation may be modified here to fit into available memory on the MCP251XFD.
 
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 #include "CanFdSpiApi.h"

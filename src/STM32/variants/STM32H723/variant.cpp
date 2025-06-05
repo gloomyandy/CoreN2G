@@ -2,6 +2,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/*
+STM32H72x clock configuration
+NOTE: We curently run H72x devices at 480MHz (rather than 550MHz) for compatibility with
+the code for H74x devices.
+*/
 #if 0
 // Pin number
 const PinName digitalPin[] = {

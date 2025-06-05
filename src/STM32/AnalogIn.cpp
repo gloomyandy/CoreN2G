@@ -15,7 +15,16 @@ We sample continuously up to 16 channels per ADC. We set the ADC clock to APB2/8
 the conversion time is 12 cycles. This gives a per channel time of...
 (480+12)/(84/8) uS = 47uS
 Total time for for 16 channels 47*16 = 750uS or approx 1333 full samples per second.
-Each channel is oversampled 16 times to increase the resolution by 2 bits to 14 bits
+Each channel is oversampled 16 times to increase the resolution by 2 bits to 14 bits.
+with oversampling we get approx 83 samples per second. We can read values more frequantly than
+this, bt if we do then the readings will contain samples that were also present in previous
+readings.
+
+Note:
+The above timing is for stm32f4 based mcus. On stm32H72x devices ADC3 only supports 12bit conversions
+for this reason on H7 based devices we only convert to 12bits and use the same oversampling scheme as used
+on the F4 based devices. We should probably consider using higher sample avlues and/or using the built in
+oversampling.
 */
 #ifdef RTOS
 #include <CoreImp.h>
