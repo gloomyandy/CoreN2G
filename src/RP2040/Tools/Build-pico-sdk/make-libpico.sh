@@ -41,7 +41,7 @@ for type in boot2_generic_03h boot2_is25lp080 boot2_w25q080 boot2_w25x10cl; do
 
         arm-none-eabi-objcopy -Obinary $type.$div.elf $type.$div.bin
 
-        python3 "$PICO_SDK_PATH/src/rp2040/boot_stage2/pad_checksum" \
+        python "$PICO_SDK_PATH/src/rp2040/boot_stage2/pad_checksum" \
                    -s 0xffffffff $type.$div.bin ${type}_${div}_padded_checksum.S
     done
 done
