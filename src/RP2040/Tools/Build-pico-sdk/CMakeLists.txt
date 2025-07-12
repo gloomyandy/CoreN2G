@@ -5,7 +5,7 @@ get_filename_component(PICO_SDK_PATH "../../pico-sdk" REALPATH)
 
 set(cpu $ENV{CPU})
 message("Building for CPU ${cpu}")
-
+set(TINYUSB_OPT_OS OPT_OS_FREERTOS)
 if (${cpu} MATCHES "rp2040")
 	# Enable PicoW driver support.  Compatible with standard Pico
 	set(PICO_BOARD pico)
@@ -50,6 +50,9 @@ endif()
 
 if (${cpu} MATCHES "rp2040")
 	set(xcd
+		CFG_TUSB_DEBUG=0
+		CFG_TUSB_MCU=OPT_MCU_RP2040
+		CFG_TUSB_OS=OPT_OS_FREERTOS
 		PICO_RP2040_B0_SUPPORTED=1
 		PICO_RP2040_B1_SUPPORTED=1
 		PICO_RP2040_B2_SUPPORTED=1
@@ -65,7 +68,7 @@ elseif (${cpu} MATCHES "rp2350")
 	set(xcd
 		CFG_TUSB_DEBUG=0
 		CFG_TUSB_MCU=OPT_MCU_RP2040
-		# CFG_TUSB_OS=OPT_OS_PICO
+		CFG_TUSB_OS=OPT_OS_FREERTOS
 		LIB_BOOT_STAGE2_HEADERS=1
 		LIB_PICO_ATOMIC=1
 		LIB_PICO_BIT_OPS=1
@@ -131,11 +134,11 @@ target_compile_definitions(common-${cpu} INTERFACE
 	PICO_PRINTF_ALWAYS_INCLUDED=0	# changed
 	PICO_FLASH_SIZE_BYTES=16777216
 	# PICO_NO_BINARY_INFO=1			# changed
-	LWIP_IPV4=1
-	LWIP_UDP=1
-	LWIP_IGMP=1
-	LWIP_CHECKSUM_CTRL_PER_NETIF=1
-	CFG_TUSB_OS=OPT_OS_FREERTOS		# added
+	#LWIP_IPV4=1
+	#LWIP_UDP=1
+	#LWIP_IGMP=1
+	#LWIP_CHECKSUM_CTRL_PER_NETIF=1
+	#CFG_TUSB_OS=OPT_OS_FREERTOS		# added
 	noexcept=						# added
 	${xcd}
 	${ppp}

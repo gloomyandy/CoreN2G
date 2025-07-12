@@ -28,7 +28,10 @@
 #include <cstring>
 #undef from
 #define PICO_MUTEX_ENABLE_SDK120_COMPATIBILITY	0	// used by mutex.h which is included by multicore.h
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wreturn-type"
 #include <pico/multicore.h>
+#pragma GCC diagnostic pop
 #include <hardware/irq.h>
 
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));

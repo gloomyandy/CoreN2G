@@ -24,7 +24,6 @@
 #if SUPPORT_USB && CORE_USES_TINYUSB
 
 #include <CoreIO.h>
-
 #include "tusb.h"
 #include "class/hid/hid_device.h"
 #include "class/audio/audio.h"

@@ -36,7 +36,7 @@
  * Received messages are filtered by ID and put into one of the two receive fifos or discarded. It would be easy to add
  * additional receive fifos.
  */
-
+#if SUPPORT_CAN && !USE_SPICAN
 #include "CanFD2040.h"
 
 #define PICO_MUTEX_ENABLE_SDK120_COMPATIBILITY	0	// used by mutex.h which is included by multicore.h
@@ -1836,3 +1836,4 @@ extern "C" ALIGNED_FUNCTION void CRITICAL_CODE(PIO_isr)() noexcept
 }
 
 // End
+#endif
