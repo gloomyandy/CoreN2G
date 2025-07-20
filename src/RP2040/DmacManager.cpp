@@ -32,7 +32,10 @@ void DmacManager::Init() noexcept
 {
 	irq_set_enabled(DMA_IRQ_0_IRQn, false);
 	irq_clear(DMA_IRQ_0_IRQn);
-	irq_set_priority(DMA_IRQ_0_IRQn, TempNvicPriorityDMA);
+	// There seems to be a bug in irq_set_priority on the RP2350, so we just use the
+	// NVIC function instead.
+	//irq_set_priority(DMA_IRQ_0_IRQn, TempNvicPriorityDMA);
+	NVIC_SetPriority((IRQn_Type)DMA_IRQ_0_IRQn, TempNvicPriorityDMA);
 	irq_set_exclusive_handler(DMA_IRQ_0, DMAC_0_Handler);
 	irq_set_enabled(DMA_IRQ_0_IRQn, true);
 }

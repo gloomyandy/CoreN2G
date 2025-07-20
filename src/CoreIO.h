@@ -712,6 +712,9 @@ enum class PwmOutput : uint8_t
 #if RP2040
 	pwm0a = 0x00, pwm0b, pwm1a, pwm1b, pwm2a, pwm2b, pwm3a, pwm3b,
 		   pwm4a, pwm4b, pwm5a, pwm5b, pwm6a, pwm6b, pwm7a, pwm7b,
+#if defined(__RP2350__)
+			pwm8a, pwm8b, pwm9a, pwm9b, pwm10a, pwm10b, pwm11a, pwm11b,
+#endif
 #else
 	pwm0l0_a = 0x00, pwm0h0_a, pwm0l1_a, pwm0h1_a, pwm0l2_a, pwm0h2_a, pwm0l3_a, pwm0h3_a,
 	pwm0l0_b = 0x20, pwm0h0_b, pwm0l1_b, pwm0h1_b, pwm0l2_b, pwm0h2_b, pwm0l3_b, pwm0h3_b,
@@ -782,6 +785,9 @@ enum class AdcInput : uint8_t
 {
 	adc0_0 = 0x00, adc0_1, adc0_2, adc0_3,
 #if RP2040
+#if defined(__RP2350__)
+	adc0_4, adc0_5, adc0_6, adc0_7,
+#endif
 	adc0_tempSense,
 	ldc1612 = 0x20,
 #else

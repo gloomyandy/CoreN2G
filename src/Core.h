@@ -129,6 +129,24 @@ extern "C" {
 # define SAME70				0
 # define STM32				0
 # define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
+#elif defined __RP2350__
+extern "C" {
+# include <hardware/gpio.h>
+# include <cmsis_compiler.h>
+# include <pico/rp2350mcu.h>
+
+# include <system_RP2040.h>
+# include <core_cm33.h>
+}
+# define RP2040				1
+# define SAMC21				0
+# define SAM3XA				0
+# define SAM4E				0
+# define SAM4S				0
+# define SAME5x				0
+# define SAME70				0
+# define STM32				0
+# define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
 #else
 # error unsupported processor
 #endif

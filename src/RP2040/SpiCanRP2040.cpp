@@ -239,7 +239,11 @@ void CanDevice::DoHardwareInit() noexcept
 	multicore_fifo_drain();
 
 #ifdef RTOS
+#if defined(__RP2040__)
 	const IRQn_Type irqn = SIO_IRQ_PROC0_IRQn;
+#else
+	const IRQn_Type irqn = SIO_IRQ_FIFO_IRQn;
+#endif
 	NVIC_DisableIRQ(irqn);
 	NVIC_ClearPendingIRQ(irqn);
 	irq_set_exclusive_handler(irqn, CAN_Handler);

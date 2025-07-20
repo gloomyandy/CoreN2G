@@ -64,10 +64,12 @@ protected:
 	void ReInit() noexcept;
 
 	static void DmaCompleteCallback(CallbackParameter cp, DmaCallbackReason reason) noexcept;
-
+#if defined(__RP2040__)
 	static constexpr size_t NumAdcChannels = 5;			// number of channels per ADC
-	static constexpr size_t MaxSequenceLength = 5;		// the maximum length of the read sequence
-
+#elif defined(__RP2350__)
+	static constexpr size_t NumAdcChannels = 9;			// number of channels per ADC
+#endif
+	static constexpr size_t MaxSequenceLength = 9;		// the maximum length of the read sequence
 	volatile uint32_t channelsEnabled;
 	volatile TaskHandle taskToWake;
 	uint32_t whenLastConversionStarted;

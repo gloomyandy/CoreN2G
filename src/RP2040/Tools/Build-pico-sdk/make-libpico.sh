@@ -6,6 +6,8 @@ set -x
 export PICO_SDK_PATH="$(cd ../../pico-sdk/; pwd)"
 export PATH="$(cd ../../system/arm-none-eabi/bin; pwd):$PATH"
 export PATH="$(cd ../../system/riscv32-unknown-elf/bin; pwd):$PATH"
+#export PICOTOOL_FETCH_FROM_GIT_PATH="$(cd ../../picotool/; pwd)"
+export picotool_DIR="$(cd ../../picotool/; pwd)"
 
 rm -rf build-rp2040
 mkdir build-rp2040
@@ -51,8 +53,9 @@ cd ../..
 rm -rf build-rp2350
 mkdir build-rp2350
 cd build-rp2350
+#export CMAKE_POLICY_VERSION_MINIMUM=3.5
 CPU=rp2350 cmake .. -DIPV6=0 -G "MSYS Makefiles"
-cmake --build . -j
+cmake --build .
 
 # cd ..
 # rm -rf build-rp2350-riscv
