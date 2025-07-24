@@ -78,7 +78,7 @@ bool AttachPinInterrupt(Pin pin, StandardCallbackFunction callback, InterruptMod
 	}
 
 	pinCallbacks[pin].mask = mask;
-	gpio_set_irq_enabled(pin, mask, enabled);
+	gpio_set_irq_enabled(pin, mask, enable);
 	return true;
 }
 
