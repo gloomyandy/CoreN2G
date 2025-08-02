@@ -21,7 +21,7 @@ extern uint32_t _estack;
 
 [[noreturn]] void OutOfMemoryHandler() noexcept;		// this must be provided by the client application
 
-#if RP2040
+#if RPXXXX
 
 // The RP2040 SDK allocates a 2Kb stack for Core 0 at the top of the 4kb Scratch Y memory, and a 2kb stack for Core 1 at the top of the 4kb Scratch X memory.
 // It defines __StackLimit as the very top of the 256kb of normal RAM, and __StackBottom as the bottom of Core 0 stack.
@@ -176,7 +176,7 @@ extern "C" int _write(int file, char *ptr, int len) noexcept
 	return len;
 }
 
-#if RP2040
+#if RPXXXX
 
 // Replacements for RP2040 SDK functions that try to print stuff
 

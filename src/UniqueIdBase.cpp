@@ -10,7 +10,7 @@
 
 #if SAM4E || SAM4S || SAME70
 # include <Flash.h>
-#elif RP2040
+#elif RPXXXX
 # include <pico/unique_id.h>
 #endif
 
@@ -26,7 +26,7 @@ void UniqueIdBase::Clear() noexcept
 // Test if we have a valid ID. We assume a valid ID cannot be all zeros.
 bool UniqueIdBase::IsValid() const noexcept
 {
-#if RP2040
+#if RPXXXX
 	return (data[0] | data[1]) != 0;
 #else
 	return (data[0] | data[1] | data[2] | data[3]) != 0;
@@ -36,7 +36,7 @@ bool UniqueIdBase::IsValid() const noexcept
 // Get a 32-bit hash of the ID. Used for pseudo random number generation.
 uint32_t UniqueIdBase::GetHash() const noexcept
 {
-#if RP2040
+#if RPXXXX
 	return data[0] ^ data[1];
 #else
 	return data[0] ^ data[1] ^ data[2] ^ data[3];
@@ -72,7 +72,7 @@ void UniqueIdBase::SetFromCurrentBoard() noexcept
 	data[3] = data[0] ^ data[2] ^ ~data[1];
 	SetChecksumWord();
 
-#elif RP2040
+#elif RPXXXX
 	pico_unique_board_id_t uniqueId;
 	pico_get_unique_board_id(&uniqueId);
 	static_assert(sizeof(uniqueId.id) == 8);
@@ -135,7 +135,7 @@ void UniqueIdBase::AppendCharsTo(function_ref_noexcept<void(char) noexcept> fn) 
 		fn(c);
 
 		++i;
-#if RP2040
+#if RPXXXX
 		if (i == 15)		// print 15 characters
 #else
 		if (i == 30)		// print 30 characters
@@ -160,7 +160,7 @@ void UniqueIdBase::AppendCharsToString(const StringRef &str) const noexcept
 // Set the checksum word of the unique ID
 void UniqueIdBase::SetChecksumWord() noexcept
 {
-#if RP2040
+#if RPXXXX
 	// We print 15 5-bit characters = 64 data bits + 11 checksum bits. So compress the 32 checksum bits into 11.
 	data[2] = data[0] ^ data[1];
 	data[2] ^= (data[2] >> 11) | (data[2] >> 21);

@@ -7,7 +7,7 @@
 
 #include "TmcUartInterface.h"
 
-#if RP2040
+#if RPXXXX
 
 #include <hardware/pio.h>
 #include <hardware/dma.h>

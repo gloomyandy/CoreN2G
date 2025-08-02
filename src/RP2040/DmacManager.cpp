@@ -7,7 +7,7 @@
 
 #include <CoreIO.h>
 
-#if !RP2040
+#if !RPXXXX
 # error Wrong processor
 #endif
 
@@ -16,7 +16,6 @@
 #include <hardware/regs/dma.h>
 #include <hardware/structs/dma.h>
 #include <hardware/regs/intctrl.h>
-// #include <RP2040.h>
 
 constexpr NvicPriority TempNvicPriorityDMA = 2;			// temporary DMA interrupt priority, low enough to allow FreeRTOS system calls
 

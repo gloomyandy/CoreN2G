@@ -17,7 +17,7 @@
  */
 struct CanStandardMessageFilterElement
 {
-#if RP2040
+#if RPXXXX
 	uint32_t id: 11,
 			 whichBuffer : 3,
 			 mask : 11,
@@ -52,7 +52,7 @@ struct CanStandardMessageFilterElement
  */
 struct CanExtendedMessageFilterElement
 {
-#if RP2040
+#if RPXXXX
 	uint32_t id : 29,
 			 whichBuffer : 3,
 			 mask : 29,

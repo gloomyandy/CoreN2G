@@ -18,7 +18,7 @@
 #define TwoWire_h
 
 #include "CoreIO.h"
-#if SAME70 || RP2040
+#if SAME70 || RPXXXX
 // TWI disabled for now
 #else
 

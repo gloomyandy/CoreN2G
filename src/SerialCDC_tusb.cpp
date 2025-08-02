@@ -13,7 +13,7 @@
 
 #if CORE_USES_TINYUSB
 
-#if RP2040
+#if RPXXXX
 # define PICO_MUTEX_ENABLE_SDK120_COMPATIBILITY		0
 #endif
 
@@ -110,7 +110,7 @@ size_t SerialCDC::write(const uint8_t *buf, size_t length) noexcept
 		return 0;
 	}
 
-#if RP2040
+#if RPXXXX
 	// Hack to allow debug output from core1
 	if (get_core_num() != 0)
 	{
@@ -170,7 +170,7 @@ size_t SerialCDC::write(const uint8_t *buf, size_t length) noexcept
 	return written;
 }
 
-#if RP2040
+#if RPXXXX
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 void SerialCDC::Spin()
 {

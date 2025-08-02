@@ -239,10 +239,12 @@ void CanDevice::DoHardwareInit() noexcept
 	multicore_fifo_drain();
 
 #ifdef RTOS
-#if defined(__RP2040__)
+#if RP2040
 	const IRQn_Type irqn = SIO_IRQ_PROC0_IRQn;
-#else
+#elif RP2350
 	const IRQn_Type irqn = SIO_IRQ_FIFO_IRQn;
+#else
+#	error Invalid processor
 #endif
 	NVIC_DisableIRQ(irqn);
 	NVIC_ClearPendingIRQ(irqn);

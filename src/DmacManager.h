@@ -16,7 +16,7 @@ constexpr unsigned int NumDmaChannelsSupported = 15;	// max is 32
 constexpr unsigned int NumDmaChannelsSupported = 8;		// max is 12
 #elif SAME70
 constexpr unsigned int NumDmaChannelsSupported = 10;	// max for SAME70 is 24
-#elif RP2040
+#elif RPXXXX
 constexpr unsigned int NumDmaChannelsSupported = 8;		// max is 12
 #endif
 
@@ -30,7 +30,7 @@ enum class DmaCallbackReason : uint8_t
 	completeAndError = DMAC_CHINTFLAG_TERR | DMAC_CHINTFLAG_TCMPL
 #elif SAME70
 	complete = 1
-#elif RP2040
+#elif RPXXXX
 	complete = 1,
 	error = 2,
 	completeAndError = 3
@@ -245,7 +245,6 @@ enum class DmaTrigSource : uint8_t
 	i2sc1rxr,
 	numPeripheralIds
 #elif RP2040
-#if defined(__RP2040__)
 	pio0tx0, pio0tx1, pio0tx2, pio0tx3,
 	pio0rx0, pio0rx1, pio0rx2, pio0rx3,
 	pio1tx0, pio1tx1, pio1tx2, pio1tx3,
@@ -255,7 +254,7 @@ enum class DmaTrigSource : uint8_t
 	pwmwrap0, pwmwrap1, pwmwrap2, pwmwrap3, pwmwrap4, pwmwrap5, pwmwrap6, pwmwrap7,
 	i2c0tx, i2c0rx, i2c1tx, i2c1rx,
 	adc, xipstream, xipssitx, xipssirx
-#elif defined(__RP2350__)
+#elif RP2350
 	pio0tx0, pio0tx1, pio0tx2, pio0tx3,
 	pio0rx0, pio0rx1, pio0rx2, pio0rx3,
 	pio1tx0, pio1tx1, pio1tx2, pio1tx3,
@@ -268,9 +267,6 @@ enum class DmaTrigSource : uint8_t
 	pwmwrap6, pwmwrap7, pwmwrap8, pwmwrap9, pwmwrap10, pwmwrap11,
 	i2c0tx, i2c0rx, i2c1tx, i2c1rx,
 	adc, xipstream, xipqmitx, xipqmirx, hstx, coresight, sha256
-#else
-#	error Unsupported processor
-#endif
 #else
 # error Unsupported processor
 #endif
@@ -299,7 +295,7 @@ static inline uint8_t GetSercomRxTrigSource(uint8_t sercomNumber) noexcept
 namespace DmacManager
 {
 	void Init() noexcept;
-#if RP2040
+#if RPXXXX
 	void SetBtctrl(DmaChannel channel, uint32_t val) noexcept;								// warning: call SetBtctrl, SetSourceAddress and SetDestinationAddress BEFORE SetDataLength!
 #else
 	void SetBtctrl(DmaChannel channel, uint16_t val) noexcept;								// warning: call SetBtctrl, SetSourceAddress and SetDestinationAddress BEFORE SetDataLength!
@@ -309,7 +305,7 @@ namespace DmacManager
 	void SetDataLength(DmaChannel channel, uint32_t amount) noexcept;						// warning: call SetBtctrl, SetSourceAddress and SetDestinationAddress BEFORE SetDataLength!
 	void SetTriggerSource(DmaChannel channel, DmaTrigSource source) noexcept;
 
-#if !RP2040
+#if !RPXXXX
 	void SetTriggerSourceSercomTx(DmaChannel channel, uint8_t sercomNumber) noexcept;
 	void SetTriggerSourceSercomRx(DmaChannel channel, uint8_t sercomNumber) noexcept;
 	void SetArbitrationLevel(DmaChannel channel, uint8_t level) noexcept;
@@ -323,7 +319,7 @@ namespace DmacManager
 	void SetInterruptCallback(DmaChannel channel, DmaCallbackFunction fn, CallbackParameter param) noexcept;
 	void EnableCompletedInterrupt(DmaChannel channel) noexcept;
 	void DisableCompletedInterrupt(DmaChannel channel) noexcept;
-#if RP2040
+#if RPXXXX
 	uint32_t GetAndClearChannelStatus(DmaChannel channel) noexcept;
 #else
 	uint8_t GetAndClearChannelStatus(DmaChannel channel) noexcept;

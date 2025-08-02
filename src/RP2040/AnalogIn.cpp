@@ -9,7 +9,7 @@
 
 #include <CoreIO.h>
 
-#if !RP2040
+#if !RPXXXX
 # error Wrong processor!
 #endif
 
@@ -64,9 +64,9 @@ protected:
 	void ReInit() noexcept;
 
 	static void DmaCompleteCallback(CallbackParameter cp, DmaCallbackReason reason) noexcept;
-#if defined(__RP2040__)
+#if RP2040
 	static constexpr size_t NumAdcChannels = 5;			// number of channels per ADC
-#elif defined(__RP2350__)
+#elif RP2350
 	static constexpr size_t NumAdcChannels = 9;			// number of channels per ADC
 #endif
 	static constexpr size_t MaxSequenceLength = 9;		// the maximum length of the read sequence

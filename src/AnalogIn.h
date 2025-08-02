@@ -43,7 +43,7 @@ namespace AnalogIn
 	constexpr unsigned int AdcBits = 16;
 #elif STM32
 	constexpr unsigned int AdcBits = 14;
-#elif RP2040
+#elif RPXXXX
 	constexpr unsigned int AdcBits = 12;
 #elif SAME70
 	static constexpr unsigned int AdcBits = 14;
@@ -61,7 +61,7 @@ namespace AnalogIn
 				DmaChannel dmaChan,
 				DmaPriority rxPriority,
 				bool extRef
-#elif RP2040
+#elif RPXXXX
 				DmaChannel dmaChan,
 				DmaPriority rxPriority
 #endif
@@ -99,7 +99,7 @@ namespace AnalogIn
 	bool EnableTemperatureSensor(unsigned int sensorNumber, AnalogInCallbackFunction fn, CallbackParameter param, uint32_t ticksPerCall, unsigned int adcnum) noexcept;
 #endif
 
-#if SAMC21 || RP2040
+#if SAMC21 || RPXXXX
 	void EnableTemperatureSensor(AnalogInCallbackFunction fn, CallbackParameter param, uint32_t ticksPerCall) noexcept;
 #endif
 

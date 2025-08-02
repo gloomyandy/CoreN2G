@@ -36,6 +36,7 @@
 # define SAME5x				1
 # define SAME70				0
 # define RP2040				0
+# define RP2350				0
 # define STM32				0
 #elif defined(__SAME51N19A__) || defined(__SAME51G19A__) || defined(__SAME51J19A__)
 # include <same51.h>
@@ -46,6 +47,7 @@
 # define SAME5x				1
 # define SAME70				0
 # define RP2040				0
+# define RP2350				0
 # define STM32				0
 #elif defined(__SAMD51N19A__)
 # include <samd51.h>
@@ -56,6 +58,7 @@
 # define SAME5x				1
 # define SAME70				0
 # define RP2040				0
+# define RP2350				0
 # define STM32				0
 #elif defined(__SAMC21G18A__)
 # include <samc21.h>
@@ -66,6 +69,7 @@
 # define SAME5x				0
 # define SAME70				0
 # define RP2040				0
+# define RP2350				0
 # define STM32				0
 # define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
 # define SUPPORT_USB		0			// SAMC21 doesn't support USB
@@ -74,6 +78,7 @@
 # include <sam4e8e.h>
 # define SAME5x				0
 # define RP2040				0
+# define RP2350				0
 # define STM32				0
 # define SUPPORT_CAN		0			// SAM4E doesn't support CAN-FD
 #elif defined(__SAM4S8C__)
@@ -81,6 +86,7 @@
 # include <sam4s8c.h>
 # define SAME5x				0
 # define RP2040				0
+# define RP2350				0
 # define STM32				0
 # define SUPPORT_CAN		0			// SAM4S doesn't support CAN-FD
 #elif defined(__SAME70Q20B__)
@@ -99,6 +105,7 @@
 # define SAME5x				0
 # define SAME70				0
 # define RP2040				0
+# define RP2350				0
 #elif defined(__STM32H7__)
 # include <stm32h7.h>
 # include <dwt.h>
@@ -111,6 +118,7 @@
 # define SAME5x				0
 # define SAME70				0
 # define RP2040				0
+# define RP2350				0
 #elif defined __RP2040__
 extern "C" {
 # include <hardware/gpio.h>
@@ -120,6 +128,7 @@ extern "C" {
 # include <system_RP2040.h>
 # include <core_cm0plus.h>
 }
+# define RPXXXX				1
 # define RP2040				1
 # define SAMC21				0
 # define SAM3XA				0
@@ -138,7 +147,8 @@ extern "C" {
 # include <system_RP2040.h>
 # include <core_cm33.h>
 }
-# define RP2040				1
+# define RPXXXX				1
+# define RP2350				1
 # define SAMC21				0
 # define SAM3XA				0
 # define SAM4E				0
@@ -156,8 +166,13 @@ extern "C" {
 # define STM32H7			0
 # define STM32F4			0
 #endif
+#if !defined(RPXXXX)
+# define RPXXXX				0
+# define RP2040				0
+# define RP2350				0
+#endif
 #if !defined(CORE_USES_TINYUSB)
-#if SAME70 || RP2040 || SAME5x
+#if SAME70 || RPXXXX || SAME5x
 # define CORE_USES_TINYUSB		1
 #else
 # define CORE_USES_TINYUSB		0
@@ -228,6 +243,10 @@ static const uint32_t SystemCoreClockFreq = 480000000;	///< The processor clock 
 #elif RP2040
 
 static const uint32_t SystemCoreClockFreq = 200000000;	///< The processor clock frequency after initialisation
+
+#elif RP2350
+
+static const uint32_t SystemCoreClockFreq = 150000000;	///< The processor clock frequency after initialisation
 
 #else
 # error unsupported processor

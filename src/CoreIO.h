@@ -39,6 +39,8 @@ constexpr unsigned int NumTotalPins = (4 * 32) + 6;		// SAME70 goes up to PE5
 constexpr int NumTotalPins = P_END;
 #elif RP2040
 constexpr unsigned int NumTotalPins = 30;				// RP2040 goes up to GPIO29
+#elif RP2350
+constexpr unsigned int NumTotalPins = 48;				// RP2350B goes up to GPIO47
 #else
 # error Unsupported processor
 #endif
@@ -47,7 +49,7 @@ constexpr unsigned int NumTotalPins = 30;				// RP2040 goes up to GPIO29
 inline uint32_t GpioPortNumber(Pin p) noexcept { return STM_PORT(p);}
 inline constexpr uint32_t GpioPinNumber(Pin p) noexcept { return STM_PIN(p); }
 inline constexpr uint32_t GpioMask(Pin p) noexcept { return (uint32_t)STM_GPIO_PIN(p); }
-#elif RP2040
+#elif RPXXXX
 
 inline constexpr Pin GpioPin(unsigned int n) noexcept { return n; }
 inline constexpr uint32_t GpioMask(Pin p) noexcept { return (uint32_t)1 << p; }
@@ -124,7 +126,7 @@ inline constexpr Pin PortEPin(unsigned int n) noexcept { return 128+n; }
  */
 enum class GpioPinFunction : uint8_t
 {
-#if RP2040
+#if RPXXXX
     Xip = 0, Spi = 1, Uart = 2, I2c = 3, Pwm = 4,
     Sio = 5, Pio0 = 6, Pio1 = 7, Gpck = 8, Usb = 9,
     None = 0x1f
@@ -488,7 +490,7 @@ inline void fastDigitalWriteHigh(uint32_t pin) noexcept
 	PORT->Group[GpioPortNumber(pin)].OUTSET.reg = GpioMask(pin);
 #elif SAME70 || SAM4E || SAM4S
 	GpioPort(pin)->PIO_SODR = GpioMask(pin);
-#elif RP2040
+#elif RPXXXX
 	gpio_set_mask(GpioMask(pin));
 #else
 # error Unsupported processor
@@ -506,7 +508,7 @@ inline void fastDigitalWriteLow(uint32_t pin) noexcept
 	PORT->Group[GpioPortNumber(pin)].OUTCLR.reg = GpioMask(pin);
 #elif SAME70 || SAM4E || SAM4S
 	GpioPort(pin)->PIO_CODR = GpioMask(pin);
-#elif RP2040
+#elif RPXXXX
 	gpio_clr_mask(GpioMask(pin));
 #else
 # error Unsupported processor
@@ -524,7 +526,7 @@ inline bool fastDigitalRead(uint32_t pin) noexcept
 	return PORT->Group[GpioPortNumber(pin)].IN.reg & GpioMask(pin);
 #elif SAME70 || SAM4E || SAM4S
 	return GpioPort(pin)->PIO_PDSR & GpioMask(pin);
-#elif RP2040
+#elif RPXXXX
 	return gpio_get(pin);			//TODO can we optimise this?
 #else
 # error Unsupported processor
@@ -538,7 +540,7 @@ inline bool fastDigitalRead(uint32_t pin) noexcept
  */
 [[noreturn]] void ResetProcessor() noexcept;
 
-#if !STM32 && !RP2040
+#if !STM32 && !RPXXXX
 
 /**
  * @brief TC output identifiers used in pin tables
@@ -705,14 +707,14 @@ static inline constexpr GpioPinFunction GetPeriNumber(TccOutput tcc) noexcept
  */
 void EnableTccClock(unsigned int tccNumber, unsigned int gclkNum) noexcept;
 
-#elif SAME70 || SAM4E || SAM4S || RP2040
+#elif SAME70 || SAM4E || SAM4S || RPXXXX
 
 enum class PwmOutput : uint8_t
 {
-#if RP2040
+#if RPXXXX
 	pwm0a = 0x00, pwm0b, pwm1a, pwm1b, pwm2a, pwm2b, pwm3a, pwm3b,
 		   pwm4a, pwm4b, pwm5a, pwm5b, pwm6a, pwm6b, pwm7a, pwm7b,
-#if defined(__RP2350__)
+#if RP2350
 			pwm8a, pwm8b, pwm9a, pwm9b, pwm10a, pwm10b, pwm11a, pwm11b,
 #endif
 #else
@@ -761,7 +763,7 @@ static inline constexpr unsigned int GetOutputNumber(PwmOutput pwm) noexcept
  */
 static inline constexpr GpioPinFunction GetPeriNumber(PwmOutput pwm) noexcept
 {
-#if RP2040
+#if RPXXXX
 	return GpioPinFunction::Pwm;
 #else
 	return (GpioPinFunction)((uint8_t)pwm >> 5);
@@ -784,8 +786,8 @@ constexpr AnalogChannelNumber NO_ADC = (AnalogChannelNumber)0xffffffff;
 enum class AdcInput : uint8_t
 {
 	adc0_0 = 0x00, adc0_1, adc0_2, adc0_3,
-#if RP2040
-#if defined(__RP2350__)
+#if RPXXXX
+#if RP2350
 	adc0_4, adc0_5, adc0_6, adc0_7,
 #endif
 	adc0_tempSense,
@@ -823,7 +825,7 @@ typedef AdcInput AnalogChannelNumber;						///< for backwards compatibility
 constexpr AnalogChannelNumber NO_ADC = AdcInput::none;		///< for backwards compatibility
 #endif
 
-#if !STM32 && !RP2040
+#if !STM32 && !RPXXXX
 
 /**
  * @brief Get the ADC number that an ADC input is on
@@ -843,7 +845,7 @@ static inline constexpr unsigned int GetDeviceNumber(AdcInput ain) noexcept { re
  */
 static inline constexpr unsigned int GetInputNumber(AdcInput ain) noexcept
 {
-#if RP2040
+#if RPXXXX
 	return (uint8_t)ain;
 #else
 	return (uint8_t)ain & 0x0F;
@@ -979,7 +981,7 @@ struct PinDescriptionBase
 	PwmOutput pwm;					///< The PWM output that is connected to this pin and available for PWM generation, or PwmOutput::none
 	AdcInput adc;					///< The ADC input that is connected to this pin and available, or AdcInput::none
 
-#elif RP2040
+#elif RPXXXX
 
 	PwmOutput pwm;					///< The PWM output that is connected to this pin and available for PWM generation, or PwmOutput::none
 	AdcInput adc;					///< The ADC input that is connected to this pin and available, or AdcInput::none
@@ -1070,7 +1072,7 @@ static inline void SetCpuQos(uint32_t qos) noexcept
 #endif
 #endif
 
-#if RP2040
+#if RPXXXX
 /**
  * @brief On the RP2040 when using flash operations we need to ensure that the core 1 is not executing code from flash
  */
@@ -1081,7 +1083,7 @@ extern void DisableCore1Processing() noexcept;
 extern void EnableCore1Processing() noexcept;
 #endif
 
-#if RP2040
+#if RPXXXX
 /**
  * @brief On the RP2040 when using flash operations we need to ensure that the core 1 is not executing code from flash
  */

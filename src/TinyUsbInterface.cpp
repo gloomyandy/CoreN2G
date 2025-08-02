@@ -325,7 +325,7 @@ void CoreUsbInit(NvicPriority priority) noexcept
 	gpio_set_pin_pull_mode(PortAPin(25), GPIO_PULL_OFF);
 	gpio_set_pin_function(PortAPin(25), PINMUX_PA25H_USB_DP);
 
-#elif RP2040
+#elif RPXXXX
 
 	// Set the USB interrupt priority to a suitable level
 	NVIC_SetPriority((IRQn_Type)USBCTRL_IRQ, priority);
@@ -369,7 +369,7 @@ extern "C" void CoreUsbDeviceTask(void* param) noexcept
 	}
 }
 
-#if RP2040		// RP2040 USB configuration has HID enabled by default
+#if RPXXXX		// RP2040 USB configuration has HID enabled by default
 
 // Invoked when received GET HID REPORT DESCRIPTOR
 // Application return pointer to descriptor

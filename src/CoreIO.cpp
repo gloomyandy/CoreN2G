@@ -34,7 +34,7 @@
 #include <HybridPWM.h>
 #endif
 static IWDG_HandleTypeDef wdHandle;
-#elif RP2040
+#elif RPXXXX
 # include <hardware/watchdog.h>
 # include <hardware/adc.h>
 #endif
@@ -113,7 +113,7 @@ void DisablePullup(Pin pin) noexcept
 #else
 // Delay for a specified number of CPU clock cycles from the starting time. Return the time at which we actually stopped waiting.
 extern "C"
-#if SAMC21 || RP2040
+#if SAMC21 || RPXXXX
 // When bit-banging Neopixels we can't afford to wait for instructions to be fetched from flash memory
 [[gnu::optimize("03")]] __attribute__((section(".time_critical")))
 #else
@@ -184,7 +184,7 @@ void SetPinFunction(Pin p, GpioPinFunction f) noexcept
 	p_pio->PIO_ABCDSR[0] = sr0;
 	p_pio->PIO_ABCDSR[1] = sr1;
 	p_pio->PIO_PDR = mask;									// remove the pins from under the control of PIO
-#elif RP2040
+#elif RPXXXX
 	gpio_set_function(p, (gpio_function_t)f);
 #else
 # error Unsupported processor
@@ -204,7 +204,7 @@ void ClearPinFunction(Pin p) noexcept
 	Pio * const p_pio = GpioPort(p);
 	const uint32_t mask = GpioMask(p);
 	p_pio->PIO_PER = mask;									// put the pins under the control of PIO
-#elif RP2040
+#elif RPXXXX
 	gpio_init(p);
 #else
 # error Unsupported processor
@@ -217,7 +217,7 @@ void EnablePullup(Pin pin) noexcept
 #if SAM4E || SAM4S || SAME70
 	GpioPort(pin)->PIO_PPDDR = GpioMask(pin);						// turn off pulldown
 	GpioPort(pin)->PIO_PUER = GpioMask(pin);						// turn on pullup
-#elif RP2040
+#elif RPXXXX
 	gpio_pull_up(pin);
 #else
 	PORT->Group[GpioPortNumber(pin)].OUTSET.reg = GpioMask(pin);
@@ -231,7 +231,7 @@ void DisablePullup(Pin pin) noexcept
 #if SAM4E || SAM4S || SAME70
 	GpioPort(pin)->PIO_PUDR = GpioMask(pin);						// turn off pullup
 	GpioPort(pin)->PIO_PPDDR = GpioMask(pin);						// turn off pulldown
-#elif RP2040
+#elif RPXXXX
 	gpio_disable_pulls(pin);
 #else
 	PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].bit.PULLEN = 0;
@@ -250,7 +250,7 @@ void SetDriveStrength(Pin p, unsigned int strength) noexcept
 	{
 		PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].reg &= ~PORT_PINCFG_DRVSTR;
 	}
-#elif RP2040
+#elif RPXXXX
 	gpio_set_drive_strength(p, gpio_drive_strength((gpio_drive_strength)min<unsigned int>(strength, 3)));	// 2, 4, 8 and 12mA can be selected
 #else
 	// This is a NOP on other processors
@@ -282,7 +282,7 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 #if SAM4E || SAM4S || SAME70
 		Pio *pio = GpioPort(pin);
 #endif
-#if !RP2040
+#if !RPXXXX
 		const uint32_t mask = GpioMask(pin);
 #endif
 		switch (mode)
@@ -293,7 +293,7 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			pio->PIO_SCDR = DebounceDivisorReg;
 			pio->PIO_PPDDR = mask;									// turn off pulldown
 			pio_set_input(pio, mask, (debounce) ? PIO_DEBOUNCE : PIO_DEGLITCH);
-#elif RP2040
+#elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_disable_pulls(pin);
 			gpio_set_input_enabled(pin, true);
@@ -312,7 +312,7 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			pio->PIO_SCDR = DebounceDivisorReg;
 			pio->PIO_PPDDR = mask;									// turn off pulldown
 			pio_set_input(pio, mask, PIO_PULLUP | ((debounce) ? PIO_DEBOUNCE : PIO_DEGLITCH));
-#elif RP2040
+#elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_pull_up(pin);
 			gpio_set_input_enabled(pin, true);
@@ -333,7 +333,7 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			pio->PIO_PUDR = mask;									// turn off pullup
 			pio->PIO_PPDER = mask;									// turn on pulldown
 			pio_set_input(pio, mask, (debounce) ? PIO_DEBOUNCE : PIO_DEGLITCH);
-#elif RP2040
+#elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_pull_down(pin);
 			gpio_set_input_enabled(pin, true);
@@ -355,7 +355,7 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			{
 				pmc_disable_periph_clk(PioIds[GpioPortNumber(pin)]);
 			}
-#elif RP2040
+#elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_disable_pulls(pin);
 			gpio_put(pin, false);
@@ -376,7 +376,7 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			{
 				pmc_disable_periph_clk(PioIds[GpioPortNumber(pin)]);
 			}
-#elif RP2040
+#elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_disable_pulls(pin);
 			gpio_put(pin, true);
@@ -396,7 +396,7 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			pio->PIO_PPDDR = mask;						// turn off pulldown
 			// Ideally we should record which pins are being used as analog inputs, then we can disable the clock
 			// on any PIO that is being used solely for outputs and ADC inputs. But for now we don't do that.
-#elif RP2040
+#elif RPXXXX
 			adc_gpio_init(pin);
 #else
 			PORT->Group[GpioPortNumber(pin)].DIRCLR.reg = mask;
@@ -676,7 +676,7 @@ static void RandomInit()
 
 void CoreInit() noexcept
 {
-#if SAME5x || SAMC21 || SAME70 || RP2040
+#if SAME5x || SAMC21 || SAME70 || RPXXXX
 	DmacManager::Init();
 #endif
 #if SAME5x || SAMC21
@@ -713,7 +713,7 @@ void WatchdogInit() noexcept
 	wdHandle.Init.Reload = IWDG_RLR_RL;
     wdHandle.Init.Prescaler = IWDG_PRESCALER_16;
     HAL_IWDG_Init(&wdHandle);
-#elif RP2040
+#elif RPXXXX
 	watchdog_enable(750, true);									// we reset the timer to run at 750kHz instead of 1MHz, so 1 second is 750 "milliseconds"
 #else
 # error Unsupported processor
@@ -732,7 +732,7 @@ void WatchdogReset() noexcept
 	WDT->WDT_CR = WDT_CR_KEY_PASSWD | WDT_CR_WDRSTT;
 #elif STM32
     HAL_IWDG_Refresh(&wdHandle);
-#elif RP2040
+#elif RPXXXX
 	watchdog_update();
 #else
 # error Unsupported processor
@@ -755,7 +755,7 @@ void ResetProcessor() noexcept
 	rstc_start_software_reset(RSTC);
 #elif STM32
 	NVIC_SystemReset();
-#elif RP2040
+#elif RPXXXX
 	watchdog_reboot(0, 0, 0);
 #else
 	SCB->AIRCR = (0x5FA << 16) | (1u << 2);						// reset the processor
@@ -786,7 +786,7 @@ void ConfigureGclk(unsigned int index, GclkSource source, uint16_t divisor, bool
 
 #endif
 
-#if !RP2040
+#if !RPXXXX
 
 void EnableTcClock(unsigned int tcNumber, unsigned int gclkNum) noexcept
 {
@@ -938,7 +938,7 @@ extern "C" uint32_t random32() noexcept
 #endif
 }
 
-#if RP2040
+#if RPXXXX
 # if SUPPORT_CAN
 extern void DisableCanCore1Processing() noexcept;
 extern void EnableCanCore1Processing() noexcept;

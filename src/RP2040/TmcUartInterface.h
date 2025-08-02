@@ -12,7 +12,7 @@
 
 #include <Core.h>
 
-#if RP2040
+#if RPXXXX
 
 #include <DmacManager.h>
 

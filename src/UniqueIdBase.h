@@ -38,7 +38,7 @@ public:
 protected:
 	void SetChecksumWord() noexcept;
 
-#if RP2040
+#if RPXXXX
 	uint32_t data[3];			// 64-bit unique ID plus checksum
 #else
 	uint32_t data[5];			// 128-bit unique ID plus checksum
