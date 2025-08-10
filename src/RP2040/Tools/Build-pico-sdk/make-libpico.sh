@@ -4,6 +4,7 @@ set -e # Exit on error
 set -x
 
 export PICO_SDK_PATH="$(cd ../../pico-sdk/; pwd)"
+# we use the same compiler as the main RRF build (at least for now).
 #export PATH="$(cd ../../system/arm-none-eabi/bin; pwd):$PATH"
 #export PATH="$(cd ../../system/riscv32-unknown-elf/bin; pwd):$PATH"
 #export PICOTOOL_FETCH_FROM_GIT_PATH="$(cd ../../picotool/; pwd)"
