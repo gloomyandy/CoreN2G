@@ -14,7 +14,7 @@ rm -rf build-rp2040
 mkdir build-rp2040
 cd build-rp2040
 CPU=rp2040 cmake .. -DIPV6=0 -DPICO_USE_FASTEST_SUPPORTED_CLOCK=1 -G "MSYS Makefiles"
-cmake --build . -j
+cmake --build .
 
 rm -rf boot
 mkdir boot
