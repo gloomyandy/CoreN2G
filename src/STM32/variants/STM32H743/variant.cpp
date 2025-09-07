@@ -257,9 +257,13 @@ void SystemClockStartupInit() {
   PeriphClkInitStruct.PLL2.PLL2RGE = RCC_PLL2VCIRANGE_2;
   PeriphClkInitStruct.PLL2.PLL2VCOSEL = RCC_PLL2VCOWIDE;
   PeriphClkInitStruct.PLL2.PLL2FRACN = 0;
-#if 0
-  PeriphClkInitStruct.PLL3.PLL3M = 15; // M DIV 15 vco 25 / 15 ~ 1.667 Mhz
-  PeriphClkInitStruct.PLL3.PLL3N = 96; // N MUL 96
+
+    // Use PLL 3 for SPI to allow closer match with common spi frequencies (like 1MHz 2MHz 4MHz)
+  // note ideally we would run at 128MHz allowing exact matches but for some reason using 4MHz
+  // when phase stepping causes some tmc5160 to return invalid read results. For now we optimise
+  // things to run at 3.75MHz instead. Hence we run the spi device at 120MHz
+  PeriphClkInitStruct.PLL3.PLL3M = 25; // M DIV 15 vco 25 / 25 ~ 1 Mhz
+  PeriphClkInitStruct.PLL3.PLL3N = 240; // N MUL 240
   PeriphClkInitStruct.PLL3.PLL3P = 2;  // P div 2
   PeriphClkInitStruct.PLL3.PLL3Q = 2;  // Q div 2
   PeriphClkInitStruct.PLL3.PLL3R = 2;  // R div 2
@@ -267,7 +271,7 @@ void SystemClockStartupInit() {
   PeriphClkInitStruct.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_0;
   PeriphClkInitStruct.PLL3.PLL3VCOSEL = RCC_PLL3VCOMEDIUM;
   PeriphClkInitStruct.PLL3.PLL3FRACN = 0;
-#endif
+
   // ADC from PLL2 pclk
   PeriphClkInitStruct.AdcClockSelection = RCC_ADCCLKSOURCE_PLL2;
   // USB from PLL1 qclk
@@ -287,11 +291,11 @@ void SystemClockStartupInit() {
   // I2C4 from PLL3 rclk
   //PeriphClkInitStruct.I2c4ClockSelection = RCC_I2C4CLKSOURCE_PLL3;
   // SPI123 from PLL2 pclk
-  PeriphClkInitStruct.Spi123ClockSelection = RCC_SPI123CLKSOURCE_PLL2;
+  PeriphClkInitStruct.Spi123ClockSelection = RCC_SPI123CLKSOURCE_PLL3;
   // SPI45 from PLL2 qclk
-  PeriphClkInitStruct.Spi45ClockSelection = RCC_SPI45CLKSOURCE_PLL2;
+  PeriphClkInitStruct.Spi45ClockSelection = RCC_SPI45CLKSOURCE_PLL3;
   // SPI6 from PLL2 qclk
-  PeriphClkInitStruct.Spi6ClockSelection = RCC_SPI6CLKSOURCE_PLL2;
+  PeriphClkInitStruct.Spi6ClockSelection = RCC_SPI6CLKSOURCE_PLL3;
   // FDCAN from Q clock
   PeriphClkInitStruct.FdcanClockSelection = RCC_FDCANCLKSOURCE_PLL;
 
