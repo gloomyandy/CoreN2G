@@ -31,8 +31,12 @@ void DmacManager::Init() noexcept
 {
 	irq_set_enabled(DMA_IRQ_0_IRQn, false);
 	irq_clear(DMA_IRQ_0_IRQn);
-	// There seems to be a bug in irq_set_priority on the RP2350, so we just use the
-	// NVIC function instead.
+	// irq_set_priority is a little odd in that it seems to require that the interrupt
+	// priority has been shifted to be in the topmost bits of the parameter. From the pico sdk:
+	// "Only the top 2 bits are significant on ARM Cortex-M0+ on RP2040.
+	//  Only the top 4 bits are significant on ARM Cortex-M33 or Hazard3 (RISC-V) on RP2350."
+	// This does not really match the way that priorities are defined in RRF. We could adjust
+	// values but for now we simply use the NVIC function instead.
 	//irq_set_priority(DMA_IRQ_0_IRQn, TempNvicPriorityDMA);
 	NVIC_SetPriority((IRQn_Type)DMA_IRQ_0_IRQn, TempNvicPriorityDMA);
 	irq_set_exclusive_handler(DMA_IRQ_0, DMAC_0_Handler);
