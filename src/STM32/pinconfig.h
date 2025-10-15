@@ -31,7 +31,6 @@
 #ifndef _PINCONFIG_H
 #define _PINCONFIG_H
 
-#include "PinAF_STM32F1.h"
 #if defined(__STM32H7__)
 # include "stm32h7xx_ll_gpio.h"
 #else
@@ -41,26 +40,14 @@
 
 static inline void pin_DisconnectDebug(PinName pin)
 {
-#ifdef STM32F1xx
-  pinF1_DisconnectDebug(pin);
-#else
   UNUSED(pin);
-#endif /* STM32F1xx */
 }
 
 static inline void pin_PullConfig(GPIO_TypeDef *gpio, uint32_t ll_pin, uint32_t pull_config)
 {
-#ifdef STM32F1xx
-  uint32_t function = LL_GPIO_GetPinMode(gpio, ll_pin);
-#endif
 
   switch (pull_config) {
     case GPIO_PULLUP:
-#ifdef STM32F1xx
-      if (function == LL_GPIO_MODE_FLOATING) {
-        LL_GPIO_SetPinMode(gpio, ll_pin, LL_GPIO_MODE_INPUT);
-      }
-#endif
       LL_GPIO_SetPinPull(gpio, ll_pin, LL_GPIO_PULL_UP);
       break;
     case GPIO_PULLDOWN:
@@ -72,25 +59,13 @@ static inline void pin_PullConfig(GPIO_TypeDef *gpio, uint32_t ll_pin, uint32_t 
       LL_GPIO_SetPinPull(gpio, ll_pin, LL_GPIO_PULL_DOWN);
       break;
     default:
-#ifdef STM32F1xx
-      /*  Input+NoPull = Floating for F1 family */
-      if (function == LL_GPIO_MODE_INPUT) {
-        LL_GPIO_SetPinMode(gpio, ll_pin, LL_GPIO_MODE_FLOATING);
-      }
-#else
       LL_GPIO_SetPinPull(gpio, ll_pin, LL_GPIO_PULL_NO);
-#endif
       break;
   }
 }
 
 static inline void pin_SetAFPin(GPIO_TypeDef *gpio, PinName pin, uint32_t afnum)
 {
-#ifdef STM32F1xx
-  UNUSED(gpio);
-  UNUSED(pin);
-  pin_SetF1AFPin(afnum);
-#else
   uint32_t ll_pin  = STM_LL_GPIO_PIN(pin);
 
   if (STM_PIN(pin) > 7) {
@@ -98,7 +73,6 @@ static inline void pin_SetAFPin(GPIO_TypeDef *gpio, PinName pin, uint32_t afnum)
   } else {
     LL_GPIO_SetAFPin_0_7(gpio, ll_pin, afnum);
   }
-#endif
 }
 
 #endif
