@@ -37,7 +37,6 @@
   */
 #include "stm32_def.h"
 #include "spi_com.h"
-//#include "PinAF_STM32F1.h"
 #include "pinconfig.h"
 
 #ifdef __cplusplus
