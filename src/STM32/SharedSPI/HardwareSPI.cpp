@@ -381,63 +381,17 @@ HardwareSPI::HardwareSPI(SPI_TypeDef *spi) noexcept : dev(spi), initComplete(fal
 static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
     // FIXME consider setting dma burst size to 4 for WiFi and SBC transfers
-    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(hspi);
-    if (state != HAL_SPI_STATE_READY)
-    {
-        debugPrintf("SPI not ready %x\n", state);
-        delay(100);
-    }
-    HAL_DMA_StateTypeDef dmaState = HAL_DMA_GetState(hspi->hdmarx);
-    if (dmaState != HAL_DMA_STATE_READY)
-    {
-        debugPrintf("RX DMA not ready %x\n", dmaState);
-        delay(100);
-    }
-    dmaState = HAL_DMA_GetState(hspi->hdmatx);
-    if (dmaState != HAL_DMA_STATE_READY)
-    {
-        debugPrintf("TX DMA not ready %x\n", dmaState);
-        delay(100);
-    }
 
     HAL_StatusTypeDef status;    
-    if (rx_data == nullptr)
-    {
-        status = HAL_SPI_Transmit_DMA(hspi, (uint8_t *)tx_data, len);
-    }
-    else if (tx_data == nullptr)
-    {
-        status = HAL_SPI_Receive_DMA(hspi, rx_data, len);
-    }
-    else
-    {
-        status = HAL_SPI_TransmitReceive_DMA(hspi, (uint8_t *)tx_data, rx_data, len);
-    }
+    status = HAL_SPI_TransmitReceive_DMA(hspi, (uint8_t *)tx_data, rx_data, len);
     return status;
 }
 
 
 static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
 {
-    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(hspi);
-    if (state != HAL_SPI_STATE_READY)
-    {
-        debugPrintf("SPI IT not ready %x\n", state);
-        delay(100);
-    }
     HAL_StatusTypeDef status;    
-    if (rx_data == nullptr)
-    {
-        status = HAL_SPI_Transmit_IT(hspi, (uint8_t *)tx_data, len);
-    }
-    else if (tx_data == nullptr)
-    {
-        status = HAL_SPI_Receive_IT(hspi, rx_data, len);
-    }
-    else
-    {
-        status = HAL_SPI_TransmitReceive_IT(hspi, (uint8_t *)tx_data, rx_data, len);
-    }
+    status = HAL_SPI_TransmitReceive_IT(hspi, (uint8_t *)tx_data, rx_data, len);
     return status;
 }
 
@@ -506,7 +460,6 @@ void HardwareSPI::stopTransfer() noexcept
             configureDevice(spi.handle.Init.Mode, curBits, curClockMode, curBitRate, spi.pin_ssel);
 #endif
         }
-        __HAL_SPI_DISABLE(&(spi.handle));
     }
 }
 
