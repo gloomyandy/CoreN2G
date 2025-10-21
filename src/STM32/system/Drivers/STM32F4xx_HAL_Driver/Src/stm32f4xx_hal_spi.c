@@ -1556,51 +1556,6 @@ error :
   * @param  Size amount of data to be sent and received
   * @retval HAL status
   */
-#if HAL_RRF
-HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData, uint16_t Size)
-{
-  /* Set the transaction information */
-  hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
-  hspi->pTxBuffPtr  = (uint8_t *)pTxData;
-  hspi->pRxBuffPtr  = (uint8_t *)pRxData;
-
-  uint16_t val = 0xffff;
-
-  // prepare inital value to transmit
-  if ((Size & 1) == 0)
-  {
-    // Data length is 16 bit multiple, use 16 bit I/O
-    if (hspi->pTxBuffPtr)
-    {
-      val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
-      val |=  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
-    }
-    SET_BIT(hspi->Instance->CR1, SPI_CR1_DFF);
-    Size = Size/2;
-  }
-  else
-  {
-    // Otherwise use 8 bit I/O
-    if (hspi->pTxBuffPtr)
-    {
-      val =  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
-    }
-    CLEAR_BIT(hspi->Instance->CR1, SPI_CR1_DFF);
-  }
-  /* Check if the SPI is already enabled */
-  if ((hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE)
-  {
-    /* Enable SPI peripheral */
-    __HAL_SPI_ENABLE(hspi);
-  }
-  hspi->RxXferCount = Size;
-  // "Prime the pump" with the initial output value
-  hspi->Instance->DR = val;
-  hspi->TxXferCount = --Size;
-  __HAL_SPI_ENABLE_IT(hspi, SPI_IT_RXNE);
-  return HAL_OK;
-}
-#else
 HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData, uint16_t Size)
 {
   uint32_t             tmp_mode;
@@ -1717,7 +1672,7 @@ error :
   __HAL_UNLOCK(hspi);
   return errorcode;
 }
-#endif
+
 /**
   * @brief  Transmit an amount of data in non-blocking mode with DMA.
   * @param  hspi pointer to a SPI_HandleTypeDef structure that contains
@@ -1953,64 +1908,6 @@ error:
   * @param  Size amount of data to be sent
   * @retval HAL status
   */
-#if HAL_RRF
-HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData,
-                                              uint16_t Size)
-{
-  static uint32_t dummyDMATxdata = 0xffffffff;
-  static uint32_t dummyDMARxdata;
-  uint32_t savedMemInc;
-
-
-  hspi->pTxBuffPtr  = (pTxData) ? (uint8_t *)pTxData : (uint8_t *)&dummyDMATxdata;
-  hspi->TxXferCount = Size;
-  hspi->pRxBuffPtr  = (pRxData) ? (uint8_t *)pRxData : (uint8_t *)&dummyDMARxdata;
-  hspi->RxXferCount = Size;
-
-  /* Set the transaction information */
-  hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
-
-  /* Set the SPI Tx/Rx DMA Half transfer complete callback */
-  hspi->hdmarx->XferHalfCpltCallback = NULL;
-  hspi->hdmarx->XferCpltCallback     = SPI_DMATransmitReceiveCplt;
-  hspi->hdmarx->XferErrorCallback = NULL;
-  hspi->hdmarx->XferAbortCallback = NULL;
-
-  /* Enable the Rx DMA Stream/Channel  */
-  // If we are generating dummy data, we need to turn off memory increment
-  savedMemInc = hspi->hdmarx->Init.MemInc;
-  if (pRxData == NULL)
-    hspi->hdmatx->Init.MemInc = 0;
-  HAL_DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->DR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount);
-  hspi->hdmarx->Init.MemInc = savedMemInc;
-  /* Enable Rx DMA Request */
-  SET_BIT(hspi->Instance->CR2, SPI_CR2_RXDMAEN);
-
-  /* Set the SPI Tx DMA transfer complete callback as NULL because the communication closing
-  is performed in DMA reception complete callback  */
-  hspi->hdmatx->XferHalfCpltCallback = NULL;
-  hspi->hdmatx->XferCpltCallback     = NULL;
-  hspi->hdmatx->XferErrorCallback    = NULL;
-  hspi->hdmatx->XferAbortCallback    = NULL;
-  // If we are generating dummy data, we need to turn off memory increment
-  savedMemInc = hspi->hdmatx->Init.MemInc;
-  if (pTxData == NULL)
-    hspi->hdmatx->Init.MemInc = 0;
-  /* Enable the Tx DMA Stream/Channel  */
-  HAL_DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->DR, hspi->TxXferCount);
-  hspi->hdmatx->Init.MemInc = savedMemInc;
-
-  /* Check if the SPI is already enabled */
-  if ((hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE)
-  {
-    /* Enable SPI peripheral */
-    __HAL_SPI_ENABLE(hspi);
-  }
-  /* Enable Tx DMA Request */
-  SET_BIT(hspi->Instance->CR2, SPI_CR2_TXDMAEN);
-  return HAL_OK;
-}
-#else
 HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData,
                                               uint16_t Size)
 {
@@ -2162,7 +2059,6 @@ error :
   __HAL_UNLOCK(hspi);
   return errorcode;
 }
-#endif
 
 /**
   * @brief  Abort ongoing transfer (blocking mode).
@@ -2566,57 +2462,6 @@ HAL_StatusTypeDef HAL_SPI_DMAStop(SPI_HandleTypeDef *hspi)
   *               the configuration information for the specified SPI module.
   * @retval None
   */
-#if HAL_RRF
-void HAL_SPI_IRQHandler(SPI_HandleTypeDef *hspi)
-{
-  uint16_t val = hspi->Instance->DR;
-  if (READ_BIT(hspi->Instance->CR1, SPI_CR1_DFF))
-  {
-    // Data length is 16 bit multiple, use 16 bit I/O
-    if (hspi->pTxBuffPtr)
-    {
-      *(hspi->pRxBuffPtr++) = val >> 8;
-      *(hspi->pRxBuffPtr++) = val;
-    }
-    if (--hspi->RxXferCount == 0)
-    {
-      // transfer complete
-      __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE | SPI_IT_TXE | SPI_IT_ERR);
-      hspi->State = HAL_SPI_STATE_READY;
-      HAL_SPI_TxRxCpltCallback(hspi);
-      return;
-    }
-    // Data length is 16 bit multiple, use 16 bit I/O
-    if (hspi->pTxBuffPtr)
-    {
-      val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
-      val |=  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
-    }
-    else
-      val = 0xffff;
-    hspi->Instance->DR = val;
-  }
-  else
-  {
-    // use 8 bit transfers
-    if (hspi->pTxBuffPtr)
-      *(hspi->pRxBuffPtr++) = val;
-
-    if (--hspi->RxXferCount == 0)
-    {
-      // transfer complete
-      __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE | SPI_IT_TXE | SPI_IT_ERR);
-      hspi->State = HAL_SPI_STATE_READY;
-      HAL_SPI_TxRxCpltCallback(hspi);
-      return;
-    }
-    if (hspi->pTxBuffPtr)
-      hspi->Instance->DR = ((uint8_t)*hspi->pTxBuffPtr++);
-    else
-      hspi->Instance->DR = 0xff;
-  }
-}
-#else
 void HAL_SPI_IRQHandler(SPI_HandleTypeDef *hspi)
 {
   uint32_t itsource = hspi->Instance->CR2;
@@ -2716,7 +2561,7 @@ void HAL_SPI_IRQHandler(SPI_HandleTypeDef *hspi)
     return;
   }
 }
-#endif
+
 /**
   * @brief  Tx Transfer completed callback.
   * @param  hspi pointer to a SPI_HandleTypeDef structure that contains
@@ -3041,20 +2886,6 @@ static void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
   *               the configuration information for the specified DMA module.
   * @retval None
   */
-#if HAL_RRF
-static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
-{
-  SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)(((DMA_HandleTypeDef *)hdma)->Parent); /* Derogation MISRAC2012-Rule-11.5 */
-  /* Disable Rx/Tx DMA Request */
-  CLEAR_BIT(hspi->Instance->CR2, SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN);
-
-  hspi->TxXferCount = 0U;
-  hspi->RxXferCount = 0U;
-  hspi->State = HAL_SPI_STATE_READY;
-  /* Call user TxRx complete callback */
-  HAL_SPI_TxRxCpltCallback(hspi);
-}
-#else
 static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
 {
   SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)(((DMA_HandleTypeDef *)hdma)->Parent); /* Derogation MISRAC2012-Rule-11.5 */
@@ -3123,7 +2954,7 @@ static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
   HAL_SPI_TxRxCpltCallback(hspi);
 #endif /* USE_HAL_SPI_REGISTER_CALLBACKS */
 }
-#endif
+
 /**
   * @brief  DMA SPI half transmit process complete callback.
   * @param  hdma pointer to a DMA_HandleTypeDef structure that contains

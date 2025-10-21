@@ -4,6 +4,7 @@
 #ifdef RTOS
 #include <RTOSIface/RTOSIface.h>
 #include <CoreNotifyIndices.h>
+#include <DMA.h>
 #endif
 #include "spi_com.h"
 #include "Cache.h"
@@ -103,7 +104,179 @@ HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_CHANNEL_0, DMA1
 //#define SSPI_DEBUG
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
+#if STM32F4
+void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept
+{
+  uint16_t val = hspi->Instance->DR;
+  if (READ_BIT(hspi->Instance->CR1, SPI_CR1_DFF))
+  {
+    // Data length is 16 bit multiple, use 16 bit I/O
+    if (hspi->pTxBuffPtr)
+    {
+      *(hspi->pRxBuffPtr++) = val >> 8;
+      *(hspi->pRxBuffPtr++) = val;
+    }
+    if (--hspi->RxXferCount == 0)
+    {
+      // transfer complete
+      __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE | SPI_IT_TXE | SPI_IT_ERR);
+      hspi->State = HAL_SPI_STATE_READY;
+      // Get pointer to containing object and handle operation complete
+      HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+      s->transferActive = false;
+      if (s->callback) s->callback(s);
+      return;
+    }
+    // Data length is 16 bit multiple, use 16 bit I/O
+    if (hspi->pTxBuffPtr)
+    {
+      val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
+      val |=  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
+    }
+    else
+      val = 0xffff;
+    hspi->Instance->DR = val;
+  }
+  else
+  {
+    // use 8 bit transfers
+    if (hspi->pTxBuffPtr)
+      *(hspi->pRxBuffPtr++) = val;
 
+    if (--hspi->RxXferCount == 0)
+    {
+      // transfer complete
+      __HAL_SPI_DISABLE_IT(hspi, SPI_IT_RXNE | SPI_IT_TXE | SPI_IT_ERR);
+      hspi->State = HAL_SPI_STATE_READY;
+      // Get pointer to containing object and handle operation complete
+      HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+      s->transferActive = false;
+      if (s->callback) s->callback(s);
+      return;
+    }
+    if (hspi->pTxBuffPtr)
+      hspi->Instance->DR = ((uint8_t)*hspi->pTxBuffPtr++);
+    else
+      hspi->Instance->DR = 0xff;
+  }
+}
+
+void HardwareSPI::SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma) noexcept
+{
+  SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)(((DMA_HandleTypeDef *)hdma)->Parent); /* Derogation MISRAC2012-Rule-11.5 */
+  /* Disable Rx/Tx DMA Request */
+  CLEAR_BIT(hspi->Instance->CR2, SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN);
+
+  hspi->TxXferCount = 0U;
+  hspi->RxXferCount = 0U;
+  hspi->State = HAL_SPI_STATE_READY;
+  // Get pointer to containing object and handle operation complete
+  HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+  s->transferActive = false;
+  if (s->callback) s->callback(s);
+}
+
+HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData,
+                                              uint16_t Size) noexcept
+{
+  static uint32_t dummyDMATxdata = 0xffffffff;
+  static uint32_t dummyDMARxdata;
+  uint32_t savedMemInc;
+
+
+  hspi->pTxBuffPtr  = (pTxData) ? (uint8_t *)pTxData : (uint8_t *)&dummyDMATxdata;
+  hspi->TxXferCount = Size;
+  hspi->pRxBuffPtr  = (pRxData) ? (uint8_t *)pRxData : (uint8_t *)&dummyDMARxdata;
+  hspi->RxXferCount = Size;
+
+  /* Set the transaction information */
+  hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
+
+  /* Set the SPI Tx/Rx DMA Half transfer complete callback */
+  hspi->hdmarx->XferHalfCpltCallback = NULL;
+  hspi->hdmarx->XferCpltCallback     = SPI_DMATransmitReceiveCplt;
+  hspi->hdmarx->XferErrorCallback = NULL;
+  hspi->hdmarx->XferAbortCallback = NULL;
+
+  /* Enable the Rx DMA Stream/Channel  */
+  // If we are generating dummy data, we need to turn off memory increment
+  savedMemInc = hspi->hdmarx->Init.MemInc;
+  if (pRxData == NULL)
+    hspi->hdmatx->Init.MemInc = 0;
+  DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->DR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount, DMA_NORMAL, DMA_PERIPH_TO_MEMORY, (pRxData ? DMA_MINC_ENABLE : 0));
+  hspi->hdmarx->Init.MemInc = savedMemInc;
+  /* Enable Rx DMA Request */
+  SET_BIT(hspi->Instance->CR2, SPI_CR2_RXDMAEN);
+
+  /* Set the SPI Tx DMA transfer complete callback as NULL because the communication closing
+  is performed in DMA reception complete callback  */
+  hspi->hdmatx->XferHalfCpltCallback = NULL;
+  hspi->hdmatx->XferCpltCallback     = NULL;
+  hspi->hdmatx->XferErrorCallback    = NULL;
+  hspi->hdmatx->XferAbortCallback    = NULL;
+  // If we are generating dummy data, we need to turn off memory increment
+  savedMemInc = hspi->hdmatx->Init.MemInc;
+  if (pTxData == NULL)
+    hspi->hdmatx->Init.MemInc = 0;
+  /* Enable the Tx DMA Stream/Channel  */
+  DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->DR, hspi->TxXferCount, DMA_NORMAL, DMA_MEMORY_TO_PERIPH, (pTxData ? DMA_MINC_ENABLE : 0));
+  hspi->hdmatx->Init.MemInc = savedMemInc;
+
+  /* Check if the SPI is already enabled */
+  if ((hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE)
+  {
+    /* Enable SPI peripheral */
+    __HAL_SPI_ENABLE(hspi);
+  }
+  /* Enable Tx DMA Request */
+  SET_BIT(hspi->Instance->CR2, SPI_CR2_TXDMAEN);
+  return HAL_OK;
+}
+
+HAL_StatusTypeDef HardwareSPI::startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData, uint16_t Size) noexcept
+{
+  /* Set the transaction information */
+  hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
+  hspi->pTxBuffPtr  = (uint8_t *)pTxData;
+  hspi->pRxBuffPtr  = (uint8_t *)pRxData;
+
+  uint16_t val = 0xffff;
+
+  // prepare inital value to transmit
+  if ((Size & 1) == 0)
+  {
+    // Data length is 16 bit multiple, use 16 bit I/O
+    if (hspi->pTxBuffPtr)
+    {
+      val = ((uint16_t)*hspi->pTxBuffPtr++) << 8;
+      val |=  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
+    }
+    SET_BIT(hspi->Instance->CR1, SPI_CR1_DFF);
+    Size = Size/2;
+  }
+  else
+  {
+    // Otherwise use 8 bit I/O
+    if (hspi->pTxBuffPtr)
+    {
+      val =  ((uint16_t)(*hspi->pTxBuffPtr++)) & 0xff;
+    }
+    CLEAR_BIT(hspi->Instance->CR1, SPI_CR1_DFF);
+  }
+  /* Check if the SPI is already enabled */
+  if ((hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE)
+  {
+    /* Enable SPI peripheral */
+    __HAL_SPI_ENABLE(hspi);
+  }
+  hspi->RxXferCount = Size;
+  // "Prime the pump" with the initial output value
+  hspi->Instance->DR = val;
+  hspi->TxXferCount = --Size;
+  __HAL_SPI_ENABLE_IT(hspi, SPI_IT_RXNE);
+  return HAL_OK;
+}
+#endif
 
 #if STM32H7
 /*
@@ -180,103 +353,6 @@ void HardwareSPI::SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma) noexcept
   }
 }
 
-typedef struct
-{
-  __IO uint32_t ISR;   /*!< DMA interrupt status register */
-  __IO uint32_t Reserved0;
-  __IO uint32_t IFCR;  /*!< DMA interrupt flag clear register */
-} DMA_Base_Registers;
-
-static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength, uint32_t Increment) noexcept
-{
-  /* calculate DMA base and stream number */
-  DMA_Base_Registers  *regs_dma  = (DMA_Base_Registers *)hdma->StreamBaseAddress;
-
-  if(IS_DMA_DMAMUX_ALL_INSTANCE(hdma->Instance) != 0U) /* No DMAMUX available for BDMA1 */
-  {
-    /* Clear the DMAMUX synchro overrun flag */
-    hdma->DMAmuxChannelStatus->CFR = hdma->DMAmuxChannelStatusMask;
-
-    if(hdma->DMAmuxRequestGen != 0U)
-    {
-      /* Clear the DMAMUX request generator overrun flag */
-      hdma->DMAmuxRequestGenStatus->RGCFR = hdma->DMAmuxRequestGenStatusMask;
-    }
-  }
-
-  if(IS_DMA_STREAM_INSTANCE(hdma->Instance) != 0U) /* DMA1 or DMA2 instance */
-  {
-    /* Clear all interrupt flags at correct offset within the register */
-    regs_dma->IFCR = 0x3FUL << (hdma->StreamIndex & 0x1FU);
-
-    /* Clear DBM bit, and set inc and direction */
-    ((DMA_Stream_TypeDef *)hdma->Instance)->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR|DMA_SxCR_MINC|DMA_SxCR_PINC|DMA_SxCR_CIRC));
-    ((DMA_Stream_TypeDef *)hdma->Instance)->CR |= (hdma->Init.Direction | hdma->Init.PeriphInc | Increment | hdma->Init.Mode);
-
-    /* Configure DMA Stream data length */
-    ((DMA_Stream_TypeDef *)hdma->Instance)->NDTR = DataLength;
-
-    /* Peripheral to Memory */
-    if((hdma->Init.Direction) == DMA_MEMORY_TO_PERIPH)
-    {
-      /* Configure DMA Stream destination address */
-      ((DMA_Stream_TypeDef *)hdma->Instance)->PAR = DstAddress;
-
-      /* Configure DMA Stream source address */
-      ((DMA_Stream_TypeDef *)hdma->Instance)->M0AR = SrcAddress;
-    }
-    /* Memory to Peripheral */
-    else
-    {
-      /* Configure DMA Stream source address */
-      ((DMA_Stream_TypeDef *)hdma->Instance)->PAR = SrcAddress;
-
-      /* Configure DMA Stream destination address */
-      ((DMA_Stream_TypeDef *)hdma->Instance)->M0AR = DstAddress;
-    }
-  }
-}
-
-static HAL_StatusTypeDef DMA_Start_IT(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength, uint32_t Increment) noexcept
-{
-  if(HAL_DMA_STATE_READY == hdma->State)
-  {
-    /* Change DMA peripheral state */
-    hdma->State = HAL_DMA_STATE_BUSY;
-
-    /* Initialize the error code */
-    hdma->ErrorCode = HAL_DMA_ERROR_NONE;
-
-    /* Disable the peripheral */
-    __HAL_DMA_DISABLE(hdma);
-
-    /* Configure the source, destination address and the data length */
-    DMA_SetConfig(hdma, SrcAddress, DstAddress, DataLength, Increment);
-
-    MODIFY_REG(((DMA_Stream_TypeDef   *)hdma->Instance)->CR, (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME | DMA_IT_HT), (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME));
-    if(IS_DMA_DMAMUX_ALL_INSTANCE(hdma->Instance) != 0U) /* No DMAMUX available for BDMA1 */
-    {
-      /* Check if DMAMUX Synchronization is enabled */
-      if((hdma->DMAmuxChannel->CCR & DMAMUX_CxCR_SE) != 0U)
-      {
-        /* Enable DMAMUX sync overrun IT*/
-        hdma->DMAmuxChannel->CCR |= DMAMUX_CxCR_SOIE;
-      }
-
-      if(hdma->DMAmuxRequestGen != 0U)
-      {
-        /* if using DMAMUX request generator, enable the DMAMUX request generator overrun IT*/
-        /* enable the request gen overrun IT */
-        hdma->DMAmuxRequestGen->RGCR |= DMAMUX_RGxCR_OIE;
-      }
-    }
-
-    /* Enable the Peripheral */
-    __HAL_DMA_ENABLE(hdma);
-  }
-  return HAL_OK;
-}
-
 HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData,
                                               uint16_t Size) noexcept
 {
@@ -305,7 +381,7 @@ HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const u
   }
 
   /* Enable the Rx DMA Stream/Channel  */
-  DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->RXDR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount, (pRxData ? DMA_MINC_ENABLE : 0));
+  DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->RXDR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount, DMA_NORMAL, DMA_PERIPH_TO_MEMORY, (pRxData ? DMA_MINC_ENABLE : 0));
 
   /* Enable Rx DMA Request */
   SET_BIT(hspi->Instance->CFG1, SPI_CFG1_RXDMAEN);
@@ -317,7 +393,7 @@ HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const u
   hspi->hdmatx->XferErrorCallback    = NULL;
   hspi->hdmatx->XferAbortCallback    = NULL;
   /* Enable the Tx DMA Stream/Channel  */
-  DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->TXDR, hspi->TxXferCount, (pTxData ? DMA_MINC_ENABLE : 0));
+  DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->TXDR, hspi->TxXferCount, DMA_NORMAL, DMA_MEMORY_TO_PERIPH, (pTxData ? DMA_MINC_ENABLE : 0));
 
   /* Enable Tx DMA Request */
   SET_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN);
@@ -455,7 +531,7 @@ extern "C" void SPI6_IRQHandler()
 #if USE_SSP1
 extern "C" void SPI1_IRQHandler()
 {
-    SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+    HardwareSPI::SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
 }
 #endif
 #endif
