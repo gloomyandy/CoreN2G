@@ -1,11 +1,3 @@
-#if HAL_RRF
-// NOTE: This module contains a number of modifications for use with RRF the primary
-// changes are to clock FF values out when performing SPI read operations (as some devices
-// work better with this than random values) and to optimise the operation for 8 bit only
-// I/O. There is a good chance that this code will not work for any other I/O size.
-#endif
-
-
 /**
   ******************************************************************************
   * @file    stm32h7xx_hal_spi.c
@@ -137,7 +129,6 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32h7xx_hal.h"
-extern void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 /** @addtogroup STM32H7xx_HAL_Driver
   * @{
@@ -187,6 +178,7 @@ static void SPI_RxISR_32BIT(SPI_HandleTypeDef *hspi);
 static void SPI_AbortTransfer(SPI_HandleTypeDef *hspi);
 static void SPI_CloseTransfer(SPI_HandleTypeDef *hspi);
 static uint32_t SPI_GetPacketSize(SPI_HandleTypeDef *hspi);
+
 
 /**
   * @}
@@ -449,6 +441,7 @@ HAL_StatusTypeDef HAL_SPI_Init(SPI_HandleTypeDef *hspi)
     /* Alternate function GPIOs control */
     MODIFY_REG(hspi->Instance->CFG2, SPI_CFG2_AFCNTR, (hspi->Init.MasterKeepIOState));
   }
+
   hspi->ErrorCode = HAL_SPI_ERROR_NONE;
   hspi->State     = HAL_SPI_STATE_READY;
 
@@ -782,9 +775,6 @@ HAL_StatusTypeDef HAL_SPI_UnRegisterCallback(SPI_HandleTypeDef *hspi, HAL_SPI_Ca
 @endverbatim
   * @{
   */
-#if HAL_RRF
-static const uint32_t   dummyData = 0xffffffff;
-#endif
 
 /**
   * @brief  Transmit an amount of data in blocking mode.
@@ -942,7 +932,6 @@ HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *hspi, uint8_t *pData, uint
       /* Wait until TXP flag is set to send data */
       if (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP))
       {
-#if HAL_RRF
         if ((hspi->TxXferCount > 3UL) && (hspi->Init.FifoThreshold > SPI_FIFO_THRESHOLD_03DATA))
         {
           *((__IO uint32_t *)&hspi->Instance->TXDR) = *((uint32_t *)hspi->pTxBuffPtr);
@@ -960,7 +949,6 @@ HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *hspi, uint8_t *pData, uint
           hspi->TxXferCount -= (uint16_t)2UL;
         }
         else
-#endif
         {
           *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)hspi->pTxBuffPtr);
           hspi->pTxBuffPtr += sizeof(uint8_t);
@@ -1030,14 +1018,8 @@ HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *hspi, uint8_t *pData, uint1
   if ((hspi->Init.Mode == SPI_MODE_MASTER) && (hspi->Init.Direction == SPI_DIRECTION_2LINES))
   {
     hspi->State = HAL_SPI_STATE_BUSY_RX;
-#if HAL_RRF
-    // We use a modified versions of TransmitReceive to always clock out 0xff when performing just
-    // a read operation. Some devices (like SD cards) work better with this rather than just random data
-    return HAL_SPI_TransmitReceive(hspi, (uint8_t *)&dummyData, pData, Size, Timeout);
-#else
     /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
     return HAL_SPI_TransmitReceive(hspi, pData, pData, Size, Timeout);
-#endif
   }
 
   /* Process Locked */
@@ -1263,9 +1245,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
   __IO uint16_t *ptxdr_16bits = (__IO uint16_t *)(&(hspi->Instance->TXDR));
   __IO uint16_t *prxdr_16bits = (__IO uint16_t *)(&(hspi->Instance->RXDR));
 #endif /* __GNUC__ */
-#if HAL_RRF
-  uint32_t   txInc;
-#endif
+
   uint32_t   tickstart;
   uint32_t   tmp_mode;
   uint16_t   initial_TxXferCount;
@@ -1312,9 +1292,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
   hspi->RxXferCount = Size;
   hspi->RxXferSize  = Size;
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
-#if HAL_RRF
-  txInc = (pTxData == (uint8_t *)&dummyData) ? 0 : sizeof(uint8_t);
-#endif
   hspi->TxXferCount = Size;
   hspi->TxXferSize  = Size;
 
@@ -1442,59 +1419,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
   {
     while ((initial_TxXferCount > 0UL) || (initial_RxXferCount > 0UL))
     {
-#if HAL_RRF
-      // Modified version of read/write code to avoid non aligned memory access and inout fifo
-      // overflow.
-      uint32_t delta = initial_RxXferCount - initial_TxXferCount;
-      /* check TXP flag and make sure there is no chance of rx fifo overflow NOTE: allow for smaller fifos on SPI4,5,6 */
-      if ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (initial_TxXferCount > 0UL) && delta < 8)
-      {
-        {
-          *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)hspi->pTxBuffPtr);
-          hspi->pTxBuffPtr += txInc;
-          hspi->TxXferCount--;
-          initial_TxXferCount = hspi->TxXferCount;
-        }
-      }
-      /* Wait until RXWNE/FRLVL flag is reset */
-      while (((hspi->Instance->SR & (SPI_FLAG_RXWNE | SPI_FLAG_FRLVL)) != 0UL) && (initial_RxXferCount > 0UL))
-      {
-        if ((hspi->Instance->SR & SPI_FLAG_RXWNE) != 0UL)
-        {
-          // avoid unaligned data access
-          uint32_t word = *((__IO uint32_t *)&hspi->Instance->RXDR);
-          uint8_t *p = (uint8_t *)&word;
-          *hspi->pRxBuffPtr++ = *p++;
-          *hspi->pRxBuffPtr++ = *p++;
-          *hspi->pRxBuffPtr++ = *p++;
-          *hspi->pRxBuffPtr++ = *p++;
-          hspi->RxXferCount -= (uint16_t)4UL;
-          initial_RxXferCount = hspi->RxXferCount;
-        }
-        else if ((hspi->Instance->SR & SPI_FLAG_FRLVL) > SPI_RX_FIFO_1PACKET)
-        {
-          uint16_t hword;
-          uint8_t *p = (uint8_t *)&hword;
-#if defined (__GNUC__)
-          hword = *prxdr_16bits;
-#else
-          *((uint16_t *)hspi->pRxBuffPtr) = *((__IO uint16_t *)&hspi->Instance->RXDR);
-#endif /* __GNUC__ */
-          *hspi->pRxBuffPtr++ = *p++;
-          *hspi->pRxBuffPtr++ = *p++;
-          hspi->RxXferCount -= (uint16_t)2UL;
-          initial_RxXferCount = hspi->RxXferCount;
-        }
-        else
-        {
-          *((uint8_t *)hspi->pRxBuffPtr) = *((__IO uint8_t *)&hspi->Instance->RXDR);
-          hspi->pRxBuffPtr += sizeof(uint8_t);
-          hspi->RxXferCount--;
-          initial_RxXferCount = hspi->RxXferCount;
-        }
-      }
-
-#else
       /* check TXP flag */
       if ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (initial_TxXferCount > 0UL))
       {
@@ -1554,13 +1478,13 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *pTxD
           initial_RxXferCount = hspi->RxXferCount;
         }
       }
-#endif
+
       /* Timeout management */
       if ((((HAL_GetTick() - tickstart) >=  Timeout) && (Timeout != HAL_MAX_DELAY)) || (Timeout == 0U))
       {
         /* Call standard close procedure with error check */
         SPI_CloseTransfer(hspi);
-        debugPrintf("SPI timeout delta %d\n", (unsigned)delta);
+
         /* Process Unlocked */
         __HAL_UNLOCK(hspi);
 
@@ -1694,14 +1618,8 @@ HAL_StatusTypeDef HAL_SPI_Receive_IT(SPI_HandleTypeDef *hspi, uint8_t *pData, ui
   if ((hspi->Init.Direction == SPI_DIRECTION_2LINES) && (hspi->Init.Mode == SPI_MODE_MASTER))
   {
     hspi->State = HAL_SPI_STATE_BUSY_RX;
-#if HAL_RRF
-    // We use a modified versions of TransmitReceive to always clock out 0xff when performing just
-    // a read operation. Some devices (like SD cards) work better with this rather than just random data
-    return HAL_SPI_TransmitReceive_IT(hspi, (uint8_t *)&dummyData, pData, Size);
-#else
     /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
     return HAL_SPI_TransmitReceive_IT(hspi, pData, pData, Size);
-#endif
   }
 
   /* Process Locked */
@@ -1791,16 +1709,11 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
 {
   HAL_SPI_StateTypeDef  tmp_state;
   HAL_StatusTypeDef errorcode = HAL_OK;
-#if HAL_RRF
-  uint32_t txInc;
-  uint32_t tmp_TxXferCount;
-#else
   uint32_t max_fifo_length = 0UL;
   uint32_t tmp_TxXferCount;
   #if defined (__GNUC__)
   __IO uint16_t *ptxdr_16bits = (__IO uint16_t *)(&(hspi->Instance->TXDR));
   #endif /* __GNUC__ */
-#endif
   uint32_t  tmp_mode;
 
   /* Check Direction parameter */
@@ -1837,9 +1750,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   /* Set the transaction information */
   hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
-#if HAL_RRF
-  txInc = (pTxData == (uint8_t *)&dummyData) ? 0 : sizeof(uint8_t);
-#endif
   hspi->TxXferSize  = Size;
   hspi->TxXferCount = Size;
   hspi->pRxBuffPtr  = (uint8_t *)pRxData;
@@ -1870,19 +1780,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   /* Enable SPI peripheral */
   __HAL_SPI_ENABLE(hspi);
 
-#if HAL_RRF
-  // Modified version of code to avoid non aligned memory access and fifo
-  // overflow.
-  // Note: We only support 8 bit transfers
-  /* Fill in the TxFIFO */
-  while ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (tmp_TxXferCount != 0UL))
-  {
-    *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)hspi->pTxBuffPtr);
-    hspi->pTxBuffPtr += txInc;
-    hspi->TxXferCount--;
-    tmp_TxXferCount = hspi->TxXferCount;
-  }
-#else
   /* Fill in the TxFIFO */
   while ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (tmp_TxXferCount != 0UL))
   {
@@ -1957,7 +1854,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
       return errorcode;
     }
   }
-#endif
+
   /* Enable EOT, DXP, UDR, OVR, FRE, MODF and TSERF interrupts */
   __HAL_SPI_ENABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF | SPI_IT_TSERF));
 
@@ -2334,13 +2231,8 @@ HAL_StatusTypeDef HAL_SPI_Receive_DMA(SPI_HandleTypeDef *hspi, uint8_t *pData, u
   if ((hspi->Init.Direction == SPI_DIRECTION_2LINES) && (hspi->Init.Mode == SPI_MODE_MASTER))
   {
     hspi->State = HAL_SPI_STATE_BUSY_RX;
-#if HAL_RRF
-    /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
-    return HAL_SPI_TransmitReceive_DMA(hspi, NULL, pData, Size);
-#else
     /* Call transmit-receive function to send Dummy data on Tx line and generate clock on CLK line */
     return HAL_SPI_TransmitReceive_DMA(hspi, pData, pData, Size);
-#endif
   }
 
   /* Process Locked */
@@ -2484,10 +2376,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
 {
   HAL_SPI_StateTypeDef tmp_state;
   HAL_StatusTypeDef errorcode = HAL_OK;
-#if HAL_RRF
-  static uint32_t dummyDMAdata = 0xffffffff;
-  uint32_t savedMemInc;
-#endif
 
   uint32_t             tmp_mode;
 
@@ -2508,12 +2396,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
     return errorcode;
   }
 
-#if HAL_RRF
-  // pTxData == NULL means generate dummy data
-  if ((pRxData == NULL) || (Size == 0UL))
-#else
   if ((pTxData == NULL) || (pRxData == NULL) || (Size == 0UL))
-#endif
   {
     errorcode = HAL_ERROR;
     __HAL_UNLOCK(hspi);
@@ -2528,11 +2411,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
 
   /* Set the transaction information */
   hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
-#if HAL_RRF
-  hspi->pTxBuffPtr  = (pTxData) ? (uint8_t *)pTxData : (uint8_t *)&dummyDMAdata;
-#else
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
-#endif
   hspi->TxXferSize  = Size;
   hspi->TxXferCount = Size;
   hspi->pRxBuffPtr  = (uint8_t *)pRxData;
@@ -2594,7 +2473,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
     /* Adjustment done */
   }
 
-#if !HAL_RRF
   /* Check if we are in Rx only or in Rx/Tx Mode and configure the DMA transfer complete callback */
   if (hspi->State == HAL_SPI_STATE_BUSY_RX)
   {
@@ -2603,7 +2481,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
     hspi->hdmarx->XferCpltCallback     = SPI_DMAReceiveCplt;
   }
   else
-#endif
   {
     /* Set the SPI Tx/Rx DMA Half transfer complete callback */
     hspi->hdmarx->XferHalfCpltCallback = SPI_DMAHalfTransmitReceiveCplt;
@@ -2615,14 +2492,7 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *
 
   /* Set the DMA AbortCallback */
   hspi->hdmarx->XferAbortCallback = NULL;
-#if HAL_RRF
-  // It seems that when using DMA the SPI unit can sometimes have an extra byte left in the RX register.
-  // If we enable DMA with this still in place it triggers a premature completion of the read.
-  // To prevent this we discard the byte(s) here. Note that we need to enable the device to be able to read the data
-__HAL_SPI_ENABLE(hspi);
-  (void)*(__IO uint8_t *)&hspi->Instance->RXDR;
-__HAL_SPI_DISABLE(hspi);
-#endif
+
   /* Enable the Rx DMA Stream/Channel  */
   if (HAL_OK != HAL_DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->RXDR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount))
   {
@@ -2642,27 +2512,16 @@ __HAL_SPI_DISABLE(hspi);
   hspi->hdmatx->XferCpltCallback     = NULL;
   hspi->hdmatx->XferErrorCallback    = NULL;
   hspi->hdmatx->XferAbortCallback    = NULL;
-#if HAL_RRF
-  // If we are generating dummy data, we need to turn off memory increment
-  savedMemInc = hspi->hdmatx->Init.MemInc;
-  if (pTxData == NULL)
-    hspi->hdmatx->Init.MemInc = 0;
-#endif
+
   /* Enable the Tx DMA Stream/Channel  */
   if (HAL_OK != HAL_DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->TXDR, hspi->TxXferCount))
   {
-#if HAL_RRF
-    hspi->hdmatx->Init.MemInc = savedMemInc;
-#endif
     /* Update SPI error code */
     SET_BIT(hspi->ErrorCode, HAL_SPI_ERROR_DMA);
     errorcode = HAL_ERROR;
     hspi->State = HAL_SPI_STATE_READY;
     return errorcode;
   }
-#if HAL_RRF
-  hspi->hdmatx->Init.MemInc = savedMemInc;
-#endif
 
   if (hspi->hdmatx->Init.Mode == DMA_CIRCULAR)
   {
@@ -3794,14 +3653,7 @@ static void SPI_TxISR_8BIT(SPI_HandleTypeDef *hspi)
 {
   /* Transmit data in 8 Bit mode */
   *(__IO uint8_t *)&hspi->Instance->TXDR = *((uint8_t *)hspi->pTxBuffPtr);
-#if HAL_RRF
-  if (hspi->pTxBuffPtr != (uint8_t *)&dummyData)
-  {
-    hspi->pTxBuffPtr += sizeof(uint8_t);
-  }
-#else
   hspi->pTxBuffPtr += sizeof(uint8_t);
-#endif
   hspi->TxXferCount--;
 
   /* Disable IT if no more data excepted */

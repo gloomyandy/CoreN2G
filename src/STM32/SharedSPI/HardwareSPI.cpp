@@ -42,7 +42,16 @@ I/O is not really fast enough currently for use when talking to the RRF WiFi int
 
 dma: This mode may not be able to access all memory areas, but it has the lowest cpu overhead for large operations.
 It is the prefered operating mode when available. If a memory areas can not be accessed by DMA or if the operation is
-very short we fall back to using an iterrupt based version. 
+very short we fall back to using an iterrupt based version.
+
+Some notes on SPI optimisations 21/10/2025
+This file now contains code that has been extracted from the HAL files for H7 systems and optimised for use with RRF.
+This code is used in conjunction with the standard HAL routines to provide interrupt and DMA operations, polled mode
+is no longer used by RRF.
+
+The primary optimisation is to remove overhead checks/locks etc. that is not used by RRF. In additon the startTransfer*
+functions have been modified such that passing a nullptr for the write buffer will feed 0xff to output and that passing a
+nullptr for the read buffer will simply discard input from input.
 
 */
 #if USE_SSP1 || USE_SSP2 || USE_SSP3 || USE_SSP4 || USE_SSP5 || USE_SSP6
@@ -97,6 +106,17 @@ extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf
 
 
 #if STM32H7
+/*
+The following functions are optimised versions of the HAL code for H7 based systems. Note that this code
+operates in "continuous" mode. We do not set a transaction length and use the feeding of data into the fifo
+to control bus activity. We also avoid enabling/disabling the device between transactions.
+The reason for this is that testing has shown that when writing a short packet (in this
+case the 5 bytes used with TMC5160 drivers) then there is a delay between starting the transfer and the first
+clocks appearing on the clock line. This delay seems to vary in length depending upon the SPI clock speed,
+but it can be as high as 3uS per transaction. I suspect it may be caused by the device skipping over empty fifo
+elements, but that is just speculation. Running in continuous mode and avoiding enable/disable seems to avoid 
+this issue.
+*/
 void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi)
 {
   uint32_t itsource = hspi->Instance->IER;
