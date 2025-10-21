@@ -95,36 +95,253 @@ HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_CHANNEL_0, DMA1
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 
-extern "C" void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
+
+#if STM32H7
+void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi)
 {
-    // Get pointer to containing object
-    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
-    s->transferActive = false;
-    if (s->callback) s->callback(s);
+  uint32_t itsource = hspi->Instance->IER;
+  uint32_t itflag   = hspi->Instance->SR;
+  uint32_t trigger  = itsource & itflag;
+
+  /* SPI in mode Transmitter -------------------------------------------------*/
+  if (HAL_IS_BIT_SET(trigger, SPI_FLAG_DXP))
+  {
+    // Write data to fifo if we have any left
+    if (hspi->TxXferCount != 0UL)
+    {
+      if (hspi->pTxBuffPtr)
+      {
+        *(__IO uint8_t *)&hspi->Instance->TXDR = *((uint8_t *)hspi->pTxBuffPtr++);
+      }
+      else
+        *(__IO uint8_t *)&hspi->Instance->TXDR = 0xff;
+      hspi->TxXferCount--;
+    }
+    // read data from fifo
+    if (hspi->pRxBuffPtr)
+      *((uint8_t *)hspi->pRxBuffPtr++) = (*(__IO uint8_t *)&hspi->Instance->RXDR);
+    else
+      // Just discard the data
+      *(__IO uint8_t *)&hspi->Instance->RXDR;
+    if (--hspi->RxXferCount == 0)
+    {
+      // finished receiving data, transfer now complete
+      __HAL_SPI_CLEAR_EOTFLAG(hspi);
+      __HAL_SPI_CLEAR_TXTFFLAG(hspi);
+
+      /* Disable ITs */
+      __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_TXP | SPI_IT_RXP | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF));
+      // Get pointer to containing object and handle operation complete
+      HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+      s->transferActive = false;
+      if (s->callback) s->callback(s);
+    }
+  }
 }
 
-extern "C" void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
+static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
 {
-    // Get pointer to containing object
-    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
-    s->transferActive = false;
-    if (s->callback) s->callback(s);
-}    
+  SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)((DMA_HandleTypeDef *)hdma)->Parent;
 
-extern "C" void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi) noexcept
-{
-    // Get pointer to containing object
-    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
-    s->transferActive = false;
-    if (s->callback) s->callback(s);
-}    
-extern "C" void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi) noexcept
-{
-    // Note: We may see underrun errors being reported here. This is usual when the RRF WiFi module
-    // aborts an SPI transfer before it is complete.
-    //debugPrintf("SPI error %x\n", (unsigned)HAL_SPI_GetError(hspi));
-}    
+  if (hspi->State != HAL_SPI_STATE_ABORT)
+  {
+    __HAL_SPI_CLEAR_EOTFLAG(hspi);
+    __HAL_SPI_CLEAR_TXTFFLAG(hspi);
+    __HAL_SPI_CLEAR_SUSPFLAG(hspi);
+    /* Disable ITs */
+    __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_TXP | SPI_IT_RXP | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF));
+    /* Disable Tx DMA Request */
+    CLEAR_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
+    hspi->State = HAL_SPI_STATE_READY;
+    HAL_SPI_TxRxCpltCallback(hspi);
+  }
+}
 
+typedef struct
+{
+  __IO uint32_t ISR;   /*!< DMA interrupt status register */
+  __IO uint32_t Reserved0;
+  __IO uint32_t IFCR;  /*!< DMA interrupt flag clear register */
+} DMA_Base_Registers;
+
+static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength, uint32_t Increment)
+{
+  /* calculate DMA base and stream number */
+  DMA_Base_Registers  *regs_dma  = (DMA_Base_Registers *)hdma->StreamBaseAddress;
+
+  if(IS_DMA_DMAMUX_ALL_INSTANCE(hdma->Instance) != 0U) /* No DMAMUX available for BDMA1 */
+  {
+    /* Clear the DMAMUX synchro overrun flag */
+    hdma->DMAmuxChannelStatus->CFR = hdma->DMAmuxChannelStatusMask;
+
+    if(hdma->DMAmuxRequestGen != 0U)
+    {
+      /* Clear the DMAMUX request generator overrun flag */
+      hdma->DMAmuxRequestGenStatus->RGCFR = hdma->DMAmuxRequestGenStatusMask;
+    }
+  }
+
+  if(IS_DMA_STREAM_INSTANCE(hdma->Instance) != 0U) /* DMA1 or DMA2 instance */
+  {
+    /* Clear all interrupt flags at correct offset within the register */
+    regs_dma->IFCR = 0x3FUL << (hdma->StreamIndex & 0x1FU);
+
+    /* Clear DBM bit, and set inc and direction */
+    ((DMA_Stream_TypeDef *)hdma->Instance)->CR &= (uint32_t)(~(DMA_SxCR_DBM|DMA_SxCR_DIR|DMA_SxCR_MINC|DMA_SxCR_PINC|DMA_SxCR_CIRC));
+    ((DMA_Stream_TypeDef *)hdma->Instance)->CR |= (hdma->Init.Direction | hdma->Init.PeriphInc | Increment | hdma->Init.Mode);
+
+    /* Configure DMA Stream data length */
+    ((DMA_Stream_TypeDef *)hdma->Instance)->NDTR = DataLength;
+
+    /* Peripheral to Memory */
+    if((hdma->Init.Direction) == DMA_MEMORY_TO_PERIPH)
+    {
+      /* Configure DMA Stream destination address */
+      ((DMA_Stream_TypeDef *)hdma->Instance)->PAR = DstAddress;
+
+      /* Configure DMA Stream source address */
+      ((DMA_Stream_TypeDef *)hdma->Instance)->M0AR = SrcAddress;
+    }
+    /* Memory to Peripheral */
+    else
+    {
+      /* Configure DMA Stream source address */
+      ((DMA_Stream_TypeDef *)hdma->Instance)->PAR = SrcAddress;
+
+      /* Configure DMA Stream destination address */
+      ((DMA_Stream_TypeDef *)hdma->Instance)->M0AR = DstAddress;
+    }
+  }
+}
+
+HAL_StatusTypeDef DMA_Start_IT(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength, uint32_t Increment)
+{
+  if(HAL_DMA_STATE_READY == hdma->State)
+  {
+    /* Change DMA peripheral state */
+    hdma->State = HAL_DMA_STATE_BUSY;
+
+    /* Initialize the error code */
+    hdma->ErrorCode = HAL_DMA_ERROR_NONE;
+
+    /* Disable the peripheral */
+    __HAL_DMA_DISABLE(hdma);
+
+    /* Configure the source, destination address and the data length */
+    DMA_SetConfig(hdma, SrcAddress, DstAddress, DataLength, Increment);
+
+    MODIFY_REG(((DMA_Stream_TypeDef   *)hdma->Instance)->CR, (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME | DMA_IT_HT), (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME));
+    if(IS_DMA_DMAMUX_ALL_INSTANCE(hdma->Instance) != 0U) /* No DMAMUX available for BDMA1 */
+    {
+      /* Check if DMAMUX Synchronization is enabled */
+      if((hdma->DMAmuxChannel->CCR & DMAMUX_CxCR_SE) != 0U)
+      {
+        /* Enable DMAMUX sync overrun IT*/
+        hdma->DMAmuxChannel->CCR |= DMAMUX_CxCR_SOIE;
+      }
+
+      if(hdma->DMAmuxRequestGen != 0U)
+      {
+        /* if using DMAMUX request generator, enable the DMAMUX request generator overrun IT*/
+        /* enable the request gen overrun IT */
+        hdma->DMAmuxRequestGen->RGCR |= DMAMUX_RGxCR_OIE;
+      }
+    }
+
+    /* Enable the Peripheral */
+    __HAL_DMA_ENABLE(hdma);
+  }
+  return HAL_OK;
+}
+
+static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData,
+                                              uint16_t Size)
+{
+  static uint32_t dummyDMATxdata = 0xffffffff;
+  static uint32_t dummyDMARxdata;
+
+  hspi->pTxBuffPtr  = (pTxData) ? (uint8_t *)pTxData : (uint8_t *)&dummyDMATxdata;
+  hspi->TxXferCount = Size;
+  hspi->pRxBuffPtr  = (pRxData) ? (uint8_t *)pRxData : (uint8_t *)&dummyDMARxdata;
+  hspi->RxXferCount = Size;
+
+  /* Reset the Tx/Rx DMA bits */
+  CLEAR_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
+
+  /* Set the SPI Tx/Rx DMA Half transfer complete callback */
+  hspi->hdmarx->XferHalfCpltCallback = NULL;
+  hspi->hdmarx->XferCpltCallback     = SPI_DMATransmitReceiveCplt;
+  hspi->hdmarx->XferErrorCallback = NULL;
+  hspi->hdmarx->XferAbortCallback = NULL;
+  // It seems that when using DMA in slave mode the SPI unit can sometimes have an extra byte left in the RX register.
+  // If we enable DMA with this still in place it triggers a premature completion of the read.
+  if ((hspi->Init.Mode & SPI_MODE_MASTER) != SPI_MODE_MASTER)
+  {
+    __HAL_SPI_DISABLE(hspi);
+    __HAL_SPI_ENABLE(hspi);
+  }
+
+  /* Enable the Rx DMA Stream/Channel  */
+  DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->RXDR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount, (pRxData ? DMA_MINC_ENABLE : 0));
+
+  /* Enable Rx DMA Request */
+  SET_BIT(hspi->Instance->CFG1, SPI_CFG1_RXDMAEN);
+
+  /* Set the SPI Tx DMA transfer complete callback as NULL because the communication closing
+  is performed in DMA reception complete callback  */
+  hspi->hdmatx->XferHalfCpltCallback = NULL;
+  hspi->hdmatx->XferCpltCallback     = NULL;
+  hspi->hdmatx->XferErrorCallback    = NULL;
+  hspi->hdmatx->XferAbortCallback    = NULL;
+  /* Enable the Tx DMA Stream/Channel  */
+  DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->TXDR, hspi->TxXferCount, (pTxData ? DMA_MINC_ENABLE : 0));
+
+  /* Enable Tx DMA Request */
+  SET_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN);
+
+  if (hspi->Init.Mode == SPI_MODE_MASTER)
+  {
+    /* Master transfer start */
+    SET_BIT(hspi->Instance->CR1, SPI_CR1_CSTART);
+  }
+
+  return HAL_OK;
+}
+
+static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData, uint16_t Size)
+{
+  // Even when only doing transmit we still read data, this allows us to use the same code
+  // path for all transfers and makes detecting end of operation easy/efficient.
+  // This also means we do not need to worry about flushing the RX fifo even when in
+  // continuous mode.
+  hspi->pRxBuffPtr  = (uint8_t *)pRxData;
+  hspi->RxXferCount = Size;
+
+  /* Fill in the TxFIFO */
+  while ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (Size != 0UL))
+  {
+    if (pTxData)
+    {
+      *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)pTxData++);
+    }
+    else
+      *((__IO uint8_t *)&hspi->Instance->TXDR) = 0xff;
+    Size--;
+  }
+  __DSB();
+  hspi->TxXferCount = Size;
+  hspi->pTxBuffPtr  = (uint8_t *)pTxData;
+  __HAL_SPI_ENABLE_IT(hspi, SPI_IT_DXP);
+
+  if (hspi->Init.Mode == SPI_MODE_MASTER)
+  {
+    /* Master transfer start */
+    SET_BIT(hspi->Instance->CR1, SPI_CR1_CSTART);
+    __DSB();
+  }
+  return HAL_OK;
+}
+#endif
 
 #if USE_SSP2
 extern "C" void DMA1_Stream3_IRQHandler()
@@ -139,7 +356,7 @@ extern "C" void DMA1_Stream4_IRQHandler()
 
 extern "C" void SPI2_IRQHandler()
 {
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP2.spi.handle));
+    HardwareSPI::SPI_IRQHandler(&(HardwareSPI::SSP2.spi.handle));
 }
 #endif
 
@@ -156,7 +373,7 @@ extern "C" void DMA1_Stream5_IRQHandler()
 
 extern "C" void SPI3_IRQHandler()
 {
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP3.spi.handle));
+    HardwareSPI::SPI_IRQHandler(&(HardwareSPI::SSP3.spi.handle));
 }
 #endif
 
@@ -175,7 +392,7 @@ extern "C" void DMA1_Stream7_IRQHandler()
 
 extern "C" void SPI1_IRQHandler()
 {
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+    HardwareSPI::SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
 }
 #endif
 
@@ -192,21 +409,21 @@ extern "C" void DMA1_Stream2_IRQHandler()
 
 extern "C" void SPI4_IRQHandler()
 {
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP4.spi.handle));
+    HardwareSPI::SPI_IRQHandler(&(HardwareSPI::SSP4.spi.handle));
 }
 #endif
 
 #if USE_SSP5
 extern "C" void SPI5_IRQHandler()
 {
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP5.spi.handle));
+    HardwareSPI::SPI_IRQHandler(&(HardwareSPI::SSP5.spi.handle));
 }
 #endif
 
 #if USE_SSP6
 extern "C" void SPI6_IRQHandler()
 {
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP6.spi.handle));
+    HardwareSPI::SPI_IRQHandler(&(HardwareSPI::SSP6.spi.handle));
 }
 #endif
 
@@ -215,7 +432,7 @@ extern "C" void SPI6_IRQHandler()
 #if USE_SSP1
 extern "C" void SPI1_IRQHandler()
 {
-    HAL_SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
+    SPI_IRQHandler(&(HardwareSPI::SSP1.spi.handle));
 }
 #endif
 #endif
@@ -371,45 +588,6 @@ HardwareSPI::HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo) noexcept : dev(sp
     curBits = 0xffffffff;
 }
 
-HardwareSPI::HardwareSPI(SPI_TypeDef *spi) noexcept : dev(spi), initComplete(false), transferActive(false), ioType(SpiIoType::polled)
-{
-    curBitRate = 0xffffffff;
-    curClockMode = 0xffffffff;
-    curBits = 0xffffffff;
-}
-
-static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
-{
-    // FIXME consider setting dma burst size to 4 for WiFi and SBC transfers
-
-    HAL_StatusTypeDef status;    
-    status = HAL_SPI_TransmitReceive_DMA(hspi, (uint8_t *)tx_data, rx_data, len);
-    return status;
-}
-
-
-static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
-{
-    HAL_StatusTypeDef status;    
-    status = HAL_SPI_TransmitReceive_IT(hspi, (uint8_t *)tx_data, rx_data, len);
-    return status;
-}
-
-
-static HAL_StatusTypeDef startTransferPolled(SPI_HandleTypeDef *hspi, const uint8_t *tx_data, uint8_t *rx_data, size_t len) noexcept
-{
-    HAL_StatusTypeDef status;
-    if (rx_data == nullptr)
-        status = HAL_SPI_Transmit(hspi, (uint8_t *)tx_data, len, SPITimeoutMillis);
-    else if (tx_data == nullptr)
-        status = HAL_SPI_Receive(hspi, rx_data, len, SPITimeoutMillis);
-    else
-        status = HAL_SPI_TransmitReceive(hspi, (uint8_t *)tx_data, rx_data, len, SPITimeoutMillis);
-    // Simulate I/O complete interrupt
-    if (status == HAL_OK)
-        HAL_SPI_RxCpltCallback(hspi);
-    return status;
-}
 
 void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t len, SPICallbackFunction ioComplete, size_t minDMALen) noexcept
 {
@@ -429,7 +607,7 @@ void HardwareSPI::startTransfer(const uint8_t *tx_data, uint8_t *rx_data, size_t
         }
         break;
     case SpiIoType::polled:
-        status = startTransferPolled(&(spi.handle), tx_data, rx_data, len);
+        debugPrintf("Error: Poled SPI is not suported\n");
         break;
     case SpiIoType::interrupt:
         status = startTransferIT(&(spi.handle), tx_data, rx_data, len);

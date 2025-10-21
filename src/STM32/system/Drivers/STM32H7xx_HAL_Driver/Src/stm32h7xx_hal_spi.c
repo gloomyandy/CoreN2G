@@ -449,7 +449,6 @@ HAL_StatusTypeDef HAL_SPI_Init(SPI_HandleTypeDef *hspi)
     /* Alternate function GPIOs control */
     MODIFY_REG(hspi->Instance->CFG2, SPI_CFG2_AFCNTR, (hspi->Init.MasterKeepIOState));
   }
-  MODIFY_REG(hspi->Instance->CR2, SPI_CR2_TSIZE, 0UL);
   hspi->ErrorCode = HAL_SPI_ERROR_NONE;
   hspi->State     = HAL_SPI_STATE_READY;
 
@@ -1788,41 +1787,6 @@ HAL_StatusTypeDef HAL_SPI_Receive_IT(SPI_HandleTypeDef *hspi, uint8_t *pData, ui
   * @param  Size   : amount of data to be sent and received
   * @retval HAL status
   */
-#if HAL_RRF
-HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData, uint16_t Size)
-{
-  // Even when only doing transmit we still read data, this allows us to use the same code
-  // path for all transfers and makes detecting end of operation easy/efficient.
-  // This also means we do not need to worry about flushing the RX fifo even when in
-  // continuous mode.
-  hspi->pRxBuffPtr  = (uint8_t *)pRxData;
-  hspi->RxXferCount = Size;
-
-  /* Fill in the TxFIFO */
-  while ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (Size != 0UL))
-  {
-    if (pTxData)
-    {
-      *((__IO uint8_t *)&hspi->Instance->TXDR) = *((uint8_t *)pTxData++);
-    }
-    else
-      *((__IO uint8_t *)&hspi->Instance->TXDR) = 0xff;
-    Size--;
-  }
-  __DSB();
-  hspi->TxXferCount = Size;
-  hspi->pTxBuffPtr  = (uint8_t *)pTxData;
-  __HAL_SPI_ENABLE_IT(hspi, SPI_IT_DXP);
-
-  if (hspi->Init.Mode == SPI_MODE_MASTER)
-  {
-    /* Master transfer start */
-    SET_BIT(hspi->Instance->CR1, SPI_CR1_CSTART);
-    __DSB();
-  }
-  return HAL_OK;
-}
-#else
 HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData, uint16_t Size)
 {
   HAL_SPI_StateTypeDef  tmp_state;
@@ -2007,8 +1971,6 @@ HAL_StatusTypeDef HAL_SPI_TransmitReceive_IT(SPI_HandleTypeDef *hspi, uint8_t *p
   __HAL_UNLOCK(hspi);
   return errorcode;
 }
-
-#endif
 
 #if defined(USE_SPI_RELOAD_TRANSFER)
 /**
@@ -2517,73 +2479,6 @@ HAL_StatusTypeDef HAL_SPI_Receive_DMA(SPI_HandleTypeDef *hspi, uint8_t *pData, u
   * @note   When the CRC feature is enabled the pRxData Length must be Size + 1
   * @retval HAL status
   */
-#if HAL_RRF
-HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData,
-                                              uint16_t Size)
-{
-  static uint32_t dummyDMATxdata = 0xffffffff;
-  static uint32_t dummyDMARxdata;
-  uint32_t savedMemInc;
-
-
-  hspi->pTxBuffPtr  = (pTxData) ? (uint8_t *)pTxData : (uint8_t *)&dummyDMATxdata;
-  hspi->TxXferCount = Size;
-  hspi->pRxBuffPtr  = (pRxData) ? (uint8_t *)pRxData : (uint8_t *)&dummyDMARxdata;
-  hspi->RxXferCount = Size;
-
-  /* Reset the Tx/Rx DMA bits */
-  CLEAR_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
-
-  /* Set the SPI Tx/Rx DMA Half transfer complete callback */
-  hspi->hdmarx->XferHalfCpltCallback = NULL;
-  hspi->hdmarx->XferCpltCallback     = SPI_DMATransmitReceiveCplt;
-  hspi->hdmarx->XferErrorCallback = NULL;
-  hspi->hdmarx->XferAbortCallback = NULL;
-  // It seems that when using DMA in slave mode the SPI unit can sometimes have an extra byte left in the RX register.
-  // If we enable DMA with this still in place it triggers a premature completion of the read.
-  if ((hspi->Init.Mode & SPI_MODE_MASTER) != SPI_MODE_MASTER)
-  {
-    __HAL_SPI_DISABLE(hspi);
-    __HAL_SPI_ENABLE(hspi);
-  }
-
-  /* Enable the Rx DMA Stream/Channel  */
-  // If we are generating dummy data, we need to turn off memory increment
-  savedMemInc = hspi->hdmarx->Init.MemInc;
-  if (pRxData == NULL)
-    hspi->hdmatx->Init.MemInc = 0;
-  HAL_DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->RXDR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount);
-  hspi->hdmarx->Init.MemInc = savedMemInc;
-
-  /* Enable Rx DMA Request */
-  SET_BIT(hspi->Instance->CFG1, SPI_CFG1_RXDMAEN);
-
-  /* Set the SPI Tx DMA transfer complete callback as NULL because the communication closing
-  is performed in DMA reception complete callback  */
-  hspi->hdmatx->XferHalfCpltCallback = NULL;
-  hspi->hdmatx->XferCpltCallback     = NULL;
-  hspi->hdmatx->XferErrorCallback    = NULL;
-  hspi->hdmatx->XferAbortCallback    = NULL;
-  // If we are generating dummy data, we need to turn off memory increment
-  savedMemInc = hspi->hdmatx->Init.MemInc;
-  if (pTxData == NULL)
-    hspi->hdmatx->Init.MemInc = 0;
-  /* Enable the Tx DMA Stream/Channel  */
-  HAL_DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->TXDR, hspi->TxXferCount);
-  hspi->hdmatx->Init.MemInc = savedMemInc;
-
-  /* Enable Tx DMA Request */
-  SET_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN);
-
-  if (hspi->Init.Mode == SPI_MODE_MASTER)
-  {
-    /* Master transfer start */
-    SET_BIT(hspi->Instance->CR1, SPI_CR1_CSTART);
-  }
-
-  return HAL_OK;
-}
-#else
 HAL_StatusTypeDef HAL_SPI_TransmitReceive_DMA(SPI_HandleTypeDef *hspi, uint8_t *pTxData, uint8_t *pRxData,
                                               uint16_t Size)
 {
@@ -2797,7 +2692,7 @@ __HAL_SPI_DISABLE(hspi);
   __HAL_UNLOCK(hspi);
   return errorcode;
 }
-#endif
+
 /**
   * @brief  Abort ongoing transfer (blocking mode).
   * @param  hspi SPI handle.
@@ -3079,52 +2974,12 @@ HAL_StatusTypeDef HAL_SPI_DMAStop(SPI_HandleTypeDef *hspi)
   return HAL_ERROR;
 }
 
-#if HAL_RRF
 /**
   * @brief  Handle SPI interrupt request.
   * @param  hspi: pointer to a SPI_HandleTypeDef structure that contains
   *               the configuration information for the specified SPI module.
   * @retval None
   */
-void HAL_SPI_IRQHandler(SPI_HandleTypeDef *hspi)
-{
-  uint32_t itsource = hspi->Instance->IER;
-  uint32_t itflag   = hspi->Instance->SR;
-  uint32_t trigger  = itsource & itflag;
-
-  /* SPI in mode Transmitter -------------------------------------------------*/
-  if (HAL_IS_BIT_SET(trigger, SPI_FLAG_DXP))
-  {
-    // Write data to fifo if we have any left
-    if (hspi->TxXferCount != 0UL)
-    {
-      if (hspi->pTxBuffPtr)
-      {
-        *(__IO uint8_t *)&hspi->Instance->TXDR = *((uint8_t *)hspi->pTxBuffPtr++);
-      }
-      else
-        *(__IO uint8_t *)&hspi->Instance->TXDR = 0xff;
-      hspi->TxXferCount--;
-    }
-    // read data from fifo
-    if (hspi->pRxBuffPtr)
-      *((uint8_t *)hspi->pRxBuffPtr++) = (*(__IO uint8_t *)&hspi->Instance->RXDR);
-    else
-      // Just discard the data
-      *(__IO uint8_t *)&hspi->Instance->RXDR;
-    if (--hspi->RxXferCount == 0)
-    {
-      // finished receiving data, transfer now complete
-      __HAL_SPI_CLEAR_EOTFLAG(hspi);
-      __HAL_SPI_CLEAR_TXTFFLAG(hspi);
-
-      /* Disable ITs */
-      __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_TXP | SPI_IT_RXP | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF));
-      HAL_SPI_TxRxCpltCallback(hspi);
-    }
-  }
-}
-#else
 void HAL_SPI_IRQHandler(SPI_HandleTypeDef *hspi)
 {
   uint32_t itsource = hspi->Instance->IER;
@@ -3369,7 +3224,6 @@ void HAL_SPI_IRQHandler(SPI_HandleTypeDef *hspi)
   }
 }
 
-#endif
 /**
   * @brief Tx Transfer completed callback.
   * @param  hspi: pointer to a SPI_HandleTypeDef structure that contains
@@ -3618,26 +3472,6 @@ static void SPI_DMAReceiveCplt(DMA_HandleTypeDef *hdma)
   *               the configuration information for the specified DMA module.
   * @retval None
   */
-#if HAL_RRF
-static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
-{
-  SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)((DMA_HandleTypeDef *)hdma)->Parent;
-
-  if (hspi->State != HAL_SPI_STATE_ABORT)
-  {
-    __HAL_SPI_CLEAR_EOTFLAG(hspi);
-    __HAL_SPI_CLEAR_TXTFFLAG(hspi);
-    __HAL_SPI_CLEAR_SUSPFLAG(hspi);
-    /* Disable ITs */
-    __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_TXP | SPI_IT_RXP | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF));
-    /* Disable Tx DMA Request */
-    CLEAR_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
-    hspi->State = HAL_SPI_STATE_READY;
-    HAL_SPI_TxRxCpltCallback(hspi);
-  }
-}
-
-#else
 static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
 {
   SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)((DMA_HandleTypeDef *)hdma)->Parent;
@@ -3659,7 +3493,7 @@ static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
     }
   }
 }
-#endif
+
 /**
   * @brief  DMA SPI half transmit process complete callback.
   * @param  hdma: pointer to a DMA_HandleTypeDef structure that contains

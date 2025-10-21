@@ -35,6 +35,8 @@
   *
   ******************************************************************************
   */
+ // NOTE: This file has been extensively modified for use in the STM32 port of RRF
+ // by Andy.
 #include "stm32_def.h"
 #include "spi_com.h"
 #include "pinconfig.h"
@@ -309,7 +311,10 @@ void spi_init(spi_t *obj, SPI_TypeDef *dev, uint32_t spimode, uint32_t speed, sp
 #endif
 
   HAL_SPI_Init(handle);
-
+#if STM32H7
+  // Set transfer size to zero to enable continuous mode
+  MODIFY_REG(handle->Instance->CR2, SPI_CR2_TSIZE, 0UL);
+#endif
   /* In order to set correctly the SPI polarity we need to enable the peripheral */
   __HAL_SPI_ENABLE(handle);
 }

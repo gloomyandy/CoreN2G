@@ -37,7 +37,6 @@ typedef void (*SPICallbackFunction)(HardwareSPI *spiDevice) noexcept;
 class HardwareSPI: public SPI
 {
 public:
-    HardwareSPI(SPI_TypeDef *spi) noexcept;
     HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo) noexcept;
     HardwareSPI(SPI_TypeDef *spi, IRQn_Type spiIrqNo, DMA_Stream_TypeDef* rxStream, uint32_t rxChan, IRQn_Type rxIrqNo,
                             DMA_Stream_TypeDef* txStream, uint32_t txChan, IRQn_Type txIrqNo) noexcept;
@@ -81,15 +80,12 @@ private:
     void configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, uint32_t dir, uint32_t minc) noexcept;
     void initDma(NvicPriority priority) noexcept;
     static const size_t minDMAThreshold = 6;
-
+    static void SPI_IRQHandler(SPI_HandleTypeDef *hspi);
     friend void DMA1_Stream3_IRQHandler() noexcept;
     friend void DMA1_Stream4_IRQHandler() noexcept;
     friend void DMA1_Stream0_IRQHandler() noexcept;
     friend void DMA1_Stream5_IRQHandler() noexcept;
     friend void transferComplete(HardwareSPI *spiDevice) noexcept;
-    friend void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi);
-    friend void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi);
-    friend void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi);
     friend void SPI1_IRQHandler() noexcept __attribute__((optimize("O2")));
     friend void SPI2_IRQHandler() noexcept;
     friend void SPI3_IRQHandler() noexcept;
