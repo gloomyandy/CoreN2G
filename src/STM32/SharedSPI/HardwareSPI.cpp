@@ -117,7 +117,7 @@ but it can be as high as 3uS per transaction. I suspect it may be caused by the 
 elements, but that is just speculation. Running in continuous mode and avoiding enable/disable seems to avoid 
 this issue.
 */
-void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi)
+void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept
 {
   uint32_t itsource = hspi->Instance->IER;
   uint32_t itflag   = hspi->Instance->SR;
@@ -159,7 +159,7 @@ void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi)
   }
 }
 
-static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
+void HardwareSPI::SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma) noexcept
 {
   SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)((DMA_HandleTypeDef *)hdma)->Parent;
 
@@ -173,7 +173,10 @@ static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma)
     /* Disable Tx DMA Request */
     CLEAR_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
     hspi->State = HAL_SPI_STATE_READY;
-    HAL_SPI_TxRxCpltCallback(hspi);
+    // Get pointer to containing object and handle operation complete
+    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+    s->transferActive = false;
+    if (s->callback) s->callback(s);
   }
 }
 
@@ -184,7 +187,7 @@ typedef struct
   __IO uint32_t IFCR;  /*!< DMA interrupt flag clear register */
 } DMA_Base_Registers;
 
-static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength, uint32_t Increment)
+static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength, uint32_t Increment) noexcept
 {
   /* calculate DMA base and stream number */
   DMA_Base_Registers  *regs_dma  = (DMA_Base_Registers *)hdma->StreamBaseAddress;
@@ -234,7 +237,7 @@ static void DMA_SetConfig(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t
   }
 }
 
-HAL_StatusTypeDef DMA_Start_IT(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength, uint32_t Increment)
+static HAL_StatusTypeDef DMA_Start_IT(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t DstAddress, uint32_t DataLength, uint32_t Increment) noexcept
 {
   if(HAL_DMA_STATE_READY == hdma->State)
   {
@@ -274,8 +277,8 @@ HAL_StatusTypeDef DMA_Start_IT(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uin
   return HAL_OK;
 }
 
-static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData,
-                                              uint16_t Size)
+HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData,
+                                              uint16_t Size) noexcept
 {
   static uint32_t dummyDMATxdata = 0xffffffff;
   static uint32_t dummyDMARxdata;
@@ -328,7 +331,7 @@ static HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t
   return HAL_OK;
 }
 
-static HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData, uint16_t Size)
+HAL_StatusTypeDef HardwareSPI::startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData, uint16_t Size) noexcept
 {
   // Even when only doing transmit we still read data, this allows us to use the same code
   // path for all transfers and makes detecting end of operation easy/efficient.

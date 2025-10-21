@@ -79,8 +79,11 @@ private:
     SpiIoType ioType;
     void configureDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, uint32_t dir, uint32_t minc) noexcept;
     void initDma(NvicPriority priority) noexcept;
-    static const size_t minDMAThreshold = 6;
-    static void SPI_IRQHandler(SPI_HandleTypeDef *hspi);
+    static const size_t minDMAThreshold = 2;
+    static void SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept;
+    static void SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma) noexcept;
+    HAL_StatusTypeDef startTransferDMA(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData, uint16_t Size) noexcept;
+    HAL_StatusTypeDef startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData, uint16_t Size) noexcept;
     friend void DMA1_Stream3_IRQHandler() noexcept;
     friend void DMA1_Stream4_IRQHandler() noexcept;
     friend void DMA1_Stream0_IRQHandler() noexcept;
