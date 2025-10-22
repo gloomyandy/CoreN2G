@@ -1,3 +1,4 @@
+
 /**
   ******************************************************************************
   * @file      startup_stm32h723xx.s
@@ -59,16 +60,7 @@ defined in linker script */
   .weak  Reset_Handler
   .type  Reset_Handler, %function
 Reset_Handler:
-#if FORCE_ESTACK
-  /* Some bootloaders mess with our estack setting, so ignore the value in flash and load it here */
-  ldr   r0, =_estack
-  msr   msp, r0
-  msr   psp, r0
-  /*ldr   sp, =_estack */   /* set stack pointer */
-#endif
-#if HAL_RRF
-  cpsid i               /* ensure interrupts are off during startup */
-#endif
+  ldr   sp, =_estack      /* set stack pointer */
 
 /* Call the clock system initialization function.*/
   bl  SystemInit
@@ -143,15 +135,9 @@ g_pfnVectors:
   .word  MemManage_Handler
   .word  BusFault_Handler
   .word  UsageFault_Handler
-#if HAL_RRF
-  .word  _firmware_crc
-  .word  VersionText
-  .word  g_pfnVectors
-#else
   .word  0
   .word  0
   .word  0
-#endif
   .word  0
   .word  SVC_Handler
   .word  DebugMon_Handler
