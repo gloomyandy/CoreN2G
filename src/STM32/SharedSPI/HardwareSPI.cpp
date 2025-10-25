@@ -4,8 +4,8 @@
 #ifdef RTOS
 #include <RTOSIface/RTOSIface.h>
 #include <CoreNotifyIndices.h>
-#include <DMA.h>
 #endif
+#include <DMA.h>
 #include "spi_com.h"
 #include "Cache.h"
 
