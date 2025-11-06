@@ -6,13 +6,12 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
   *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
@@ -36,14 +35,14 @@
 
 /** @addtogroup GFXMMU
   * @{
-  */
+  */ 
 
 /* Exported types ------------------------------------------------------------*/
 /** @defgroup GFXMMU_Exported_Types GFXMMU Exported Types
   * @{
   */
 
-/**
+/** 
   * @brief  HAL GFXMMU states definition
   */
 typedef enum
@@ -52,7 +51,7 @@ typedef enum
   HAL_GFXMMU_STATE_READY = 0x01U, /*!< GFXMMU initialized and ready for use */
 }HAL_GFXMMU_StateTypeDef;
 
-/**
+/** 
   * @brief  GFXMMU buffers structure definition
   */
 typedef struct
@@ -63,7 +62,7 @@ typedef struct
   uint32_t Buf3Address; /*!< Physical address of buffer 3. */
 }GFXMMU_BuffersTypeDef;
 
-/**
+/** 
   * @brief  GFXMMU cache and pre-fetch structure definition
   */
 typedef struct
@@ -86,7 +85,7 @@ typedef struct
                                             This parameter can be a value of @ref GFXMMU_Prefetch. */
 }GFXMMU_CachePrefetchTypeDef;
 
-/**
+/** 
   * @brief  GFXMMU interrupts structure definition
   */
 typedef struct
@@ -97,7 +96,7 @@ typedef struct
                                        @note: Useful only when interrupts are enabled. */
 }GFXMMU_InterruptsTypeDef;
 
-/**
+/** 
   * @brief  GFXMMU init structure definition
   */
 typedef struct
@@ -110,7 +109,7 @@ typedef struct
   GFXMMU_InterruptsTypeDef    Interrupts;    /*!< Interrupts parameters. */
 }GFXMMU_InitTypeDef;
 
-/**
+/** 
   * @brief  GFXMMU handle structure definition
   */
 #if (USE_HAL_GFXMMU_REGISTER_CALLBACKS == 1)
@@ -130,7 +129,7 @@ typedef struct
 #endif
 }GFXMMU_HandleTypeDef;
 
-/**
+/** 
   * @brief  GFXMMU LUT line structure definition
   */
 typedef struct
@@ -168,7 +167,7 @@ typedef void (*pGFXMMU_CallbackTypeDef)(GFXMMU_HandleTypeDef *hgfxmmu);
 
 /**
   * @}
-  */
+  */ 
 /* End of exported types -----------------------------------------------------*/
 
 /* Exported constants --------------------------------------------------------*/
@@ -289,7 +288,7 @@ typedef void (*pGFXMMU_CallbackTypeDef)(GFXMMU_HandleTypeDef *hgfxmmu);
 
 /**
   * @}
-  */
+  */ 
 /* End of exported constants -------------------------------------------------*/
 
 /* Exported macros -----------------------------------------------------------*/
@@ -345,16 +344,16 @@ HAL_StatusTypeDef HAL_GFXMMU_UnRegisterCallback(GFXMMU_HandleTypeDef        *hgf
   * @{
   */
 /* Operation functions ********************************************************/
-HAL_StatusTypeDef HAL_GFXMMU_ConfigLut(GFXMMU_HandleTypeDef *hgfxmmu,
+HAL_StatusTypeDef HAL_GFXMMU_ConfigLut(const GFXMMU_HandleTypeDef *hgfxmmu,
                                        uint32_t FirstLine,
                                        uint32_t LinesNumber,
                                        uint32_t Address);
 
-HAL_StatusTypeDef HAL_GFXMMU_DisableLutLines(GFXMMU_HandleTypeDef *hgfxmmu,
+HAL_StatusTypeDef HAL_GFXMMU_DisableLutLines(const GFXMMU_HandleTypeDef *hgfxmmu,
                                              uint32_t FirstLine,
                                              uint32_t LinesNumber);
 
-HAL_StatusTypeDef HAL_GFXMMU_ConfigLutLine(GFXMMU_HandleTypeDef *hgfxmmu, GFXMMU_LutLineTypeDef *lutLine);
+HAL_StatusTypeDef HAL_GFXMMU_ConfigLutLine(const GFXMMU_HandleTypeDef *hgfxmmu, GFXMMU_LutLineTypeDef *lutLine);
 
 HAL_StatusTypeDef HAL_GFXMMU_ConfigForceCache(GFXMMU_HandleTypeDef *hgfxmmu, uint32_t ForceParam);
 
@@ -374,7 +373,7 @@ void HAL_GFXMMU_ErrorCallback(GFXMMU_HandleTypeDef *hgfxmmu);
   * @{
   */
 /* State function *************************************************************/
-HAL_GFXMMU_StateTypeDef HAL_GFXMMU_GetState(GFXMMU_HandleTypeDef *hgfxmmu);
+HAL_GFXMMU_StateTypeDef HAL_GFXMMU_GetState(const GFXMMU_HandleTypeDef *hgfxmmu);
 
 uint32_t HAL_GFXMMU_GetError(GFXMMU_HandleTypeDef *hgfxmmu);
 /**
@@ -433,12 +432,12 @@ uint32_t HAL_GFXMMU_GetError(GFXMMU_HandleTypeDef *hgfxmmu);
                                              ((VALUE) == (GFXMMU_CACHE_FORCE_FLUSH | GFXMMU_CACHE_FORCE_INVALIDATE)))
 /**
   * @}
-  */
+  */ 
 /* End of private macros -----------------------------------------------------*/
 
 /**
   * @}
-  */
+  */ 
 
 /**
   * @}
@@ -450,4 +449,3 @@ uint32_t HAL_GFXMMU_GetError(GFXMMU_HandleTypeDef *hgfxmmu);
 
 #endif /* STM32H7xx_HAL_GFXMMU_H */
 
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

@@ -6,13 +6,12 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
   *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
@@ -51,7 +50,7 @@ typedef struct
 {
   uint32_t Ratio;                         /*!< Configures the oversampling ratio. */
 #if defined(ADC_VER_V5_V90)
-                                           /* On devices STM32H72xx and STM32H73xx, this parameter can be a value from 1 to 1023 for ADC1/2 or a value of @ref ADC_HAL_EC_OVS_RATIO  for ADC3*/
+                                           /* On devices STM32H72xx and STM32H73xx, this parameter can be a value from 1 to 1023 for ADC1/2 or a value of @ref ADC_HAL_EC_OVS_RATIO  for ADC3*/    
 #else
                                            /*This parameter can be a value of @ref ADC_HAL_EC_OVS_RATIO */
 #endif
@@ -131,8 +130,8 @@ typedef struct
                                        Note: It is not recommended to use with interruption or DMA (HAL_ADC_Start_IT(), HAL_ADC_Start_DMA()) since these modes have to clear immediately the EOC flag (by CPU to free the IRQ pending event or by DMA).
                                                        Auto wait will work but fort a very short time, discarding its intended benefit (except specific case of high load of CPU or DMA transfers which can justify usage of auto wait).
                                                        Do use with polling: 1. Start conversion with HAL_ADC_Start(), 2. Later on, when ADC conversion data is needed:
-													   and use HAL_ADC_GetValue() to retrieve conversion result and trig another conversion (in case of usage of injected group,
-													   use the equivalent functions HAL_ADCExInjected_Start(), HAL_ADCEx_InjectedGetValue(), ...). */
+                                                       and use HAL_ADC_GetValue() to retrieve conversion result and trig another conversion (in case of usage of injected group, 
+                                                       use the equivalent functions HAL_ADCExInjected_Start(), HAL_ADCEx_InjectedGetValue(), ...). */
 
   FunctionalState ContinuousConvMode; /*!< Specify whether the conversion is performed in single mode (one conversion) or continuous mode for ADC group regular,
                                        after the first ADC conversion start trigger occurred (software start or external trigger).
@@ -257,8 +256,8 @@ typedef struct
 
   uint32_t Offset;                 /*!< Define the offset to be subtracted from the raw converted data.
                                         Offset value must be a positive number.
-                                        Depending of ADC resolution selected (16, 14, 12, 10, 8 bits), this parameter must be a number between Min_Data = 0x0000 and Max_Data = 0xFFFF,
-                                        0x3FFF, 0xFFF, 0x3FF or 0xFF respectively.
+                                        Maximum value depends on ADC resolution and oversampling ratio (in case of oversampling used).
+                                        This parameter must be a number between Min_Data = 0x0000 and Max_Data = 0x3FFFC00 (corresponding to resolution 16 bit and oversampling ratio 1024).
                                         Note: This parameter must be modified when no conversion is on going on both regular and injected groups (ADC disabled, or ADC enabled
                                               without continuous mode or external trigger that could launch a conversion). */
 
@@ -268,15 +267,15 @@ typedef struct
 #if defined(ADC_VER_V5_V90)
   uint32_t OffsetSign;                /*!< Define if the offset should be subtracted (negative sign) or added (positive sign) from or to the raw converted data.
                                         This parameter can be a value of @ref ADCEx_OffsetSign.
-                                        Note:
+                                        Note: 
                                               - This parameter must be modified when no conversion is on going on both regular and injected groups (ADC disabled, or ADC enabled
-                                                without continuous mode or external trigger that could launch a conversion).
+                                                without continuous mode or external trigger that could launch a conversion). 
                                               - Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
   FunctionalState OffsetSaturation;   /*!< Define if the offset should be saturated upon under or over flow.
                                         This parameter value can be ENABLE or DISABLE.
-                                        Note:
+                                        Note: 
                                               - This parameter must be modified when no conversion is on going on both regular and injected groups (ADC disabled, or ADC enabled
-                                                without continuous mode or external trigger that could launch a conversion).
+                                                without continuous mode or external trigger that could launch a conversion). 
                                               - Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
 #endif
   FunctionalState OffsetSignedSaturation; /*!< Specify whether the Signed saturation feature is used or not.
@@ -600,12 +599,12 @@ typedef  void (*pADC_CallbackTypeDef)(ADC_HandleTypeDef *hadc); /*!< pointer to 
   */
 #define ADC_SAMPLING_MODE_NORMAL                (0x00000000UL)      /*!< ADC conversions sampling phase duration is defined using  @ref ADC_HAL_EC_CHANNEL_SAMPLINGTIME */
 #define ADC_SAMPLING_MODE_BULB                  (ADC3_CFGR2_BULB)    /*!< ADC conversions sampling phase starts immediately after end of conversion, and stops upon trigger event.
-                                                                                Notes:
-                                                                                      - First conversion is using minimal sampling time (see @ref ADC_HAL_EC_CHANNEL_SAMPLINGTIME)
+                                                                                Notes: 
+                                                                                      - First conversion is using minimal sampling time (see @ref ADC_HAL_EC_CHANNEL_SAMPLINGTIME) 
                                                                                       - Applicable for ADC3 on devices STM32H72xx and STM32H73xx  */
 #define ADC_SAMPLING_MODE_TRIGGER_CONTROLED     (ADC3_CFGR2_SMPTRIG) /*!< ADC conversions sampling phase is controlled by trigger events:
                                                                                  Trigger rising edge  = start sampling
-                                                                                 Trigger falling edge = stop sampling and start conversion
+                                                                                 Trigger falling edge = stop sampling and start conversion 
                                                                                  Note: Applicable for ADC3 on devices STM32H72xx and STM32H73xx  */
 /**
   * @}
@@ -679,7 +678,7 @@ typedef  void (*pADC_CallbackTypeDef)(ADC_HandleTypeDef *hadc); /*!< pointer to 
 #define ADC3_SAMPLETIME_92CYCLES_5        (LL_ADC_SAMPLINGTIME_ADC3_92CYCLES_5)   /*!< Sampling time 92.5 ADC clock cycles, On devices STM32H72xx and STM32H73xx, parameter available only on ADC instance: ADC3 */
 #define ADC3_SAMPLETIME_247CYCLES_5       (LL_ADC_SAMPLINGTIME_ADC3_247CYCLES_5)  /*!< Sampling time 247.5 ADC clock cycles, On devices STM32H72xx and STM32H73xx, parameter available only on ADC instance: ADC3 */
 #define ADC3_SAMPLETIME_640CYCLES_5       (LL_ADC_SAMPLINGTIME_ADC3_640CYCLES_5)  /*!< Sampling time 640.5 ADC clock cycles, On devices STM32H72xx and STM32H73xx, parameter available only on ADC instance: ADC3 */
-#define ADC3_SAMPLETIME_3CYCLES_5         (ADC_SMPR1_SMPPLUS | LL_ADC_SAMPLINGTIME_ADC3_2CYCLES_5) /*!< Sampling time 3.5 ADC clock cycles. If selected, this sampling time replaces all sampling time 2.5 ADC clock cycles. These 2 sampling times cannot be used simultaneously.
+#define ADC3_SAMPLETIME_3CYCLES_5         (ADC_SMPR1_SMPPLUS | LL_ADC_SAMPLINGTIME_ADC3_2CYCLES_5) /*!< Sampling time 3.5 ADC clock cycles. If selected, this sampling time replaces all sampling time 2.5 ADC clock cycles. These 2 sampling times cannot be used simultaneously. 
                                                                                                         On devices STM32H72xx and STM32H73xx, parameter available only on ADC instance: ADC3 */
 /**
   * @}
@@ -756,14 +755,14 @@ typedef  void (*pADC_CallbackTypeDef)(ADC_HandleTypeDef *hadc); /*!< pointer to 
 /** @defgroup ADC_analog_watchdog_filtering_config ADC Analog Watchdog filtering configuration
   * @{
   */
-#define ADC3_AWD_FILTERING_NONE          (0x00000000UL)                                                   /*!< ADC analog wathdog no filtering, one out-of-window sample is needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
-#define ADC3_AWD_FILTERING_2SAMPLES      ((ADC3_TR1_AWDFILT_0))                                           /*!< ADC analog wathdog 2 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
-#define ADC3_AWD_FILTERING_3SAMPLES      ((ADC3_TR1_AWDFILT_1))                                           /*!< ADC analog wathdog 3 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
-#define ADC3_AWD_FILTERING_4SAMPLES      ((ADC3_TR1_AWDFILT_1 | ADC3_TR1_AWDFILT_0))                      /*!< ADC analog wathdog 4 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
-#define ADC3_AWD_FILTERING_5SAMPLES      ((ADC3_TR1_AWDFILT_2))                                           /*!< ADC analog wathdog 5 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
-#define ADC3_AWD_FILTERING_6SAMPLES      ((ADC3_TR1_AWDFILT_2 | ADC3_TR1_AWDFILT_0))                      /*!< ADC analog wathdog 6 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
-#define ADC3_AWD_FILTERING_7SAMPLES      ((ADC3_TR1_AWDFILT_2 | ADC3_TR1_AWDFILT_1))                      /*!< ADC analog wathdog 7 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
-#define ADC3_AWD_FILTERING_8SAMPLES      ((ADC3_TR1_AWDFILT_2 | ADC3_TR1_AWDFILT_1 | ADC3_TR1_AWDFILT_0)) /*!< ADC analog wathdog 8 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
+#define ADC3_AWD_FILTERING_NONE          (0x00000000UL)                                                   /*!< ADC analog watchdog no filtering, one out-of-window sample is needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
+#define ADC3_AWD_FILTERING_2SAMPLES      ((ADC3_TR1_AWDFILT_0))                                           /*!< ADC analog watchdog 2 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
+#define ADC3_AWD_FILTERING_3SAMPLES      ((ADC3_TR1_AWDFILT_1))                                           /*!< ADC analog watchdog 3 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
+#define ADC3_AWD_FILTERING_4SAMPLES      ((ADC3_TR1_AWDFILT_1 | ADC3_TR1_AWDFILT_0))                      /*!< ADC analog watchdog 4 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
+#define ADC3_AWD_FILTERING_5SAMPLES      ((ADC3_TR1_AWDFILT_2))                                           /*!< ADC analog watchdog 5 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
+#define ADC3_AWD_FILTERING_6SAMPLES      ((ADC3_TR1_AWDFILT_2 | ADC3_TR1_AWDFILT_0))                      /*!< ADC analog watchdog 6 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
+#define ADC3_AWD_FILTERING_7SAMPLES      ((ADC3_TR1_AWDFILT_2 | ADC3_TR1_AWDFILT_1))                      /*!< ADC analog watchdog 7 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
+#define ADC3_AWD_FILTERING_8SAMPLES      ((ADC3_TR1_AWDFILT_2 | ADC3_TR1_AWDFILT_1 | ADC3_TR1_AWDFILT_0)) /*!< ADC analog watchdog 8 consecutives out-of-window samples are needed to raise flag or interrupt. Applicable for ADC3 on devices STM32H72xx and STM32H73xx */
 /**
   * @}
   */
@@ -911,7 +910,7 @@ typedef  void (*pADC_CallbackTypeDef)(ADC_HandleTypeDef *hadc); /*!< pointer to 
 #define ADC_FLAG_AWD2          ADC_ISR_AWD2     /*!< ADC Analog watchdog 2 flag (additional analog watchdog) */
 #define ADC_FLAG_AWD3          ADC_ISR_AWD3     /*!< ADC Analog watchdog 3 flag (additional analog watchdog) */
 #define ADC_FLAG_JQOVF         ADC_ISR_JQOVF    /*!< ADC Injected Context Queue Overflow flag */
-
+#define ADC_FLAG_LDORDY        ADC_ISR_LDORDY   /*!< ADC LDO output voltage ready bit */
 /**
   * @}
   */
@@ -1089,7 +1088,7 @@ typedef  void (*pADC_CallbackTypeDef)(ADC_HandleTypeDef *hadc); /*!< pointer to 
 
 #if defined(ADC_VER_V5_V90)
 /**
-  * @brief Verify the ADC converted data alignment. Applicable for ADC3 on devices STM32H72xx and STM32H73xx.
+  * @brief Verify the ADC converted data alignment. Applicable for ADC3 on devices STM32H72xx and STM32H73xx. 
   * @param __ALIGN__ programmed ADC converted data alignment.
   * @retval SET (__ALIGN__ is a valid value) or RESET (__ALIGN__ is invalid)
   */
@@ -1373,7 +1372,8 @@ typedef  void (*pADC_CallbackTypeDef)(ADC_HandleTypeDef *hadc); /*!< pointer to 
   *            @arg @ref ADC_FLAG_AWD1    ADC Analog watchdog 1 flag (main analog watchdog)
   *            @arg @ref ADC_FLAG_AWD2    ADC Analog watchdog 2 flag (additional analog watchdog)
   *            @arg @ref ADC_FLAG_AWD3    ADC Analog watchdog 3 flag (additional analog watchdog)
-  *            @arg @ref ADC_FLAG_JQOVF   ADC Injected Context Queue Overflow flag.
+  *            @arg @ref ADC_FLAG_JQOVF   ADC Injected Context Queue Overflow flag
+  *            @arg @ref ADC_FLAG_LDORDY  ADC LDO output voltage ready bit.
   * @retval State of flag (TRUE or FALSE).
   */
 #define __HAL_ADC_GET_FLAG(__HANDLE__, __FLAG__)                               \
@@ -1962,7 +1962,7 @@ HAL_StatusTypeDef       HAL_ADC_Start_DMA(ADC_HandleTypeDef *hadc, uint32_t *pDa
 HAL_StatusTypeDef       HAL_ADC_Stop_DMA(ADC_HandleTypeDef *hadc);
 
 /* ADC retrieve conversion value intended to be used with polling or interruption */
-uint32_t                HAL_ADC_GetValue(ADC_HandleTypeDef *hadc);
+uint32_t                HAL_ADC_GetValue(const ADC_HandleTypeDef *hadc);
 
 /* ADC IRQHandler and Callbacks used in non-blocking modes (Interruption and DMA) */
 void                    HAL_ADC_IRQHandler(ADC_HandleTypeDef *hadc);
@@ -1990,8 +1990,8 @@ HAL_StatusTypeDef       HAL_ADC_AnalogWDGConfig(ADC_HandleTypeDef *hadc, ADC_Ana
 /** @addtogroup ADC_Exported_Functions_Group4
   * @{
   */
-uint32_t                HAL_ADC_GetState(ADC_HandleTypeDef *hadc);
-uint32_t                HAL_ADC_GetError(ADC_HandleTypeDef *hadc);
+uint32_t                HAL_ADC_GetState(const ADC_HandleTypeDef *hadc);
+uint32_t                HAL_ADC_GetError(const ADC_HandleTypeDef *hadc);
 
 /**
   * @}
@@ -2032,4 +2032,3 @@ void ADC_ConfigureBoostMode(ADC_HandleTypeDef *hadc);
 
 #endif /* STM32H7xx_HAL_ADC_H */
 
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

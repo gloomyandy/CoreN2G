@@ -6,13 +6,12 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
   *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
@@ -441,7 +440,7 @@ __STATIC_INLINE void LL_EXTI_EnableIT_32_63(uint32_t ExtiLine)
   *         @arg @ref LL_EXTI_LINE_86 (*)
   *         @arg @ref LL_EXTI_LINE_87
   *         @arg @ref LL_EXTI_LINE_88 (*)
-  *         @arg @ref LL_EXTI_LINE_89 (*)
+  *         @arg @ref LL_EXTI_LINE_89 (*) 
   *         @arg @ref LL_EXTI_LINE_90 (*)
   *         @arg @ref LL_EXTI_LINE_91 (*)
   *         @arg @ref LL_EXTI_LINE_ALL_64_95
@@ -573,7 +572,7 @@ __STATIC_INLINE void LL_EXTI_DisableIT_32_63(uint32_t ExtiLine)
   *         @arg @ref LL_EXTI_LINE_86 (*)
   *         @arg @ref LL_EXTI_LINE_87
   *         @arg @ref LL_EXTI_LINE_88 (*)
-  *         @arg @ref LL_EXTI_LINE_89 (*)
+  *         @arg @ref LL_EXTI_LINE_89 (*) 
   *         @arg @ref LL_EXTI_LINE_90 (*)
   *         @arg @ref LL_EXTI_LINE_91 (*)
   *         @arg @ref LL_EXTI_LINE_ALL_64_95
@@ -706,7 +705,7 @@ __STATIC_INLINE uint32_t LL_EXTI_IsEnabledIT_32_63(uint32_t ExtiLine)
   *         @arg @ref LL_EXTI_LINE_86 (*)
   *         @arg @ref LL_EXTI_LINE_87
   *         @arg @ref LL_EXTI_LINE_88 (*)
-  *         @arg @ref LL_EXTI_LINE_89 (*)
+  *         @arg @ref LL_EXTI_LINE_89 (*) 
   *         @arg @ref LL_EXTI_LINE_90 (*)
   *         @arg @ref LL_EXTI_LINE_91 (*)
   *         @arg @ref LL_EXTI_LINE_ALL_64_95
@@ -3284,4 +3283,3 @@ void LL_EXTI_StructInit(LL_EXTI_InitTypeDef *EXTI_InitStruct);
 
 #endif /* __STM32H7xx_LL_EXTI_H */
 
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
