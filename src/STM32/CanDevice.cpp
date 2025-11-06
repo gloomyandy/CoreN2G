@@ -379,7 +379,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		hdr.TxFrameType = (buffer->remote ? FDCAN_REMOTE_FRAME : FDCAN_DATA_FRAME);
 		uint32_t dataLen = buffer->dataLength;
 		uint32_t dlcLen = BytesToDLC[dataLen];
-		hdr.DataLength = dlcLen << 16;
+		hdr.DataLength = dlcLen;
 		dlcLen = DLCtoBytes[dlcLen];
 		while (dataLen < dlcLen)
 		{
@@ -420,7 +420,7 @@ void CanDevice::CopyHeader(CanMessageBuffer *buffer, FDCAN_RxHeaderTypeDef *hdr)
 	buffer->id.SetReceivedId(hdr->Identifier);
 	buffer->remote = (hdr->RxFrameType == FDCAN_REMOTE_FRAME ? 1 : 0);
 	buffer->timeStamp = hdr->RxTimestamp;
-	buffer->dataLength = DLCtoBytes[hdr->DataLength >> 16];
+	buffer->dataLength = DLCtoBytes[hdr->DataLength];
 	++stats.messagesReceived;
 }
 
