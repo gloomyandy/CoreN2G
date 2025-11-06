@@ -16,6 +16,17 @@
   *           + Clock absence detector feature
   *           + Break generation on analog watchdog or short-circuit event
   *
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
   @verbatim
   ==============================================================================
                      ##### How to use this driver #####
@@ -157,23 +168,26 @@
 
     *** Callback registration ***
     =============================
-
+    [..]
     The compilation define USE_HAL_DFSDM_REGISTER_CALLBACKS when set to 1
     allows the user to configure dynamically the driver callbacks.
-    Use functions @ref HAL_DFSDM_Channel_RegisterCallback(),
-    @ref HAL_DFSDM_Filter_RegisterCallback() or
-    @ref HAL_DFSDM_Filter_RegisterAwdCallback() to register a user callback.
+    Use functions HAL_DFSDM_Channel_RegisterCallback(),
+    HAL_DFSDM_Filter_RegisterCallback() or
+    HAL_DFSDM_Filter_RegisterAwdCallback() to register a user callback.
 
-    Function @ref HAL_DFSDM_Channel_RegisterCallback() allows to register
+    [..]
+    Function HAL_DFSDM_Channel_RegisterCallback() allows to register
     following callbacks:
       (+) CkabCallback      : DFSDM channel clock absence detection callback.
       (+) ScdCallback       : DFSDM channel short circuit detection callback.
       (+) MspInitCallback   : DFSDM channel MSP init callback.
       (+) MspDeInitCallback : DFSDM channel MSP de-init callback.
+    [..]
     This function takes as parameters the HAL peripheral handle, the Callback ID
     and a pointer to the user callback function.
 
-    Function @ref HAL_DFSDM_Filter_RegisterCallback() allows to register
+    [..]
+    Function HAL_DFSDM_Filter_RegisterCallback() allows to register
     following callbacks:
       (+) RegConvCpltCallback     : DFSDM filter regular conversion complete callback.
       (+) RegConvHalfCpltCallback : DFSDM filter half regular conversion complete callback.
@@ -182,26 +196,33 @@
       (+) ErrorCallback           : DFSDM filter error callback.
       (+) MspInitCallback         : DFSDM filter MSP init callback.
       (+) MspDeInitCallback       : DFSDM filter MSP de-init callback.
+    [..]
     This function takes as parameters the HAL peripheral handle, the Callback ID
     and a pointer to the user callback function.
 
+    [..]
     For specific DFSDM filter analog watchdog callback use dedicated register callback:
-    @ref HAL_DFSDM_Filter_RegisterAwdCallback().
+    HAL_DFSDM_Filter_RegisterAwdCallback().
 
-    Use functions @ref HAL_DFSDM_Channel_UnRegisterCallback() or
-    @ref HAL_DFSDM_Filter_UnRegisterCallback() to reset a callback to the default
+    [..]
+    Use functions HAL_DFSDM_Channel_UnRegisterCallback() or
+    HAL_DFSDM_Filter_UnRegisterCallback() to reset a callback to the default
     weak function.
 
-    @ref HAL_DFSDM_Channel_UnRegisterCallback() takes as parameters the HAL peripheral handle,
+    [..]
+    HAL_DFSDM_Channel_UnRegisterCallback() takes as parameters the HAL peripheral handle,
     and the Callback ID.
+    [..]
     This function allows to reset following callbacks:
       (+) CkabCallback      : DFSDM channel clock absence detection callback.
       (+) ScdCallback       : DFSDM channel short circuit detection callback.
       (+) MspInitCallback   : DFSDM channel MSP init callback.
       (+) MspDeInitCallback : DFSDM channel MSP de-init callback.
 
-    @ref HAL_DFSDM_Filter_UnRegisterCallback() takes as parameters the HAL peripheral handle,
+    [..]
+    HAL_DFSDM_Filter_UnRegisterCallback() takes as parameters the HAL peripheral handle,
     and the Callback ID.
+    [..]
     This function allows to reset following callbacks:
       (+) RegConvCpltCallback     : DFSDM filter regular conversion complete callback.
       (+) RegConvHalfCpltCallback : DFSDM filter half regular conversion complete callback.
@@ -211,41 +232,35 @@
       (+) MspInitCallback         : DFSDM filter MSP init callback.
       (+) MspDeInitCallback       : DFSDM filter MSP de-init callback.
 
+    [..]
     For specific DFSDM filter analog watchdog callback use dedicated unregister callback:
-    @ref HAL_DFSDM_Filter_UnRegisterAwdCallback().
+    HAL_DFSDM_Filter_UnRegisterAwdCallback().
 
+    [..]
     By default, after the call of init function and if the state is RESET
     all callbacks are reset to the corresponding legacy weak functions:
-    examples @ref HAL_DFSDM_ChannelScdCallback(), @ref HAL_DFSDM_FilterErrorCallback().
+    examples HAL_DFSDM_ChannelScdCallback(), HAL_DFSDM_FilterErrorCallback().
     Exception done for MspInit and MspDeInit callbacks that are respectively
     reset to the legacy weak functions in the init and de-init only when these
     callbacks are null (not registered beforehand).
     If not, MspInit or MspDeInit are not null, the init and de-init keep and use
     the user MspInit/MspDeInit callbacks (registered beforehand)
 
+    [..]
     Callbacks can be registered/unregistered in READY state only.
     Exception done for MspInit/MspDeInit callbacks that can be registered/unregistered
     in READY or RESET state, thus registered (user) MspInit/DeInit callbacks can be used
     during the init/de-init.
     In that case first register the MspInit/MspDeInit user callbacks using
-    @ref HAL_DFSDM_Channel_RegisterCallback() or
-    @ref HAL_DFSDM_Filter_RegisterCallback() before calling init or de-init function.
+    HAL_DFSDM_Channel_RegisterCallback() or
+    HAL_DFSDM_Filter_RegisterCallback() before calling init or de-init function.
 
+    [..]
     When The compilation define USE_HAL_DFSDM_REGISTER_CALLBACKS is set to 0 or
     not defined, the callback registering feature is not available
     and weak callbacks are used.
+
     @endverbatim
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
   ******************************************************************************
   */
 
@@ -309,7 +324,7 @@ DFSDM_Channel_HandleTypeDef* a_dfsdm2ChannelHandle[DFSDM2_CHANNEL_NUMBER] = {NUL
   * @{
   */
 static uint32_t DFSDM_GetInjChannelsNbr(uint32_t Channels);
-static uint32_t DFSDM_GetChannelFromInstance(DFSDM_Channel_TypeDef* Instance);
+static uint32_t DFSDM_GetChannelFromInstance(const DFSDM_Channel_TypeDef *Instance);
 static void     DFSDM_RegConvStart(DFSDM_Filter_HandleTypeDef *hdfsdm_filter);
 static void     DFSDM_RegConvStop(DFSDM_Filter_HandleTypeDef* hdfsdm_filter);
 static void     DFSDM_InjConvStart(DFSDM_Filter_HandleTypeDef* hdfsdm_filter);
@@ -945,7 +960,7 @@ HAL_StatusTypeDef HAL_DFSDM_ChannelCkabStart(DFSDM_Channel_HandleTypeDef *hdfsdm
   * @param  Timeout Timeout value in milliseconds.
   * @retval HAL status
   */
-HAL_StatusTypeDef HAL_DFSDM_ChannelPollForCkab(DFSDM_Channel_HandleTypeDef *hdfsdm_channel,
+HAL_StatusTypeDef HAL_DFSDM_ChannelPollForCkab(const DFSDM_Channel_HandleTypeDef *hdfsdm_channel,
                                                uint32_t Timeout)
 {
   uint32_t tickstart;
@@ -1314,7 +1329,7 @@ HAL_StatusTypeDef HAL_DFSDM_ChannelScdStart(DFSDM_Channel_HandleTypeDef *hdfsdm_
   * @param  Timeout Timeout value in milliseconds.
   * @retval HAL status
   */
-HAL_StatusTypeDef HAL_DFSDM_ChannelPollForScd(DFSDM_Channel_HandleTypeDef *hdfsdm_channel,
+HAL_StatusTypeDef HAL_DFSDM_ChannelPollForScd(const DFSDM_Channel_HandleTypeDef *hdfsdm_channel,
                                               uint32_t Timeout)
 {
   uint32_t tickstart;
@@ -1581,7 +1596,7 @@ HAL_StatusTypeDef HAL_DFSDM_ChannelScdStop_IT(DFSDM_Channel_HandleTypeDef *hdfsd
   * @param  hdfsdm_channel DFSDM channel handle.
   * @retval Channel analog watchdog value.
   */
-int16_t HAL_DFSDM_ChannelGetAwdValue(DFSDM_Channel_HandleTypeDef *hdfsdm_channel)
+int16_t HAL_DFSDM_ChannelGetAwdValue(const DFSDM_Channel_HandleTypeDef *hdfsdm_channel)
 {
   return (int16_t) hdfsdm_channel->Instance->CHWDATAR;
 }
@@ -1640,7 +1655,7 @@ HAL_StatusTypeDef HAL_DFSDM_ChannelModifyOffset(DFSDM_Channel_HandleTypeDef *hdf
   * @param  hdfsdm_channel DFSDM channel handle.
   * @retval DFSDM channel state.
   */
-HAL_DFSDM_Channel_StateTypeDef HAL_DFSDM_ChannelGetState(DFSDM_Channel_HandleTypeDef *hdfsdm_channel)
+HAL_DFSDM_Channel_StateTypeDef HAL_DFSDM_ChannelGetState(const DFSDM_Channel_HandleTypeDef *hdfsdm_channel)
 {
   /* Return DFSDM channel handle state */
   return hdfsdm_channel->State;
@@ -2622,7 +2637,7 @@ HAL_StatusTypeDef HAL_DFSDM_FilterRegularStop_DMA(DFSDM_Filter_HandleTypeDef *hd
   * @param  Channel Corresponding channel of regular conversion.
   * @retval Regular conversion value
   */
-int32_t HAL_DFSDM_FilterGetRegularValue(DFSDM_Filter_HandleTypeDef *hdfsdm_filter,
+int32_t HAL_DFSDM_FilterGetRegularValue(const DFSDM_Filter_HandleTypeDef *hdfsdm_filter,
                                         uint32_t                   *Channel)
 {
   uint32_t reg = 0U;
@@ -3036,7 +3051,7 @@ HAL_StatusTypeDef HAL_DFSDM_FilterInjectedStop_DMA(DFSDM_Filter_HandleTypeDef *h
   * @param  Channel Corresponding channel of injected conversion.
   * @retval Injected conversion value
   */
-int32_t HAL_DFSDM_FilterGetInjectedValue(DFSDM_Filter_HandleTypeDef *hdfsdm_filter,
+int32_t HAL_DFSDM_FilterGetInjectedValue(const DFSDM_Filter_HandleTypeDef *hdfsdm_filter,
                                          uint32_t                   *Channel)
 {
   uint32_t reg = 0U;
@@ -3064,7 +3079,7 @@ int32_t HAL_DFSDM_FilterGetInjectedValue(DFSDM_Filter_HandleTypeDef *hdfsdm_filt
   * @retval HAL status
   */
 HAL_StatusTypeDef HAL_DFSDM_FilterAwdStart_IT(DFSDM_Filter_HandleTypeDef   *hdfsdm_filter,
-                                              DFSDM_Filter_AwdParamTypeDef *awdParam)
+                                              const DFSDM_Filter_AwdParamTypeDef *awdParam)
 {
   HAL_StatusTypeDef status = HAL_OK;
 
@@ -3221,7 +3236,7 @@ HAL_StatusTypeDef HAL_DFSDM_FilterExdStop(DFSDM_Filter_HandleTypeDef *hdfsdm_fil
   * @retval Extreme detector maximum value
   *         This value is between Min_Data = -8388608 and Max_Data = 8388607.
   */
-int32_t HAL_DFSDM_FilterGetExdMaxValue(DFSDM_Filter_HandleTypeDef *hdfsdm_filter,
+int32_t HAL_DFSDM_FilterGetExdMaxValue(const DFSDM_Filter_HandleTypeDef *hdfsdm_filter,
                                        uint32_t                   *Channel)
 {
   uint32_t reg = 0U;
@@ -3249,7 +3264,7 @@ int32_t HAL_DFSDM_FilterGetExdMaxValue(DFSDM_Filter_HandleTypeDef *hdfsdm_filter
   * @retval Extreme detector minimum value
   *         This value is between Min_Data = -8388608 and Max_Data = 8388607.
   */
-int32_t HAL_DFSDM_FilterGetExdMinValue(DFSDM_Filter_HandleTypeDef *hdfsdm_filter,
+int32_t HAL_DFSDM_FilterGetExdMinValue(const DFSDM_Filter_HandleTypeDef *hdfsdm_filter,
                                        uint32_t                   *Channel)
 {
   uint32_t reg = 0U;
@@ -3276,7 +3291,7 @@ int32_t HAL_DFSDM_FilterGetExdMinValue(DFSDM_Filter_HandleTypeDef *hdfsdm_filter
   * @retval Conversion time value
   * @note   To get time in second, this value has to be divided by DFSDM clock frequency.
   */
-uint32_t HAL_DFSDM_FilterGetConvTimeValue(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
+uint32_t HAL_DFSDM_FilterGetConvTimeValue(const DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
   uint32_t reg = 0U;
   uint32_t value = 0U;
@@ -3661,7 +3676,7 @@ __weak void HAL_DFSDM_FilterErrorCallback(DFSDM_Filter_HandleTypeDef *hdfsdm_fil
   * @param  hdfsdm_filter DFSDM filter handle.
   * @retval DFSDM filter state.
   */
-HAL_DFSDM_Filter_StateTypeDef HAL_DFSDM_FilterGetState(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
+HAL_DFSDM_Filter_StateTypeDef HAL_DFSDM_FilterGetState(const DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
   /* Return DFSDM filter handle state */
   return hdfsdm_filter->State;
@@ -3672,7 +3687,7 @@ HAL_DFSDM_Filter_StateTypeDef HAL_DFSDM_FilterGetState(DFSDM_Filter_HandleTypeDe
   * @param  hdfsdm_filter DFSDM filter handle.
   * @retval DFSDM filter error code.
   */
-uint32_t HAL_DFSDM_FilterGetError(DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
+uint32_t HAL_DFSDM_FilterGetError(const DFSDM_Filter_HandleTypeDef *hdfsdm_filter)
 {
   return hdfsdm_filter->ErrorCode;
 }
@@ -4168,9 +4183,9 @@ static uint32_t DFSDM_GetInjChannelsNbr(uint32_t Channels)
   * @param  Instance DFSDM channel instance.
   * @retval Channel number.
   */
-static uint32_t DFSDM_GetChannelFromInstance(DFSDM_Channel_TypeDef* Instance)
+static uint32_t DFSDM_GetChannelFromInstance(const DFSDM_Channel_TypeDef *Instance)
 {
-  uint32_t channel = 0xFFU;
+  uint32_t channel;
 
   /* Get channel from instance */
 #if defined(DFSDM2_Channel0)
@@ -4202,14 +4217,11 @@ static uint32_t DFSDM_GetChannelFromInstance(DFSDM_Channel_TypeDef* Instance)
   {
     channel = 6U;
   }
-  else if(Instance == DFSDM2_Channel7)
+  else /* DFSDM2_Channel7 */
   {
     channel = 7U;
   }
-  else
-  {
-    /* channel = 0xFFU;*/
-  }
+
 #else
   if(Instance == DFSDM1_Channel0)
   {
@@ -4223,13 +4235,9 @@ static uint32_t DFSDM_GetChannelFromInstance(DFSDM_Channel_TypeDef* Instance)
   {
     channel = 2U;
   }
-  else if(Instance == DFSDM1_Channel3)
+  else /* DFSDM1_Channel3 */
   {
     channel = 3U;
-  }
-  else
-  {
-    /* channel = 0xFFU;*/
   }
 #endif /* defined(DFSDM2_Channel0) */
 
@@ -4413,5 +4421,3 @@ static void DFSDM_InjConvStop(DFSDM_Filter_HandleTypeDef* hdfsdm_filter)
 /**
   * @}
   */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

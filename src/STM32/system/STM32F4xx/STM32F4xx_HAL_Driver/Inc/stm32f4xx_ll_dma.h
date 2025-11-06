@@ -6,13 +6,12 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
   *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
+  * This software is licensed under terms that can be found in the LICENSE file in
+  * the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
@@ -140,10 +139,10 @@ typedef struct
                                         This parameter can be a value of @ref DMA_LL_EC_PRIORITY
 
                                         This feature can be modified afterwards using unitary function @ref LL_DMA_SetStreamPriorityLevel(). */
-
+                                        
   uint32_t FIFOMode;               /*!< Specifies if the FIFO mode or Direct mode will be used for the specified stream.
                                         This parameter can be a value of @ref DMA_LL_FIFOMODE
-                                        @note The Direct mode (FIFO mode disabled) cannot be used if the
+                                        @note The Direct mode (FIFO mode disabled) cannot be used if the 
                                         memory-to-memory data transfer is configured on the selected stream
 
                                         This feature can be modified afterwards using unitary functions @ref LL_DMA_EnableFifoMode() or @ref LL_DMA_EnableFifoMode() . */
@@ -153,19 +152,19 @@ typedef struct
 
                                         This feature can be modified afterwards using unitary function @ref LL_DMA_SetFIFOThreshold(). */
 
-  uint32_t MemBurst;               /*!< Specifies the Burst transfer configuration for the memory transfers.
+  uint32_t MemBurst;               /*!< Specifies the Burst transfer configuration for the memory transfers. 
                                         It specifies the amount of data to be transferred in a single non interruptible
                                         transaction.
-                                        This parameter can be a value of @ref DMA_LL_EC_MBURST
-                                        @note The burst mode is possible only if the address Increment mode is enabled.
+                                        This parameter can be a value of @ref DMA_LL_EC_MBURST 
+                                        @note The burst mode is possible only if the address Increment mode is enabled. 
 
                                         This feature can be modified afterwards using unitary function @ref LL_DMA_SetMemoryBurstxfer(). */
 
-  uint32_t PeriphBurst;            /*!< Specifies the Burst transfer configuration for the peripheral transfers.
-                                        It specifies the amount of data to be transferred in a single non interruptible
-                                        transaction.
+  uint32_t PeriphBurst;            /*!< Specifies the Burst transfer configuration for the peripheral transfers. 
+                                        It specifies the amount of data to be transferred in a single non interruptible 
+                                        transaction. 
                                         This parameter can be a value of @ref DMA_LL_EC_PBURST
-                                        @note The burst mode is possible only if the address Increment mode is enabled.
+                                        @note The burst mode is possible only if the address Increment mode is enabled. 
 
                                         This feature can be modified afterwards using unitary function @ref LL_DMA_SetPeriphBurstxfer(). */
 
@@ -285,14 +284,24 @@ typedef struct
 /** @defgroup DMA_LL_EC_CHANNEL CHANNEL
   * @{
   */
-#define LL_DMA_CHANNEL_0                  0x00000000U                                                /* Select Channel0 of DMA Instance */
-#define LL_DMA_CHANNEL_1                  DMA_SxCR_CHSEL_0                                           /* Select Channel1 of DMA Instance */
-#define LL_DMA_CHANNEL_2                  DMA_SxCR_CHSEL_1                                           /* Select Channel2 of DMA Instance */
-#define LL_DMA_CHANNEL_3                  (DMA_SxCR_CHSEL_0 | DMA_SxCR_CHSEL_1)                      /* Select Channel3 of DMA Instance */
-#define LL_DMA_CHANNEL_4                  DMA_SxCR_CHSEL_2                                           /* Select Channel4 of DMA Instance */
-#define LL_DMA_CHANNEL_5                  (DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_0)                      /* Select Channel5 of DMA Instance */
-#define LL_DMA_CHANNEL_6                  (DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_1)                      /* Select Channel6 of DMA Instance */
-#define LL_DMA_CHANNEL_7                  (DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_0)   /* Select Channel7 of DMA Instance */
+#define LL_DMA_CHANNEL_0                  0x00000000U                                                                   /* Select Channel0 of DMA Instance */
+#define LL_DMA_CHANNEL_1                  DMA_SxCR_CHSEL_0                                                              /* Select Channel1 of DMA Instance */
+#define LL_DMA_CHANNEL_2                  DMA_SxCR_CHSEL_1                                                              /* Select Channel2 of DMA Instance */
+#define LL_DMA_CHANNEL_3                  (DMA_SxCR_CHSEL_0 | DMA_SxCR_CHSEL_1)                                         /* Select Channel3 of DMA Instance */
+#define LL_DMA_CHANNEL_4                  DMA_SxCR_CHSEL_2                                                              /* Select Channel4 of DMA Instance */
+#define LL_DMA_CHANNEL_5                  (DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_0)                                         /* Select Channel5 of DMA Instance */
+#define LL_DMA_CHANNEL_6                  (DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_1)                                         /* Select Channel6 of DMA Instance */
+#define LL_DMA_CHANNEL_7                  (DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_0)                      /* Select Channel7 of DMA Instance */
+#if defined (DMA_SxCR_CHSEL_3)
+#define LL_DMA_CHANNEL_8                  DMA_SxCR_CHSEL_3                                                              /* Select Channel8 of DMA Instance */
+#define LL_DMA_CHANNEL_9                  (DMA_SxCR_CHSEL_3 | DMA_SxCR_CHSEL_0)                                         /* Select Channel9 of DMA Instance */
+#define LL_DMA_CHANNEL_10                 (DMA_SxCR_CHSEL_3 | DMA_SxCR_CHSEL_1)                                         /* Select Channel10 of DMA Instance */
+#define LL_DMA_CHANNEL_11                 (DMA_SxCR_CHSEL_3 | DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_0)                      /* Select Channel11 of DMA Instance */
+#define LL_DMA_CHANNEL_12                 (DMA_SxCR_CHSEL_3 | DMA_SxCR_CHSEL_2)                                         /* Select Channel12 of DMA Instance */
+#define LL_DMA_CHANNEL_13                 (DMA_SxCR_CHSEL_3 | DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_0)                      /* Select Channel13 of DMA Instance */
+#define LL_DMA_CHANNEL_14                 (DMA_SxCR_CHSEL_3 | DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_1)                      /* Select Channel14 of DMA Instance */
+#define LL_DMA_CHANNEL_15                 (DMA_SxCR_CHSEL_3 | DMA_SxCR_CHSEL_2 | DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_0)   /* Select Channel15 of DMA Instance */
+#endif /* DMA_SxCR_CHSEL_3 */
 /**
   * @}
   */
@@ -318,7 +327,7 @@ typedef struct
 /**
   * @}
   */
-
+  
 /** @defgroup DMA_LL_FIFOMODE DMA_LL_FIFOMODE
   * @{
   */
@@ -326,7 +335,7 @@ typedef struct
 #define LL_DMA_FIFOMODE_ENABLE            DMA_SxFCR_DMDIS                         /*!< FIFO mode enable  */
 /**
   * @}
-  */
+  */  
 
 /** @defgroup DMA_LL_EC_FIFOSTATUS_0 FIFOSTATUS 0
   * @{
@@ -351,7 +360,7 @@ typedef struct
 /**
   * @}
   */
-
+    
 /** @defgroup DMA_LL_EC_CURRENTTARGETMEM CURRENTTARGETMEM
   * @{
   */
@@ -1140,7 +1149,7 @@ __STATIC_INLINE uint32_t LL_DMA_GetPeriphBurstxfer(DMA_TypeDef *DMAx, uint32_t S
 
 /**
   * @brief Set Current target (only in double buffer mode) to Memory 1 or Memory 0.
-  * @rmtoll CR          CT           LL_DMA_SetCurrentTargetMem
+  * @rmtoll CR          CT           LL_DMA_SetCurrentTargetMem 
   * @param  DMAx DMAx Instance
   * @param  Stream This parameter can be one of the following values:
   *         @arg @ref LL_DMA_STREAM_0
@@ -1162,8 +1171,8 @@ __STATIC_INLINE void LL_DMA_SetCurrentTargetMem(DMA_TypeDef *DMAx, uint32_t Stre
 }
 
 /**
-  * @brief Set Current target (only in double buffer mode) to Memory 1 or Memory 0.
-  * @rmtoll CR          CT           LL_DMA_GetCurrentTargetMem
+  * @brief Get Current target (only in double buffer mode).
+  * @rmtoll CR          CT           LL_DMA_GetCurrentTargetMem 
   * @param  DMAx DMAx Instance
   * @param  Stream This parameter can be one of the following values:
   *         @arg @ref LL_DMA_STREAM_0
@@ -1205,7 +1214,7 @@ __STATIC_INLINE void LL_DMA_EnableDoubleBufferMode(DMA_TypeDef *DMAx, uint32_t S
 
 /**
   * @brief Disable the double buffer mode.
-  * @rmtoll CR          DBM           LL_DMA_DisableDoubleBufferMode
+  * @rmtoll CR          DBM           LL_DMA_DisableDoubleBufferMode 
   * @param  DMAx DMAx Instance
   * @param  Stream This parameter can be one of the following values:
   *         @arg @ref LL_DMA_STREAM_0
@@ -1271,7 +1280,7 @@ __STATIC_INLINE void LL_DMA_DisableFifoMode(DMA_TypeDef *DMAx, uint32_t Stream)
 
 /**
   * @brief Enable Fifo mode.
-  * @rmtoll FCR          DMDIS          LL_DMA_EnableFifoMode
+  * @rmtoll FCR          DMDIS          LL_DMA_EnableFifoMode 
   * @param  DMAx DMAx Instance
   * @param  Stream This parameter can be one of the following values:
   *         @arg @ref LL_DMA_STREAM_0
@@ -1370,7 +1379,7 @@ __STATIC_INLINE void LL_DMA_ConfigFifo(DMA_TypeDef *DMAx, uint32_t Stream, uint3
 /**
   * @brief Configure the Source and Destination addresses.
   * @note   This API must not be called when the DMA stream is enabled.
-  * @rmtoll M0AR        M0A         LL_DMA_ConfigAddresses\n
+  * @rmtoll M0AR        M0A         LL_DMA_ConfigAddresses\n 
   *         PAR         PA          LL_DMA_ConfigAddresses
   * @param  DMAx DMAx Instance
   * @param  Stream This parameter can be one of the following values:
@@ -1600,7 +1609,7 @@ __STATIC_INLINE uint32_t LL_DMA_GetM2MDstAddress(DMA_TypeDef* DMAx, uint32_t Str
   */
 __STATIC_INLINE void LL_DMA_SetMemory1Address(DMA_TypeDef *DMAx, uint32_t Stream, uint32_t Address)
 {
-  MODIFY_REG(((DMA_Stream_TypeDef*)((uint32_t)((uint32_t)DMAx + STREAM_OFFSET_TAB[Stream])))->M1AR, DMA_SxM1AR_M1A, Address);
+  WRITE_REG(((DMA_Stream_TypeDef*)((uint32_t)((uint32_t)DMAx + STREAM_OFFSET_TAB[Stream])))->M1AR, Address);
 }
 
 /**
@@ -1717,7 +1726,7 @@ __STATIC_INLINE uint32_t LL_DMA_IsActiveFlag_HT6(DMA_TypeDef *DMAx)
 __STATIC_INLINE uint32_t LL_DMA_IsActiveFlag_HT7(DMA_TypeDef *DMAx)
 {
   return (READ_BIT(DMAx->HISR ,DMA_HISR_HTIF7)==(DMA_HISR_HTIF7));
-}
+} 
 
 /**
   * @brief Get Stream 0 transfer complete flag.
@@ -1805,7 +1814,7 @@ __STATIC_INLINE uint32_t LL_DMA_IsActiveFlag_TC6(DMA_TypeDef *DMAx)
 __STATIC_INLINE uint32_t LL_DMA_IsActiveFlag_TC7(DMA_TypeDef *DMAx)
 {
   return (READ_BIT(DMAx->HISR ,DMA_HISR_TCIF7)==(DMA_HISR_TCIF7));
-}
+} 
 
 /**
   * @brief Get Stream 0 transfer error flag.
@@ -1893,7 +1902,7 @@ __STATIC_INLINE uint32_t LL_DMA_IsActiveFlag_TE6(DMA_TypeDef *DMAx)
 __STATIC_INLINE uint32_t LL_DMA_IsActiveFlag_TE7(DMA_TypeDef *DMAx)
 {
   return (READ_BIT(DMAx->HISR ,DMA_HISR_TEIF7)==(DMA_HISR_TEIF7));
-}
+} 
 
 /**
   * @brief Get Stream 0 direct mode error flag.
@@ -2720,7 +2729,7 @@ __STATIC_INLINE void LL_DMA_DisableIT_FE(DMA_TypeDef *DMAx, uint32_t Stream)
 }
 
 /**
-  * @brief Check if Half transfer interrup is enabled.
+  * @brief Check if Half transfer interrupt is enabled.
   * @rmtoll CR        HTIE         LL_DMA_IsEnabledIT_HT
   * @param  DMAx DMAx Instance
   * @param  Stream This parameter can be one of the following values:
@@ -2760,7 +2769,7 @@ __STATIC_INLINE uint32_t LL_DMA_IsEnabledIT_TE(DMA_TypeDef *DMAx, uint32_t Strea
 }
 
 /**
-  * @brief Check if Transfer complete interrup is enabled.
+  * @brief Check if Transfer complete interrupt is enabled.
   * @rmtoll CR        TCIE         LL_DMA_IsEnabledIT_TC
   * @param  DMAx DMAx Instance
   * @param  Stream This parameter can be one of the following values:
@@ -2800,7 +2809,7 @@ __STATIC_INLINE uint32_t LL_DMA_IsEnabledIT_DME(DMA_TypeDef *DMAx, uint32_t Stre
 }
 
 /**
-  * @brief Check if FIFO error interrup is enabled.
+  * @brief Check if FIFO error interrupt is enabled.
   * @rmtoll FCR        FEIE         LL_DMA_IsEnabledIT_FE
   * @param  DMAx DMAx Instance
   * @param  Stream This parameter can be one of the following values:
@@ -2857,4 +2866,3 @@ void LL_DMA_StructInit(LL_DMA_InitTypeDef *DMA_InitStruct);
 
 #endif /* __STM32F4xx_LL_DMA_H */
 
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

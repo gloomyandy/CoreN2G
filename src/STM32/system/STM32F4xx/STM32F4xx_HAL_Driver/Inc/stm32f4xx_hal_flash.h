@@ -6,14 +6,12 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
   *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
+  * This software is licensed under terms that can be found in the LICENSE file in
+  * the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
   ******************************************************************************
   */
 
@@ -22,7 +20,7 @@
 #define __STM32F4xx_HAL_FLASH_H
 
 #ifdef __cplusplus
- extern "C" {
+extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
@@ -73,7 +71,7 @@ typedef struct
 
   __IO uint32_t               ErrorCode;          /* FLASH error code                    */
 
-}FLASH_ProcessTypeDef;
+} FLASH_ProcessTypeDef;
 
 /**
   * @}
@@ -226,7 +224,7 @@ typedef struct
   * @retval None
   */
 #define __HAL_FLASH_INSTRUCTION_CACHE_RESET() do {FLASH->ACR |= FLASH_ACR_ICRST;  \
-                                                  FLASH->ACR &= ~FLASH_ACR_ICRST; \
+                                                   FLASH->ACR &= ~FLASH_ACR_ICRST; \
                                                  }while(0U)
 
 /**
@@ -235,7 +233,7 @@ typedef struct
   * @retval None
   */
 #define __HAL_FLASH_DATA_CACHE_RESET() do {FLASH->ACR |= FLASH_ACR_DCRST;  \
-                                           FLASH->ACR &= ~FLASH_ACR_DCRST; \
+                                            FLASH->ACR &= ~FLASH_ACR_DCRST; \
                                           }while(0U)
 /**
   * @brief  Enable the specified FLASH interrupt.
@@ -425,4 +423,3 @@ HAL_StatusTypeDef FLASH_WaitForLastOperation(uint32_t Timeout);
 
 #endif /* __STM32F4xx_HAL_FLASH_H */
 
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file      startup_stm32f410tx.s
   * @author    MCD Application Team
-  * @brief     STM32F410Tx Devices vector table for GCC based toolchains.
+  * @brief     STM32F410Tx Devices vector table for GCC based toolchains. 
   *            This module performs:
   *                - Set the initial SP
   *                - Set the initial PC == Reset_Handler,
@@ -14,17 +14,16 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
   *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
-
+    
   .syntax unified
   .cpu cortex-m4
   .fpu softvfp
@@ -33,7 +32,7 @@
 .global  g_pfnVectors
 .global  Default_Handler
 
-/* start address for the initialization values of the .data section.
+/* start address for the initialization values of the .data section. 
 defined in linker script */
 .word  _sidata
 /* start address for the .data section. defined in linker script */
@@ -50,7 +49,7 @@ defined in linker script */
  * @brief  This is the code that gets called when the processor first
  *          starts execution following a reset event. Only the absolutely
  *          necessary set is performed, after which the application
- *          supplied main() routine is called.
+ *          supplied main() routine is called. 
  * @param  None
  * @retval : None
 */
@@ -58,8 +57,11 @@ defined in linker script */
     .section  .text.Reset_Handler
   .weak  Reset_Handler
   .type  Reset_Handler, %function
-Reset_Handler:
+Reset_Handler:  
   ldr   sp, =_estack       /* set stack pointer */
+  
+/* Call the clock system initialization function.*/
+  bl  SystemInit  
 
 /* Copy the data segment initializers from flash to SRAM */
   ldr r0, =_sdata
@@ -77,7 +79,7 @@ LoopCopyDataInit:
   adds r4, r0, r3
   cmp r4, r1
   bcc CopyDataInit
-
+  
 /* Zero fill the bss segment. */
   ldr r2, =_sbss
   ldr r4, =_ebss
@@ -92,21 +94,19 @@ LoopFillZerobss:
   cmp r2, r4
   bcc FillZerobss
 
-/* Call the clock system intitialization function.*/
-  bl  SystemInit
 /* Call static constructors */
     bl __libc_init_array
 /* Call the application's entry point.*/
   bl  main
-  bx  lr
+  bx  lr    
 .size  Reset_Handler, .-Reset_Handler
 
 /**
- * @brief  This is the code that gets called when the processor receives an
+ * @brief  This is the code that gets called when the processor receives an 
  *         unexpected interrupt.  This simply enters an infinite loop, preserving
  *         the system state for examination by a debugger.
- * @param  None
- * @retval None
+ * @param  None     
+ * @retval None       
 */
     .section  .text.Default_Handler,"ax",%progbits
 Default_Handler:
@@ -118,12 +118,11 @@ Infinite_Loop:
 * The minimal vector table for a Cortex M3. Note that the proper constructs
 * must be placed on this to ensure that it ends up at physical address
 * 0x0000.0000.
-*
+* 
 *******************************************************************************/
    .section  .isr_vector,"a",%progbits
   .type  g_pfnVectors, %object
-  .size  g_pfnVectors, .-g_pfnVectors
-
+    
 g_pfnVectors:
   .word  _estack
   .word  Reset_Handler
@@ -242,10 +241,13 @@ g_pfnVectors:
   .word     FMPI2C1_ER_IRQHandler             /* FMPI2C1 Error                               */
   .word     LPTIM1_IRQHandler                 /* LP TIM1                                     */
 
+
+  .size  g_pfnVectors, .-g_pfnVectors
+
 /*******************************************************************************
 *
-* Provide weak aliases for each Exception handler to the Default_Handler.
-* As they are weak aliases, any function with the same name will override
+* Provide weak aliases for each Exception handler to the Default_Handler. 
+* As they are weak aliases, any function with the same name will override 
 * this definition.
 *
 *******************************************************************************/
@@ -257,7 +259,7 @@ g_pfnVectors:
 
    .weak      MemManage_Handler
    .thumb_set MemManage_Handler,Default_Handler
-
+  
    .weak      BusFault_Handler
    .thumb_set BusFault_Handler,Default_Handler
 
@@ -301,7 +303,7 @@ g_pfnVectors:
    .thumb_set EXTI1_IRQHandler,Default_Handler
 
    .weak      EXTI2_IRQHandler
-   .thumb_set EXTI2_IRQHandler,Default_Handler
+   .thumb_set EXTI2_IRQHandler,Default_Handler 
 
    .weak      EXTI3_IRQHandler
    .thumb_set EXTI3_IRQHandler,Default_Handler
@@ -421,5 +423,4 @@ g_pfnVectors:
    .thumb_set FMPI2C1_ER_IRQHandler,Default_Handler
 
    .weak      LPTIM1_IRQHandler
-   .thumb_set LPTIM1_IRQHandler,Default_Handler
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+   .thumb_set LPTIM1_IRQHandler,Default_Handler   

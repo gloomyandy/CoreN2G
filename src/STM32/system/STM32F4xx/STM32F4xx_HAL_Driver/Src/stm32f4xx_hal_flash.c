@@ -63,14 +63,12 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
-  * All rights reserved.</center></h2>
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
   *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
+  * This software is licensed under terms that can be found in the LICENSE file in
+  * the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
   ******************************************************************************
   */
 
@@ -103,7 +101,14 @@
   * @{
   */
 /* Variable used for Erase sectors under interruption */
-FLASH_ProcessTypeDef pFlash;
+FLASH_ProcessTypeDef pFlash  = {.ProcedureOnGoing = FLASH_PROC_NONE,
+                                .NbSectorsToErase = 0U,
+                                .VoltageForErase= FLASH_VOLTAGE_RANGE_1,
+                                .Sector = 0U,
+                                .Bank = FLASH_BANK_1,
+                                .Address = 0U,
+                                .Lock = HAL_UNLOCKED,
+                                .ErrorCode = HAL_FLASH_ERROR_NONE};
 /**
   * @}
   */
@@ -130,8 +135,8 @@ HAL_StatusTypeDef FLASH_WaitForLastOperation(uint32_t Timeout);
   */
 
 /** @defgroup FLASH_Exported_Functions_Group1 Programming operation functions
- *  @brief   Programming operation functions
- *
+  *  @brief   Programming operation functions
+  *
 @verbatim
  ===============================================================================
                   ##### Programming operation functions #####
@@ -155,7 +160,7 @@ HAL_StatusTypeDef FLASH_WaitForLastOperation(uint32_t Timeout);
   */
 HAL_StatusTypeDef HAL_FLASH_Program(uint32_t TypeProgram, uint32_t Address, uint64_t Data)
 {
-  HAL_StatusTypeDef status = HAL_ERROR;
+  HAL_StatusTypeDef status;
 
   /* Process Locked */
   __HAL_LOCK(&pFlash);
@@ -166,19 +171,19 @@ HAL_StatusTypeDef HAL_FLASH_Program(uint32_t TypeProgram, uint32_t Address, uint
   /* Wait for last operation to be completed */
   status = FLASH_WaitForLastOperation((uint32_t)FLASH_TIMEOUT_VALUE);
 
-  if(status == HAL_OK)
+  if (status == HAL_OK)
   {
-    if(TypeProgram == FLASH_TYPEPROGRAM_BYTE)
+    if (TypeProgram == FLASH_TYPEPROGRAM_BYTE)
     {
       /*Program byte (8-bit) at a specified address.*/
       FLASH_Program_Byte(Address, (uint8_t) Data);
     }
-    else if(TypeProgram == FLASH_TYPEPROGRAM_HALFWORD)
+    else if (TypeProgram == FLASH_TYPEPROGRAM_HALFWORD)
     {
       /*Program halfword (16-bit) at a specified address.*/
       FLASH_Program_HalfWord(Address, (uint16_t) Data);
     }
-    else if(TypeProgram == FLASH_TYPEPROGRAM_WORD)
+    else if (TypeProgram == FLASH_TYPEPROGRAM_WORD)
     {
       /*Program word (32-bit) at a specified address.*/
       FLASH_Program_Word(Address, (uint32_t) Data);
@@ -215,9 +220,6 @@ HAL_StatusTypeDef HAL_FLASH_Program_IT(uint32_t TypeProgram, uint32_t Address, u
 {
   HAL_StatusTypeDef status = HAL_OK;
 
-  /* Process Locked */
-  __HAL_LOCK(&pFlash);
-
   /* Check the parameters */
   assert_param(IS_FLASH_TYPEPROGRAM(TypeProgram));
 
@@ -230,17 +232,17 @@ HAL_StatusTypeDef HAL_FLASH_Program_IT(uint32_t TypeProgram, uint32_t Address, u
   pFlash.ProcedureOnGoing = FLASH_PROC_PROGRAM;
   pFlash.Address = Address;
 
-  if(TypeProgram == FLASH_TYPEPROGRAM_BYTE)
+  if (TypeProgram == FLASH_TYPEPROGRAM_BYTE)
   {
     /*Program byte (8-bit) at a specified address.*/
-      FLASH_Program_Byte(Address, (uint8_t) Data);
+    FLASH_Program_Byte(Address, (uint8_t) Data);
   }
-  else if(TypeProgram == FLASH_TYPEPROGRAM_HALFWORD)
+  else if (TypeProgram == FLASH_TYPEPROGRAM_HALFWORD)
   {
     /*Program halfword (16-bit) at a specified address.*/
     FLASH_Program_HalfWord(Address, (uint16_t) Data);
   }
-  else if(TypeProgram == FLASH_TYPEPROGRAM_WORD)
+  else if (TypeProgram == FLASH_TYPEPROGRAM_WORD)
   {
     /*Program word (32-bit) at a specified address.*/
     FLASH_Program_Word(Address, (uint32_t) Data);
@@ -264,20 +266,20 @@ void HAL_FLASH_IRQHandler(void)
 
   /* Check FLASH operation error flags */
 #if defined(FLASH_SR_RDERR)
-  if(__HAL_FLASH_GET_FLAG((FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | \
-    FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR | FLASH_FLAG_RDERR)) != RESET)
+  if (__HAL_FLASH_GET_FLAG((FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | \
+                            FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR | FLASH_FLAG_RDERR)) != RESET)
 #else
-  if(__HAL_FLASH_GET_FLAG((FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | \
-    FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR)) != RESET)
+  if (__HAL_FLASH_GET_FLAG((FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | \
+                            FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR)) != RESET)
 #endif /* FLASH_SR_RDERR */
   {
-    if(pFlash.ProcedureOnGoing == FLASH_PROC_SECTERASE)
+    if (pFlash.ProcedureOnGoing == FLASH_PROC_SECTERASE)
     {
       /*return the faulty sector*/
       addresstmp = pFlash.Sector;
       pFlash.Sector = 0xFFFFFFFFU;
     }
-    else if(pFlash.ProcedureOnGoing == FLASH_PROC_MASSERASE)
+    else if (pFlash.ProcedureOnGoing == FLASH_PROC_MASSERASE)
     {
       /*return the faulty bank*/
       addresstmp = pFlash.Bank;
@@ -299,18 +301,18 @@ void HAL_FLASH_IRQHandler(void)
   }
 
   /* Check FLASH End of Operation flag  */
-  if(__HAL_FLASH_GET_FLAG(FLASH_FLAG_EOP) != RESET)
+  if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_EOP) != RESET)
   {
     /* Clear FLASH End of Operation pending bit */
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP);
 
-    if(pFlash.ProcedureOnGoing == FLASH_PROC_SECTERASE)
+    if (pFlash.ProcedureOnGoing == FLASH_PROC_SECTERASE)
     {
       /*Nb of sector to erased can be decreased*/
       pFlash.NbSectorsToErase--;
 
       /* Check if there are still sectors to erase*/
-      if(pFlash.NbSectorsToErase != 0U)
+      if (pFlash.NbSectorsToErase != 0U)
       {
         addresstmp = pFlash.Sector;
         /*Indicate user which sector has been erased*/
@@ -329,7 +331,7 @@ void HAL_FLASH_IRQHandler(void)
         pFlash.ProcedureOnGoing = FLASH_PROC_NONE;
 
         /* Flush the caches to be sure of the data consistency */
-        FLASH_FlushCaches() ;
+        FLASH_FlushCaches();
 
         /* FLASH EOP interrupt user callback */
         HAL_FLASH_EndOfOperationCallback(addresstmp);
@@ -337,11 +339,11 @@ void HAL_FLASH_IRQHandler(void)
     }
     else
     {
-      if(pFlash.ProcedureOnGoing == FLASH_PROC_MASSERASE)
+      if (pFlash.ProcedureOnGoing == FLASH_PROC_MASSERASE)
       {
         /* MassErase ended. Return the selected bank */
         /* Flush the caches to be sure of the data consistency */
-        FLASH_FlushCaches() ;
+        FLASH_FlushCaches();
 
         /* FLASH EOP interrupt user callback */
         HAL_FLASH_EndOfOperationCallback(pFlash.Bank);
@@ -356,7 +358,7 @@ void HAL_FLASH_IRQHandler(void)
     }
   }
 
-  if(pFlash.ProcedureOnGoing == FLASH_PROC_NONE)
+  if (pFlash.ProcedureOnGoing == FLASH_PROC_NONE)
   {
     /* Operation is completed, disable the PG, SER, SNB and MER Bits */
     CLEAR_BIT(FLASH->CR, (FLASH_CR_PG | FLASH_CR_SER | FLASH_CR_SNB | FLASH_MER_BIT));
@@ -366,9 +368,6 @@ void HAL_FLASH_IRQHandler(void)
 
     /* Disable Error source interrupt */
     __HAL_FLASH_DISABLE_IT(FLASH_IT_ERR);
-
-    /* Process Unlocked */
-    __HAL_UNLOCK(&pFlash);
   }
 }
 
@@ -412,8 +411,8 @@ __weak void HAL_FLASH_OperationErrorCallback(uint32_t ReturnValue)
   */
 
 /** @defgroup FLASH_Exported_Functions_Group2 Peripheral Control functions
- *  @brief   management functions
- *
+  *  @brief   management functions
+  *
 @verbatim
  ===============================================================================
                       ##### Peripheral Control functions #####
@@ -434,14 +433,14 @@ HAL_StatusTypeDef HAL_FLASH_Unlock(void)
 {
   HAL_StatusTypeDef status = HAL_OK;
 
-  if(READ_BIT(FLASH->CR, FLASH_CR_LOCK) != RESET)
+  if (READ_BIT(FLASH->CR, FLASH_CR_LOCK) != RESET)
   {
     /* Authorize the FLASH Registers access */
     WRITE_REG(FLASH->KEYR, FLASH_KEY1);
     WRITE_REG(FLASH->KEYR, FLASH_KEY2);
 
     /* Verify Flash is unlocked */
-    if(READ_BIT(FLASH->CR, FLASH_CR_LOCK) != RESET)
+    if (READ_BIT(FLASH->CR, FLASH_CR_LOCK) != RESET)
     {
       status = HAL_ERROR;
     }
@@ -468,7 +467,7 @@ HAL_StatusTypeDef HAL_FLASH_Lock(void)
   */
 HAL_StatusTypeDef HAL_FLASH_OB_Unlock(void)
 {
-  if((FLASH->OPTCR & FLASH_OPTCR_OPTLOCK) != RESET)
+  if ((FLASH->OPTCR & FLASH_OPTCR_OPTLOCK) != RESET)
   {
     /* Authorizes the Option Byte register programming */
     FLASH->OPTKEYR = FLASH_OPT_KEY1;
@@ -504,7 +503,7 @@ HAL_StatusTypeDef HAL_FLASH_OB_Launch(void)
   *(__IO uint8_t *)OPTCR_BYTE0_ADDRESS |= FLASH_OPTCR_OPTSTRT;
 
   /* Wait for last operation to be completed */
-  return(FLASH_WaitForLastOperation((uint32_t)FLASH_TIMEOUT_VALUE));
+  return (FLASH_WaitForLastOperation((uint32_t)FLASH_TIMEOUT_VALUE));
 }
 
 /**
@@ -512,8 +511,8 @@ HAL_StatusTypeDef HAL_FLASH_OB_Launch(void)
   */
 
 /** @defgroup FLASH_Exported_Functions_Group3 Peripheral State and Errors functions
- *  @brief   Peripheral Errors functions
- *
+  *  @brief   Peripheral Errors functions
+  *
 @verbatim
  ===============================================================================
                 ##### Peripheral Errors functions #####
@@ -537,7 +536,7 @@ HAL_StatusTypeDef HAL_FLASH_OB_Launch(void)
   */
 uint32_t HAL_FLASH_GetError(void)
 {
-   return pFlash.ErrorCode;
+  return pFlash.ErrorCode;
 }
 
 /**
@@ -562,11 +561,11 @@ HAL_StatusTypeDef FLASH_WaitForLastOperation(uint32_t Timeout)
   /* Get tick */
   tickstart = HAL_GetTick();
 
-  while(__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY) != RESET)
+  while (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY) != RESET)
   {
-    if(Timeout != HAL_MAX_DELAY)
+    if (Timeout != HAL_MAX_DELAY)
     {
-      if((Timeout == 0U)||((HAL_GetTick() - tickstart ) > Timeout))
+      if ((Timeout == 0U) || ((HAL_GetTick() - tickstart) > Timeout))
       {
         return HAL_TIMEOUT;
       }
@@ -580,11 +579,11 @@ HAL_StatusTypeDef FLASH_WaitForLastOperation(uint32_t Timeout)
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP);
   }
 #if defined(FLASH_SR_RDERR)
-  if(__HAL_FLASH_GET_FLAG((FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | \
-                           FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR | FLASH_FLAG_RDERR)) != RESET)
+  if (__HAL_FLASH_GET_FLAG((FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | \
+                            FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR | FLASH_FLAG_RDERR)) != RESET)
 #else
-  if(__HAL_FLASH_GET_FLAG((FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | \
-                           FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR)) != RESET)
+  if (__HAL_FLASH_GET_FLAG((FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | \
+                            FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR)) != RESET)
 #endif /* FLASH_SR_RDERR */
   {
     /*Save the error code*/
@@ -619,9 +618,15 @@ static void FLASH_Program_DoubleWord(uint32_t Address, uint64_t Data)
   FLASH->CR |= FLASH_PSIZE_DOUBLE_WORD;
   FLASH->CR |= FLASH_CR_PG;
 
-  /* Program the double-word */
-  *(__IO uint32_t*)Address = (uint32_t)Data;
-  *(__IO uint32_t*)(Address+4) = (uint32_t)(Data >> 32);
+  /* Program first word */
+  *(__IO uint32_t *)Address = (uint32_t)Data;
+
+  /* Barrier to ensure programming is performed in 2 steps, in right order
+    (independently of compiler optimization behavior) */
+  __ISB();
+
+  /* Program second word */
+  *(__IO uint32_t *)(Address + 4) = (uint32_t)(Data >> 32);
 }
 
 
@@ -647,7 +652,7 @@ static void FLASH_Program_Word(uint32_t Address, uint32_t Data)
   FLASH->CR |= FLASH_PSIZE_WORD;
   FLASH->CR |= FLASH_CR_PG;
 
-  *(__IO uint32_t*)Address = Data;
+  *(__IO uint32_t *)Address = Data;
 }
 
 /**
@@ -672,7 +677,7 @@ static void FLASH_Program_HalfWord(uint32_t Address, uint16_t Data)
   FLASH->CR |= FLASH_PSIZE_HALF_WORD;
   FLASH->CR |= FLASH_CR_PG;
 
-  *(__IO uint16_t*)Address = Data;
+  *(__IO uint16_t *)Address = Data;
 }
 
 /**
@@ -697,7 +702,7 @@ static void FLASH_Program_Byte(uint32_t Address, uint8_t Data)
   FLASH->CR |= FLASH_PSIZE_BYTE;
   FLASH->CR |= FLASH_CR_PG;
 
-  *(__IO uint8_t*)Address = Data;
+  *(__IO uint8_t *)Address = Data;
 }
 
 /**
@@ -706,23 +711,23 @@ static void FLASH_Program_Byte(uint32_t Address, uint8_t Data)
   */
 static void FLASH_SetErrorCode(void)
 {
-  if(__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) != RESET)
+  if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) != RESET)
   {
-   pFlash.ErrorCode |= HAL_FLASH_ERROR_WRP;
+    pFlash.ErrorCode |= HAL_FLASH_ERROR_WRP;
 
-   /* Clear FLASH write protection error pending bit */
-   __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_WRPERR);
+    /* Clear FLASH write protection error pending bit */
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_WRPERR);
   }
 
-  if(__HAL_FLASH_GET_FLAG(FLASH_FLAG_PGAERR) != RESET)
+  if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_PGAERR) != RESET)
   {
-   pFlash.ErrorCode |= HAL_FLASH_ERROR_PGA;
+    pFlash.ErrorCode |= HAL_FLASH_ERROR_PGA;
 
-   /* Clear FLASH Programming alignment error pending bit */
-   __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_PGAERR);
+    /* Clear FLASH Programming alignment error pending bit */
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_PGAERR);
   }
 
-  if(__HAL_FLASH_GET_FLAG(FLASH_FLAG_PGPERR) != RESET)
+  if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_PGPERR) != RESET)
   {
     pFlash.ErrorCode |= HAL_FLASH_ERROR_PGP;
 
@@ -730,7 +735,7 @@ static void FLASH_SetErrorCode(void)
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_PGPERR);
   }
 
-  if(__HAL_FLASH_GET_FLAG(FLASH_FLAG_PGSERR) != RESET)
+  if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_PGSERR) != RESET)
   {
     pFlash.ErrorCode |= HAL_FLASH_ERROR_PGS;
 
@@ -738,7 +743,7 @@ static void FLASH_SetErrorCode(void)
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_PGSERR);
   }
 #if defined(FLASH_SR_RDERR)
-  if(__HAL_FLASH_GET_FLAG(FLASH_FLAG_RDERR) != RESET)
+  if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_RDERR) != RESET)
   {
     pFlash.ErrorCode |= HAL_FLASH_ERROR_RD;
 
@@ -746,7 +751,7 @@ static void FLASH_SetErrorCode(void)
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_RDERR);
   }
 #endif /* FLASH_SR_RDERR */
-  if(__HAL_FLASH_GET_FLAG(FLASH_FLAG_OPERR) != RESET)
+  if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_OPERR) != RESET)
   {
     pFlash.ErrorCode |= HAL_FLASH_ERROR_OPERATION;
 
@@ -769,4 +774,3 @@ static void FLASH_SetErrorCode(void)
   * @}
   */
 
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
