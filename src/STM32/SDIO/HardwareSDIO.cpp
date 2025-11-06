@@ -38,12 +38,12 @@ extern "C" void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsdio)
   HardwareSDIO::SDIO1.ioComplete = true;
 #ifdef RTOS
   TaskBase::GiveFromISR(HardwareSDIO::SDIO1.waitingTask, NotifyIndices::Sdio);
-
 #endif
 }    
 
 #if STM32H7
-extern "C" void HAL_SD_AbortCallback(SD_HandleTypeDef *hsd) {
+extern "C" void HAL_SD_AbortCallback(SD_HandleTypeDef *hsd)
+{
 }
 
 extern "C" void SDMMC1_IRQHandler()
@@ -54,15 +54,11 @@ extern "C" void SDMMC1_IRQHandler()
 
 extern "C" void DMA2_Stream3_IRQHandler()
 {
-  HAL_DMA_IRQHandler(&(HardwareSDIO::SDIO1.dmaRx));    
+  HAL_DMA_IRQHandler(&(HardwareSDIO::SDIO1.dmaTxRx));    
 }
 
-extern "C" void DMA2_Stream6_IRQHandler()
+extern "C" void HAL_SD_AbortCallback(SD_HandleTypeDef *hsd)
 {
-  HAL_DMA_IRQHandler(&(HardwareSDIO::SDIO1.dmaTx));    
-}
-
-extern "C" void HAL_SD_AbortCallback(SD_HandleTypeDef *hsd) {
 }
 
 extern "C" void SDIO_IRQHandler()
@@ -206,10 +202,9 @@ uint8_t HardwareSDIO::Init() noexcept
   NVIC_EnableIRQ(SDIO_IRQn);
   // DMA setup
   __HAL_RCC_DMA2_CLK_ENABLE();
-  initDmaStream(dmaRx, DMA2_Stream3, DMA_CHANNEL_4, DMA2_Stream3_IRQn, priority, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
-  initDmaStream(dmaTx, DMA2_Stream6, DMA_CHANNEL_4, DMA2_Stream6_IRQn, priority, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
-  __HAL_LINKDMA(&hsd, hdmarx, dmaRx);
-  __HAL_LINKDMA(&hsd, hdmatx, dmaTx);
+  initDmaStream(dmaTxRx, DMA2_Stream3, DMA_CHANNEL_4, DMA2_Stream3_IRQn, priority, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
+  __HAL_LINKDMA(&hsd, hdmarx, dmaTxRx);
+  __HAL_LINKDMA(&hsd, hdmatx, dmaTxRx);
 #endif
 #ifdef RTOS
   waitingTask = 0;

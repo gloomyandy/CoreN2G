@@ -18,7 +18,6 @@
 #define SD_PRESENT               ((uint8_t)0x01)
 #define SD_NOT_PRESENT           ((uint8_t)0x00)
 #define SD_DATATIMEOUT           ((uint32_t)100000000)
-extern "C" void DMA2_Stream6_IRQHandler(void);
 extern "C" void DMA2_Stream3_IRQHandler(void);
 extern "C" void SDMMC1_IRQHandler(void);
 extern "C" void SDIO_IRQHandler(void);
@@ -44,8 +43,7 @@ private:
     void initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, NvicPriority pri, uint32_t dir, uint32_t minc) noexcept;
     uint8_t tryInit(bool highspeed) noexcept;
     SD_HandleTypeDef hsd;
-    DMA_HandleTypeDef dmaRx;
-    DMA_HandleTypeDef dmaTx;
+    DMA_HandleTypeDef dmaTxRx;
     NvicPriority priority;
 #ifdef RTOS
     TaskHandle waitingTask;
@@ -58,7 +56,6 @@ private:
 #if STM32H7
     friend void SDMMC1_IRQHandler();
 #else
-    friend void DMA2_Stream6_IRQHandler();
     friend void DMA2_Stream3_IRQHandler();
     friend void SDIO_IRQHandler();
 #endif
