@@ -203,6 +203,7 @@ uint8_t HardwareSDIO::Init() noexcept
   NVIC_EnableIRQ(SDMMC1_IRQn);      
 #else
   NVIC_SetPriority(SDIO_IRQn, priority);
+  NVIC_EnableIRQ(SDIO_IRQn);
   // DMA setup
   __HAL_RCC_DMA2_CLK_ENABLE();
   initDmaStream(dmaRx, DMA2_Stream3, DMA_CHANNEL_4, DMA2_Stream3_IRQn, priority, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
