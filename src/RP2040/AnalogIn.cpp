@@ -23,6 +23,7 @@
 #include <hardware/adc.h>
 #include <hardware/dma.h>
 #include <hardware/structs/adc.h>
+#include <hardware/structs/sysinfo.h>
 
 constexpr uint32_t AdcConversionTimeout = 5;		// milliseconds
 
@@ -393,7 +394,13 @@ uint16_t AnalogIn::ReadChannel(AdcInput adcin) noexcept
 // Enable an on-chip MCU temperature sensor
 void AnalogIn::EnableTemperatureSensor(AnalogInCallbackFunction fn, CallbackParameter param, uint32_t ticksPerCall) noexcept
 {
-	adc->EnableChannel(GetInputNumber(AdcInput::adc0_tempSense), fn, param, ticksPerCall);
+#if RP2040
+	const unsigned int tempSensorChannel = 4;
+#elif RP2350
+	// Read package_sel: 0 = QFN-80 (48 GPIOs, temp on channel 8), 1 = QFN-60 (30 GPIOs, temp on channel 4)
+	const unsigned int tempSensorChannel = (sysinfo_hw->package_sel & 1) ? 4 : 8;
+#endif
+	adc->EnableChannel(tempSensorChannel, fn, param, ticksPerCall);
 }
 
 void AnalogIn::GetDebugInfo(uint32_t &convsStarted, uint32_t &convsCompleted, uint32_t &convTimeouts, uint32_t& errs) noexcept
