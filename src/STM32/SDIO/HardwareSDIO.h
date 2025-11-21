@@ -33,15 +33,15 @@ public:
     uint8_t Init() noexcept;
     uint8_t ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t NumOfBlocks, uint32_t Timeout) noexcept;
     uint8_t WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t NumOfBlocks, uint32_t Timeout) noexcept;
-    uint8_t Erase(uint32_t StartAddr, uint32_t EndAddr) noexcept;
     uint8_t GetCardState(void) noexcept;
     uint32_t GetCardInfo(HAL_SD_CardInfoTypeDef *CardInfo) noexcept;
     uint8_t IsDetected(void) noexcept;
     static HardwareSDIO SDIO1;
 
 private:
+    bool waitReady(uint32_t timeout) noexcept;
     void initDmaStream(DMA_HandleTypeDef& hdma, DMA_Stream_TypeDef *inst, uint32_t chan, IRQn_Type irq, NvicPriority pri, uint32_t dir, uint32_t minc) noexcept;
-    uint8_t tryInit(bool highspeed) noexcept;
+    uint8_t initCard() noexcept;
     SD_HandleTypeDef hsd;
     DMA_HandleTypeDef dmaTxRx;
     NvicPriority priority;

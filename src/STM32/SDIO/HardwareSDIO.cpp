@@ -98,70 +98,91 @@ HardwareSDIO::HardwareSDIO() noexcept
 {   
 }
 
-uint8_t HardwareSDIO::tryInit(bool highspeed) noexcept
+bool HardwareSDIO::waitReady(uint32_t timeout) noexcept
 {
-  // TODO: Consider using STM32H7 code to switch to higher speed
+  uint32_t start = millis();
+  while((HAL_SD_GetCardState(&hsd) & 0xff) != HAL_SD_CARD_TRANSFER)
+  {
+    uint32_t elapsed = millis() - start;
+    if (elapsed > 100)
+    {
+#if RTOS
+      delay(1);
+#endif
+      if (elapsed > timeout)
+      {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+uint8_t HardwareSDIO::initCard() noexcept
+{
   uint8_t sd_state = MSD_OK;
-  #if USE_SD_HIGHSPEED
-  int speed = highspeed ? GPIO_SPEED_FREQ_HIGH : GPIO_SPEED_FREQ_MEDIUM;
-  pin_speed(PC_8, speed);
-  pin_speed(PC_9, speed);
-  pin_speed(PC_10, speed);
-  pin_speed(PC_11, speed);
-  pin_speed(PC_12, speed);
-  pin_speed(PD_2, speed);
-  #endif
-  /* HAL SD initialization */
+
   int retryCnt = 0;
   do {
-    //if (retryCnt > 0) debugPrintf("SDIO Init: retry %d\n", retryCnt);
 #if STM32H7
     __HAL_RCC_SDMMC1_FORCE_RESET();
+    delay(10);
     __HAL_RCC_SDMMC1_RELEASE_RESET();
     hsd.Instance = SDMMC1;
     hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
-    hsd.Init.ClockDiv = SDMMC_NSpeed_CLK_DIV;
+    hsd.Init.ClockDiv = SDMMC_INIT_CLK_DIV;
 #else
     __HAL_RCC_SDIO_FORCE_RESET();
+    delay(10);
     __HAL_RCC_SDIO_RELEASE_RESET();
     hsd.Instance = SDIO;
     hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
-    hsd.Init.ClockDiv = 0;
-    hsd.Init.ClockBypass = (highspeed ? SDIO_CLOCK_BYPASS_ENABLE : SDIO_CLOCK_BYPASS_DISABLE);
+    hsd.Init.ClockDiv = SDIO_INIT_CLK_DIV;
+    hsd.Init.ClockBypass = SDIO_CLOCK_BYPASS_DISABLE;
 #endif
     hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
     hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
     hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
-
+    HAL_SD_DeInit(&hsd);
+    delay(5);
     sd_state = HAL_SD_Init(&hsd);
     // HAL_SD_Init does not report an error if there is no card to talk to, HAL_SD_InitCard
     // does, so call that to check.
     if (sd_state == MSD_OK)
     {
       sd_state = HAL_SD_InitCard(&hsd);
-      //if (sd_state != MSD_OK)
-        //debugPrintf("HAL_SD_InitCard returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
     }
-    //else
-      //debugPrintf("HAL_SD_Init returns %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
 
-    /* Configure SD Bus width (4 bits mode selected) */
-    if (sd_state == MSD_OK) {
-      /* Enable wide operation */
-      sd_state = HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B);
-      if (sd_state != HAL_OK) {
-        debugPrintf("Failed to select wide bus mode highspeed %d ret %x code %x\n", highspeed, sd_state, (unsigned)HAL_SD_GetError(&hsd));
-        if (retryCnt < 2)
-        {
-          // Something odd going on deinit and try again
-          sd_state = HAL_SD_DeInit(&hsd);
-          debugPrintf("HAL_SD_DeInit returns %x\n", (unsigned) sd_state);
-          sd_state = MSD_ERROR;
-        }
-        else
-          // give up and try to use single bit mode
-          sd_state = MSD_OK;
+    // Configure SD high speed and bus width
+    if (sd_state == MSD_OK && retryCnt < 2)
+    {
+      // Use highspeed mode on STM32H7. The errata for STM32F4 basically says this does not work when using a 48MHz clock
+      // which we need as it is shared with USB.
+#if STM32H7
+      sd_state = HAL_SD_ConfigSpeedBusOperation(&hsd, SDMMC_SPEED_MODE_AUTO);
+      if (sd_state == HAL_OK)
+      {
+        // Switch clock speed to high speed
+        hsd.Init.ClockDiv = SDMMC_HSPEED_CLK_DIV;
       }
+      else
+      {
+        debugPrintf("Failed to select high speed mode. error %d code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
+        hsd.Init.ClockDiv = SDMMC_NSPEED_CLK_DIV;
+      }
+#else
+      hsd.Init.ClockDiv = SDIO_TRANSFER_CLK_DIV;
+#endif 
+      // Enable wide operation which will also set the clock speed
+      sd_state = HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B);
+      if (sd_state != HAL_OK) 
+      {
+        debugPrintf("Failed to select wide bus mode ret %x code %x\n", sd_state, (unsigned)HAL_SD_GetError(&hsd));
+      }
+    }
+    if (sd_state == MSD_OK && !waitReady(1000))
+    {
+      sd_state = MSD_ERROR;
     }
   } while (sd_state != MSD_OK && retryCnt++ < 2);
   return sd_state == MSD_OK ? MSD_OK : MSD_ERROR;
@@ -209,18 +230,8 @@ uint8_t HardwareSDIO::Init() noexcept
 #ifdef RTOS
   waitingTask = 0;
 #endif
-  // Some SD cards are not happy writing when using 48MHz
-  // so for now we stick with 24.
-#if USE_SD_HIGHSPEED
-  // try to init in highspeed mode
-  sd_state = tryInit(true);
-  if (sd_state != MSD_OK)
-    // switch to standard speed
-    sd_state = tryInit(false);
-#else
-  sd_state = tryInit(false);
-#endif
-  return sd_state;
+sd_state = initCard();
+return sd_state;
 }
 
 /**
@@ -234,21 +245,14 @@ uint8_t HardwareSDIO::Init() noexcept
 uint8_t HardwareSDIO::ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t NumOfBlocks, uint32_t Timeout) noexcept
 {
   uint8_t sd_state = MSD_OK;
-  uint32_t start = millis();
-
-  while(HAL_SD_GetCardState(&hsd) != HAL_SD_CARD_TRANSFER)
+  if (!waitReady(Timeout))
   {
-    if (millis() - start > 1000)
-    {
-      //debugPrintf("SDIO Card not ready on read\n");
       return MSD_ERROR;
-    }
   }
-
-#ifdef RTOS
+  #ifdef RTOS
   waitingTask = TaskBase::GetCallerTaskHandle();
 #else
-  start = millis();
+  uint32_t start = millis();
 #endif
   ioComplete = false;
   HAL_StatusTypeDef stat = HAL_SD_ReadBlocks_DMA(&hsd, (uint8_t *)pData, ReadAddr, NumOfBlocks);
@@ -287,25 +291,19 @@ uint8_t HardwareSDIO::ReadBlocks(uint32_t *pData, uint32_t ReadAddr, uint32_t Nu
 uint8_t HardwareSDIO::WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t NumOfBlocks, uint32_t Timeout) noexcept
 {
   uint8_t sd_state = MSD_OK;
-  uint32_t start = millis();
-  while(HAL_SD_GetCardState(&hsd) != HAL_SD_CARD_TRANSFER)
+  if (!waitReady(Timeout))
   {
-    if (millis() - start > 1000)
-    {
-      debugPrintf("SDIO Card not ready on write\n");
       return MSD_ERROR;
-    }
   }
-
 #ifdef RTOS
   waitingTask = TaskBase::GetCallerTaskHandle();
 #else
-  start = millis();
+  uint32_t start = millis();
 #endif
   ioComplete = false;
   HAL_StatusTypeDef stat = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)pData, WriteAddr, NumOfBlocks);
   if (stat != HAL_OK) {
-    debugPrintf("SDIO Write %d len %d error %d\n", (int)WriteAddr, (int)NumOfBlocks, stat);
+    debugPrintf("SDIO Write %d len %d return %d error %x\n", (int)WriteAddr, (int)NumOfBlocks, stat, (unsigned)HAL_SD_GetError(&hsd));
     return MSD_ERROR;
   }
   // The SBC code can sometimes spam us with task notifications, check that our operation has finished
@@ -326,25 +324,6 @@ uint8_t HardwareSDIO::WriteBlocks(uint32_t *pData, uint32_t WriteAddr, uint32_t 
   #ifdef RTOS
   waitingTask = 0;
   #endif
-
-  return sd_state;
-}
-
-
-
-/**
-  * @brief  Erases the specified memory area of the given SD card.
-  * @param  StartAddr: Start byte address
-  * @param  EndAddr: End byte address
-  * @retval SD status
-  */
-uint8_t HardwareSDIO::Erase(uint32_t StartAddr, uint32_t EndAddr) noexcept
-{
-  uint8_t sd_state = MSD_OK;
-
-  if (HAL_SD_Erase(&hsd, StartAddr, EndAddr) != HAL_OK) {
-    sd_state = MSD_ERROR;
-  }
 
   return sd_state;
 }

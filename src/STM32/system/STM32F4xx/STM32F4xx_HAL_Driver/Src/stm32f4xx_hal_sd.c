@@ -3091,7 +3091,7 @@ static uint32_t SD_WideBus_Disable(SD_HandleTypeDef *hsd)
   }
 }
 
-
+extern void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 /**
   * @brief  Finds the SD card SCR register value.
   * @param  hsd: Pointer to SD handle
@@ -3140,8 +3140,22 @@ static uint32_t SD_FindSCR(SD_HandleTypeDef *hsd, uint32_t *pSCR)
   {
     if(__HAL_SD_GET_FLAG(hsd, SDIO_FLAG_RXDAVL))
     {
+#if HAL_RRF
+      // We sometimes see a memory overwrite with the original code
+      if (index >= 2)
+      {
+        debugPrintf("Warning SDIO memory overwrite index %d\n", (int)index);
+        (void)SDIO_ReadFIFO(hsd->Instance);
+      }
+      else
+      {
+        *(tempscr + index) = SDIO_ReadFIFO(hsd->Instance);
+        index++;
+      }
+#else
       *(tempscr + index) = SDIO_ReadFIFO(hsd->Instance);
       index++;
+#endif
     }
     else if(!__HAL_SD_GET_FLAG(hsd, SDIO_FLAG_RXACT))
     {
