@@ -23,6 +23,7 @@
 #include <hardware/adc.h>
 #include <hardware/dma.h>
 #include <hardware/structs/adc.h>
+#include <hardware/structs/sysinfo.h>
 
 constexpr uint32_t AdcConversionTimeout = 5;		// milliseconds
 
@@ -59,17 +60,22 @@ public:
 	bool StartConversion() noexcept;
 	void ExecuteCallbacks() noexcept;
 
+	unsigned int GetTemperatureAdcChannel() noexcept {return NumAdcChannels - 1;}
+
 protected:
 	bool InternalEnableChannel(unsigned int chan, AnalogInCallbackFunction fn, CallbackParameter param, uint32_t p_ticksPerCall) noexcept;
 	void ReInit() noexcept;
 
 	static void DmaCompleteCallback(CallbackParameter cp, DmaCallbackReason reason) noexcept;
 #if RP2040
-	static constexpr size_t NumAdcChannels = 5;			// number of channels per ADC
+	static constexpr size_t MaxAdcChannels = 5;			// number of channels per ADC (including mcu temp)
+	static constexpr size_t MaxSequenceLength = 5;		// the maximum length of the read sequence
+	static constexpr size_t NumAdcChannels = 5;			// Actual number of ADC channels on this device
 #elif RP2350
-	static constexpr size_t NumAdcChannels = 9;			// number of channels per ADC
-#endif
+	static constexpr size_t MaxAdcChannels = 9;			// number of channels per ADC (including mcu temp)
 	static constexpr size_t MaxSequenceLength = 9;		// the maximum length of the read sequence
+	size_t NumAdcChannels = 5;							// Actual number of ADC channels on this device (different for two 2350 packages)
+#endif
 	volatile uint32_t channelsEnabled;
 	volatile TaskHandle taskToWake;
 	uint32_t whenLastConversionStarted;
@@ -80,12 +86,12 @@ protected:
 	volatile State state;
 	volatile DmaCallbackReason dmaFinishedReason;
 
-	AnalogInCallbackFunction callbackFunctions[NumAdcChannels];
-	CallbackParameter callbackParams[NumAdcChannels];
-	uint32_t ticksPerCall[NumAdcChannels];
-	uint32_t ticksAtLastCall[NumAdcChannels];
+	AnalogInCallbackFunction callbackFunctions[MaxAdcChannels];
+	CallbackParameter callbackParams[MaxAdcChannels];
+	uint32_t ticksPerCall[MaxAdcChannels];
+	uint32_t ticksAtLastCall[MaxAdcChannels];
 	volatile uint16_t results[MaxSequenceLength];
-	volatile uint16_t resultsByChannel[NumAdcChannels];
+	volatile uint16_t resultsByChannel[MaxAdcChannels];
 };
 
 AdcClass::AdcClass(DmaChannel p_dmaChan, DmaPriority p_dmaPrio) noexcept
@@ -93,6 +99,10 @@ AdcClass::AdcClass(DmaChannel p_dmaChan, DmaPriority p_dmaPrio) noexcept
 	  dmaChan(p_dmaChan), dmaPrio(p_dmaPrio), numChannelsEnabled(0), state(State::noChannels)
 {
 	dma_channel_claim(dmaChan);
+#if RP2350
+	// We need to set the number of actual ADC inputs we have, for the RP2350 this depends on the package
+	NumAdcChannels = (sysinfo_hw->package_sel & 1) ? 5 : 9;
+#endif
 	for (size_t i = 0; i < NumAdcChannels; ++i)
 	{
 		callbackFunctions[i] = nullptr;
@@ -393,7 +403,7 @@ uint16_t AnalogIn::ReadChannel(AdcInput adcin) noexcept
 // Enable an on-chip MCU temperature sensor
 void AnalogIn::EnableTemperatureSensor(AnalogInCallbackFunction fn, CallbackParameter param, uint32_t ticksPerCall) noexcept
 {
-	adc->EnableChannel(GetInputNumber(AdcInput::adc0_tempSense), fn, param, ticksPerCall);
+	adc->EnableChannel(adc->GetTemperatureAdcChannel(), fn, param, ticksPerCall);
 }
 
 void AnalogIn::GetDebugInfo(uint32_t &convsStarted, uint32_t &convsCompleted, uint32_t &convTimeouts, uint32_t& errs) noexcept
