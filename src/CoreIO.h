@@ -794,7 +794,6 @@ enum class AdcInput : uint8_t
 #if RP2350
 	adc0_4, adc0_5, adc0_6, adc0_7,
 #endif
-	adc0_tempSense,
 	ldc1612 = 0x20,
 #else
 	adc0_4, adc0_5, adc0_6, adc0_7, adc0_8, adc0_9,
