@@ -79,9 +79,10 @@ HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_REQUEST_SPI3_RX
 HardwareSPI HardwareSPI::SSP4(SPI4, SPI4_IRQn, DMA1_Stream1, DMA_REQUEST_SPI4_RX, DMA1_Stream1_IRQn, DMA1_Stream2, DMA_REQUEST_SPI4_TX, DMA1_Stream2_IRQn);
 #endif
 #if USE_SSP5
-HardwareSPI HardwareSPI::SSP5(SPI5, SPI5_IRQn);
+HardwareSPI HardwareSPI::SSP5(SPI5, SPI5_IRQn, DMA2_Stream1, DMA_REQUEST_SPI5_RX, DMA2_Stream1_IRQn, DMA2_Stream2, DMA_REQUEST_SPI5_TX, DMA2_Stream2_IRQn);
 #endif
 #if USE_SSP6
+// SPI6 only has DMA via BDMA, currently we don't use that at all and have no easy way to test it...
 HardwareSPI HardwareSPI::SSP6(SPI6, SPI6_IRQn);
 #endif
 #else
@@ -513,6 +514,16 @@ extern "C" void SPI4_IRQHandler()
 #endif
 
 #if USE_SSP5
+extern "C" void DMA2_Stream1_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP5.dmaRx));
+}
+
+extern "C" void DMA2_Stream2_IRQHandler()
+{
+    HAL_DMA_IRQHandler(&(HardwareSPI::SSP5.dmaTx));
+}
+
 extern "C" void SPI5_IRQHandler()
 {
     HardwareSPI::SPI_IRQHandler(&(HardwareSPI::SSP5.spi.handle));

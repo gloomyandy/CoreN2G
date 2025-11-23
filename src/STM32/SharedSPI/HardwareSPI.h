@@ -20,6 +20,8 @@ extern "C" void DMA1_Stream1_IRQHandler() noexcept;
 extern "C" void DMA1_Stream2_IRQHandler() noexcept;
 extern "C" void DMA1_Stream6_IRQHandler() noexcept;
 extern "C" void DMA1_Stream7_IRQHandler() noexcept;
+extern "C" void DMA2_Stream1_IRQHandler() noexcept;
+extern "C" void DMA2_Stream2_IRQHandler() noexcept;
 extern "C" void SPI4_IRQHandler() noexcept;
 extern "C" void SPI5_IRQHandler() noexcept;
 extern "C" void SPI6_IRQHandler() noexcept;
@@ -97,6 +99,8 @@ private:
     friend void DMA1_Stream2_IRQHandler() noexcept;
     friend void DMA1_Stream6_IRQHandler() noexcept;
     friend void DMA1_Stream7_IRQHandler() noexcept;
+    friend void DMA2_Stream1_IRQHandler() noexcept;
+    friend void DMA2_Stream2_IRQHandler() noexcept;
     friend void SPI4_IRQHandler() noexcept;
     friend void SPI5_IRQHandler() noexcept;
     friend void SPI6_IRQHandler() noexcept;
