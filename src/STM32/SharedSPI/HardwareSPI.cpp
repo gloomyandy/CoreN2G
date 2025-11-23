@@ -19,12 +19,11 @@ The following Errata document describes problems which may be related to this is
 we are not using the FiFO in this case):
 https://www.st.com/resource/en/errata_sheet/dm00037591-stm32f405-407xx-and-stm32f415-417xx-device-limitations-stmicroelectronics.pdf
 
-For now the solution I've choosen is to not use DMA for SPI1 (as it is not possible to DMA1 with
+For now the solution I've choosen is to not use DMA for SPI1 (as it is not possible to use DMA1 with
 SPI1 and DMA1 is not able to access GPIO memory). This seems to work fine and since the SD card is
 only used in a synchronous manner did not require any code to be restructured. It also seems to
 be faster (I suspect because the SD card access code uses many short SPI operations and the DMA
-setup is relatively large). It is probably worth testing the interrupt based version at some
-point.
+setup is relatively large).
 
 Andy - 6/8/2020
 
@@ -46,13 +45,17 @@ It is the prefered operating mode when available. If a memory areas can not be a
 very short we fall back to using an iterrupt based version.
 
 Some notes on SPI optimisations 21/10/2025
-This file now contains code that has been extracted from the HAL files for H7 systems and optimised for use with RRF.
+This file now contains code that has been extracted from the HAL files for F4 and H7 systems and optimised for use with RRF.
 This code is used in conjunction with the standard HAL routines to provide interrupt and DMA operations, polled mode
 is no longer used by RRF.
 
 The primary optimisation is to remove overhead checks/locks etc. that is not used by RRF. In additon the startTransfer*
 functions have been modified such that passing a nullptr for the write buffer will feed 0xff to output and that passing a
-nullptr for the read buffer will simply discard input from input.
+nullptr for the read buffer will simply discard data from input. In addition on H7 based systems we run in continuous mode
+(see notes below) that reduces the SPI latency.
+
+On all systems we do not use DMA for short transactions as in this case using interrupt based I/O is faster and has a lower
+latency. This is of particular use for the TMC SPI interface as transactions are short (5 bytes).
 
 */
 #if USE_SSP1 || USE_SSP2 || USE_SSP3 || USE_SSP4 || USE_SSP5 || USE_SSP6
@@ -106,6 +109,8 @@ HardwareSPI HardwareSPI::SSP3(SPI3, SPI3_IRQn, DMA1_Stream0, DMA_CHANNEL_0, DMA1
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 #if STM32F4
+//The following functions are optimised versions of the HAL code for F4 based systems.
+
 void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept
 {
   uint16_t val = hspi->Instance->DR;
@@ -164,8 +169,8 @@ void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept
 
 void HardwareSPI::SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma) noexcept
 {
-  SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)(((DMA_HandleTypeDef *)hdma)->Parent); /* Derogation MISRAC2012-Rule-11.5 */
-  /* Disable Rx/Tx DMA Request */
+  SPI_HandleTypeDef *hspi = (SPI_HandleTypeDef *)(((DMA_HandleTypeDef *)hdma)->Parent);
+  // Disable Rx/Tx DMA Request
   CLEAR_BIT(hspi->Instance->CR2, SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN);
 
   hspi->TxXferCount = 0U;
@@ -182,7 +187,6 @@ HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const u
 {
   static uint32_t dummyDMATxdata = 0xffffffff;
   static uint32_t dummyDMARxdata;
-  uint32_t savedMemInc;
 
 
   hspi->pTxBuffPtr  = (pTxData) ? (uint8_t *)pTxData : (uint8_t *)&dummyDMATxdata;
@@ -190,53 +194,43 @@ HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const u
   hspi->pRxBuffPtr  = (pRxData) ? (uint8_t *)pRxData : (uint8_t *)&dummyDMARxdata;
   hspi->RxXferCount = Size;
 
-  /* Set the transaction information */
+  // Set the transaction information
   hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
 
-  /* Set the SPI Tx/Rx DMA Half transfer complete callback */
+  // Set the SPI Tx/Rx DMA Half transfer complete callback
   hspi->hdmarx->XferHalfCpltCallback = NULL;
   hspi->hdmarx->XferCpltCallback     = SPI_DMATransmitReceiveCplt;
   hspi->hdmarx->XferErrorCallback = NULL;
   hspi->hdmarx->XferAbortCallback = NULL;
 
-  /* Enable the Rx DMA Stream/Channel  */
-  // If we are generating dummy data, we need to turn off memory increment
-  savedMemInc = hspi->hdmarx->Init.MemInc;
-  if (pRxData == NULL)
-    hspi->hdmatx->Init.MemInc = 0;
+  // Enable the Rx DMA Stream/Channel
   DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->DR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount, DMA_NORMAL, DMA_PERIPH_TO_MEMORY, (pRxData ? DMA_MINC_ENABLE : 0));
-  hspi->hdmarx->Init.MemInc = savedMemInc;
-  /* Enable Rx DMA Request */
+  // Enable Rx DMA Request
   SET_BIT(hspi->Instance->CR2, SPI_CR2_RXDMAEN);
 
-  /* Set the SPI Tx DMA transfer complete callback as NULL because the communication closing
-  is performed in DMA reception complete callback  */
+  // Set the SPI Tx DMA transfer complete callback as NULL because the communication closing
+  // is performed in DMA reception complete callback
   hspi->hdmatx->XferHalfCpltCallback = NULL;
   hspi->hdmatx->XferCpltCallback     = NULL;
   hspi->hdmatx->XferErrorCallback    = NULL;
   hspi->hdmatx->XferAbortCallback    = NULL;
-  // If we are generating dummy data, we need to turn off memory increment
-  savedMemInc = hspi->hdmatx->Init.MemInc;
-  if (pTxData == NULL)
-    hspi->hdmatx->Init.MemInc = 0;
-  /* Enable the Tx DMA Stream/Channel  */
+  // Enable the Tx DMA Stream/Channel
   DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->DR, hspi->TxXferCount, DMA_NORMAL, DMA_MEMORY_TO_PERIPH, (pTxData ? DMA_MINC_ENABLE : 0));
-  hspi->hdmatx->Init.MemInc = savedMemInc;
 
-  /* Check if the SPI is already enabled */
+  // Check if the SPI is already enabled
   if ((hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE)
   {
-    /* Enable SPI peripheral */
+    // Enable SPI peripheral
     __HAL_SPI_ENABLE(hspi);
   }
-  /* Enable Tx DMA Request */
+  // Enable Tx DMA Request
   SET_BIT(hspi->Instance->CR2, SPI_CR2_TXDMAEN);
   return HAL_OK;
 }
 
 HAL_StatusTypeDef HardwareSPI::startTransferIT(SPI_HandleTypeDef *hspi, const uint8_t *pTxData, uint8_t *pRxData, uint16_t Size) noexcept
 {
-  /* Set the transaction information */
+  // Set the transaction information
   hspi->ErrorCode   = HAL_SPI_ERROR_NONE;
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
   hspi->pRxBuffPtr  = (uint8_t *)pRxData;
@@ -264,10 +258,10 @@ HAL_StatusTypeDef HardwareSPI::startTransferIT(SPI_HandleTypeDef *hspi, const ui
     }
     CLEAR_BIT(hspi->Instance->CR1, SPI_CR1_DFF);
   }
-  /* Check if the SPI is already enabled */
+  // Check if the SPI is already enabled
   if ((hspi->Instance->CR1 & SPI_CR1_SPE) != SPI_CR1_SPE)
   {
-    /* Enable SPI peripheral */
+    // Enable SPI peripheral
     __HAL_SPI_ENABLE(hspi);
   }
   hspi->RxXferCount = Size;
@@ -293,43 +287,36 @@ this issue.
 */
 void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept
 {
-  uint32_t itsource = hspi->Instance->IER;
-  uint32_t itflag   = hspi->Instance->SR;
-  uint32_t trigger  = itsource & itflag;
-
-  /* SPI in mode Transmitter -------------------------------------------------*/
-  if (HAL_IS_BIT_SET(trigger, SPI_FLAG_DXP))
+  // read data from fifo
+  while (hspi->RxXferCount != 0UL && HAL_IS_BIT_SET(hspi->Instance->SR, SPI_FLAG_RXP))
   {
-    // Write data to fifo if we have any left
-    if (hspi->TxXferCount != 0UL)
-    {
-      if (hspi->pTxBuffPtr)
-      {
-        *(__IO uint8_t *)&hspi->Instance->TXDR = *((uint8_t *)hspi->pTxBuffPtr++);
-      }
-      else
-        *(__IO uint8_t *)&hspi->Instance->TXDR = 0xff;
-      hspi->TxXferCount--;
-    }
-    // read data from fifo
     if (hspi->pRxBuffPtr)
       *((uint8_t *)hspi->pRxBuffPtr++) = (*(__IO uint8_t *)&hspi->Instance->RXDR);
     else
       // Just discard the data
       *(__IO uint8_t *)&hspi->Instance->RXDR;
-    if (--hspi->RxXferCount == 0)
+    hspi->RxXferCount--;
+  }
+  // Write data to fifo if we have any left
+  while (hspi->TxXferCount != 0UL && HAL_IS_BIT_SET(hspi->Instance->SR, SPI_FLAG_TXP))
+  {
+    if (hspi->pTxBuffPtr)
     {
-      // finished receiving data, transfer now complete
-      __HAL_SPI_CLEAR_EOTFLAG(hspi);
-      __HAL_SPI_CLEAR_TXTFFLAG(hspi);
-
-      /* Disable ITs */
-      __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_TXP | SPI_IT_RXP | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF));
-      // Get pointer to containing object and handle operation complete
-      HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
-      s->transferActive = false;
-      if (s->callback) s->callback(s);
+      *(__IO uint8_t *)&hspi->Instance->TXDR = *((uint8_t *)hspi->pTxBuffPtr++);
     }
+    else
+      *(__IO uint8_t *)&hspi->Instance->TXDR = 0xff;
+    hspi->TxXferCount--;
+  }
+  if (hspi->RxXferCount == 0)
+  {
+    // finished receiving data, transfer now complete
+    // Disable ITs
+    __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_TXP | SPI_IT_RXP | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF));
+    // Get pointer to containing object and handle operation complete
+    HardwareSPI *s = (HardwareSPI *)((uint8_t *)hspi - ((uint8_t *)&(HardwareSPI::SSP1.spi.handle) - (uint8_t *)&HardwareSPI::SSP1));
+    s->transferActive = false;
+    if (s->callback) s->callback(s);
   }
 }
 
@@ -339,12 +326,9 @@ void HardwareSPI::SPI_DMATransmitReceiveCplt(DMA_HandleTypeDef *hdma) noexcept
 
   if (hspi->State != HAL_SPI_STATE_ABORT)
   {
-    __HAL_SPI_CLEAR_EOTFLAG(hspi);
-    __HAL_SPI_CLEAR_TXTFFLAG(hspi);
-    __HAL_SPI_CLEAR_SUSPFLAG(hspi);
-    /* Disable ITs */
+    // Disable ITs
     __HAL_SPI_DISABLE_IT(hspi, (SPI_IT_EOT | SPI_IT_TXP | SPI_IT_RXP | SPI_IT_DXP | SPI_IT_UDR | SPI_IT_OVR | SPI_IT_FRE | SPI_IT_MODF));
-    /* Disable Tx DMA Request */
+    // Disable Tx DMA Request
     CLEAR_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
     hspi->State = HAL_SPI_STATE_READY;
     // Get pointer to containing object and handle operation complete
@@ -365,10 +349,10 @@ HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const u
   hspi->pRxBuffPtr  = (pRxData) ? (uint8_t *)pRxData : (uint8_t *)&dummyDMARxdata;
   hspi->RxXferCount = Size;
 
-  /* Reset the Tx/Rx DMA bits */
+  // Reset the Tx/Rx DMA bits
   CLEAR_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN);
 
-  /* Set the SPI Tx/Rx DMA Half transfer complete callback */
+  // Set the SPI Tx/Rx DMA Half transfer complete callback
   hspi->hdmarx->XferHalfCpltCallback = NULL;
   hspi->hdmarx->XferCpltCallback     = SPI_DMATransmitReceiveCplt;
   hspi->hdmarx->XferErrorCallback = NULL;
@@ -381,27 +365,27 @@ HAL_StatusTypeDef HardwareSPI::startTransferDMA(SPI_HandleTypeDef *hspi, const u
     __HAL_SPI_ENABLE(hspi);
   }
 
-  /* Enable the Rx DMA Stream/Channel  */
+  // Enable the Rx DMA Stream/Channel
   DMA_Start_IT(hspi->hdmarx, (uint32_t)&hspi->Instance->RXDR, (uint32_t)hspi->pRxBuffPtr, hspi->RxXferCount, DMA_NORMAL, DMA_PERIPH_TO_MEMORY, (pRxData ? DMA_MINC_ENABLE : 0));
 
-  /* Enable Rx DMA Request */
+  // Enable Rx DMA Request
   SET_BIT(hspi->Instance->CFG1, SPI_CFG1_RXDMAEN);
 
-  /* Set the SPI Tx DMA transfer complete callback as NULL because the communication closing
-  is performed in DMA reception complete callback  */
+  // Set the SPI Tx DMA transfer complete callback as NULL because the communication closing
+  // is performed in DMA reception complete callback
   hspi->hdmatx->XferHalfCpltCallback = NULL;
   hspi->hdmatx->XferCpltCallback     = NULL;
   hspi->hdmatx->XferErrorCallback    = NULL;
   hspi->hdmatx->XferAbortCallback    = NULL;
-  /* Enable the Tx DMA Stream/Channel  */
+  // Enable the Tx DMA Stream/Channel
   DMA_Start_IT(hspi->hdmatx, (uint32_t)hspi->pTxBuffPtr, (uint32_t)&hspi->Instance->TXDR, hspi->TxXferCount, DMA_NORMAL, DMA_MEMORY_TO_PERIPH, (pTxData ? DMA_MINC_ENABLE : 0));
 
-  /* Enable Tx DMA Request */
+  // Enable Tx DMA Request
   SET_BIT(hspi->Instance->CFG1, SPI_CFG1_TXDMAEN);
 
   if (hspi->Init.Mode == SPI_MODE_MASTER)
   {
-    /* Master transfer start */
+    // Master transfer start
     SET_BIT(hspi->Instance->CR1, SPI_CR1_CSTART);
   }
 
@@ -417,7 +401,7 @@ HAL_StatusTypeDef HardwareSPI::startTransferIT(SPI_HandleTypeDef *hspi, const ui
   hspi->pRxBuffPtr  = (uint8_t *)pRxData;
   hspi->RxXferCount = Size;
 
-  /* Fill in the TxFIFO */
+  // Fill in the TxFIFO
   while ((__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_TXP)) && (Size != 0UL))
   {
     if (pTxData)
@@ -431,11 +415,16 @@ HAL_StatusTypeDef HardwareSPI::startTransferIT(SPI_HandleTypeDef *hspi, const ui
   __DSB();
   hspi->TxXferCount = Size;
   hspi->pTxBuffPtr  = (uint8_t *)pTxData;
-  __HAL_SPI_ENABLE_IT(hspi, SPI_IT_DXP);
+  // If all of the data fits in the fifo, we can just wait for the tx and bus activity
+  // to complete and save on interrupts.
+  if (Size == 0UL)
+    __HAL_SPI_ENABLE_IT(hspi, SPI_IT_EOT);
+  else
+    __HAL_SPI_ENABLE_IT(hspi, SPI_IT_DXP);
 
   if (hspi->Init.Mode == SPI_MODE_MASTER)
   {
-    /* Master transfer start */
+    // Master transfer start
     SET_BIT(hspi->Instance->CR1, SPI_CR1_CSTART);
     __DSB();
   }
@@ -556,7 +545,7 @@ static inline void flushRxFifo(SPI_HandleTypeDef *hspi) noexcept
 {
    while (__HAL_SPI_GET_FLAG(hspi, SPI_FLAG_RXNE))
     {
-        /* read the received data */
+        // read the received data
 #if STM32H7
         (void)*(__IO uint8_t *)&hspi->Instance->RXDR;
 #else
@@ -577,7 +566,6 @@ void HardwareSPI::disable() noexcept
     {
         if (ioType == SpiIoType::dma)
             HAL_SPI_DMAStop(&(spi.handle));
-            //HAL_SPI_Abort_IT(&(spi.handle));
         flushRxFifo(&spi.handle);
         spi_deinit(&spi);
         initComplete = false;
