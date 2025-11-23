@@ -1826,12 +1826,12 @@ static CanFD2040 CORE1_CRITICAL_DATA_RW(canFdDevice);
 
 extern "C" [[noreturn]]void Core1Entry() noexcept
 {
-//	canFdDevice.Entry(&virtualRegs);
+	canFdDevice.Entry(&virtualRegs);
 }
 
 extern "C" ALIGNED_FUNCTION void CRITICAL_CODE(PIO_isr)() noexcept
 {
-//	canFdDevice.pio_irq_handler();
+	canFdDevice.pio_irq_handler();
 }
 
 // End
