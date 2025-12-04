@@ -147,7 +147,7 @@ void CanDevice::CanStats::Clear() noexcept
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO1_MESSAGE_LOST, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_BUS_OFF, 0);
-	HAL_FDCAN_EnableTxDelayCompensation(&dev.hw);
+	HAL_FDCAN_DisableTxDelayCompensation(&dev.hw);
 #ifdef RTOS
 	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][0]);
 	HAL_NVIC_EnableIRQ(IRQnsByPort[p_whichPort][1]);
@@ -727,7 +727,7 @@ void CanDevice::GetLocalCanTiming(CanTiming &timing) const noexcept
 
 void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
 {
-	UpdateLocalCanTiming(timing);				// set up nbtp and dbtp variables
+	UpdateLocalCanTiming(timing);					// set up nbtp and dbtp variables
 	Disable();
 	hw.Instance->NBTP = ((((uint32_t)hw.Init.NominalSyncJumpWidth - 1U) << FDCAN_NBTP_NSJW_Pos) |
 							(((uint32_t)hw.Init.NominalTimeSeg1 - 1U) << FDCAN_NBTP_NTSEG1_Pos)	|
@@ -747,12 +747,14 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 	uint32_t period = timing.period;
 	uint32_t tseg1 = timing.tseg1;
 	uint32_t jumpWidth = timing.jumpWidth;
-	uint32_t prescaler = 1;						// 48MHz main clock
-	uint32_t tseg2 = period - tseg1 - 1;
+	uint32_t prescaler = 1;							// 48MHz main clock
+	uint32_t tseg2;
+
+	// Use the highest prescaled clock frequency we can in order to get the most accurate timing
 	for (;;)
 	{
 		tseg2 = period - tseg1 - 1;
-		if (tseg1 <= 32 && tseg2 <= 16 && jumpWidth <= 16)
+		if (tseg1 <= 256 && tseg2 <= 128)
 		{
 			break;
 		}
@@ -763,18 +765,24 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 		tseg1 >>= 1;
 		jumpWidth >>= 1;
 	}
+
+	if (jumpWidth > tseg2) { jumpWidth = tseg2; }	// jump width cannot exceed tseg2
 #if !SAME70
-	bitPeriod = period * prescaler;				// the actual CAN normal bit period, in 48MHz clocks
+	bitPeriod = period * prescaler;					// the actual CAN normal bit period in 48MHz clocks (may be different from timing.period)
 #endif
+
 	FDCAN_InitTypeDef& Init = hw.Init;
-	Init.NominalPrescaler = prescaler; /* tq = NominalPrescaler x (1/fdcan_ker_ck) */
+	Init.NominalPrescaler = prescaler;
 	Init.NominalSyncJumpWidth = jumpWidth;
-	Init.NominalTimeSeg1 = tseg1; /* NominalTimeSeg1 = Propagation_segment + Phase_segment_1 */
+	Init.NominalTimeSeg1 = tseg1;
 	Init.NominalTimeSeg2 = tseg2;
 	Init.DataPrescaler = prescaler;
-	Init.DataSyncJumpWidth = jumpWidth;
-	Init.DataTimeSeg1 = tseg1; /* DataTimeSeg1 = Propagation_segment + Phase_segment_1 */
-	Init.DataTimeSeg2 = tseg2;
+	// we don't currently do BRS switching, but we need to make sure that the values we set
+	// are valid. For now we set values that are sort of 4 times the nominal speed, but we need to
+	// ensure that the value is always > 0
+	Init.DataSyncJumpWidth = (jumpWidth/4 > 0 ? jumpWidth/4 : 1);
+	Init.DataTimeSeg1 = (tseg1/4 > 0 ? tseg1/4 : 1);
+	Init.DataTimeSeg2 = (tseg2/4 > 0 ? tseg2/4 : 1);
 }
 
 void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
