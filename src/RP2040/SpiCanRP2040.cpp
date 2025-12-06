@@ -118,11 +118,28 @@ void CanDevice::CanStats::Clear() noexcept
 		debugPrintf("SPI CAN Failed to set can config\n");
 		return nullptr;
 	}
-	// TODO use configuration timing values
-	status = DRV_CANFDSPI_BitTimeConfigure(0, CAN_1000K_1M, CAN_SSP_MODE_AUTO, CAN_SYSCLK_40M);
+	devices[0].nbtp.word = devices[0].dbtp.word = 0;
+	devices[0].UpdateLocalCanTiming(timing);
+	status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, devices[0].nbtp.word);
 	if (status != 0)
 	{
 		debugPrintf("SPI CAN Failed to set bit rates\n");
+		return nullptr;
+	}
+	status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiDBTCFG, devices[0].dbtp.word);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set data bit rates\n");
+		return nullptr;
+	}
+
+	// Disable TDC
+	REG_CiTDC tdc;
+    tdc.word = 0;
+	status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiTDC, tdc.word);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set tef config\n");
 		return nullptr;
 	}
 
@@ -553,15 +570,64 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 
 void CanDevice::GetLocalCanTiming(CanTiming &timing) const noexcept
 {
+	const uint32_t tseg1 = nbtp.bF.TSEG1;
+	const uint32_t tseg2 = nbtp.bF.TSEG2;
+	const uint32_t jw = nbtp.bF.SJW;
+	const uint32_t brp = nbtp.bF.BRP;
+	timing.period = (tseg1 + tseg2 + 3) * (brp + 1);
+	timing.tseg1 = (tseg1 + 1) * (brp + 1);
+	timing.jumpWidth = (jw + 1) * (brp + 1);
 }
 
 void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
 {
+	UpdateLocalCanTiming(timing);					// set up nbtp and dbtp variables
+	Disable();
+	DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, nbtp.word);
+	DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, dbtp.word);
+	Enable();
 }
 
 void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 {
+	// Sort out the bit timing
+	uint32_t period = timing.period;
+	uint32_t tseg1 = timing.tseg1;
+	uint32_t jumpWidth = timing.jumpWidth;
+	uint32_t prescaler = 1;							// 48MHz main clock
+	uint32_t tseg2;
 
+	// Use the highest prescaled clock frequency we can in order to get the most accurate timing
+	for (;;)
+	{
+		tseg2 = period - tseg1 - 1;
+		if (tseg1 <= 256 && tseg2 <= 128)
+		{
+			break;
+		}
+
+		// Currently we always use a prescaler that is a power of 2, but we could be more general
+		prescaler <<= 1;
+		period >>= 1;
+		tseg1 >>= 1;
+		jumpWidth >>= 1;
+	}
+
+	if (jumpWidth > tseg2) { jumpWidth = tseg2; }	// jump width cannot exceed tseg2
+
+	debugPrintf("period %d prescaler %d tseg1 %d tseg2 %d jw %d\n", period, prescaler, tseg1, tseg2, jumpWidth);
+	nbtp.bF.BRP = prescaler - 1;
+	nbtp.bF.TSEG1 = tseg1 - 1;
+	nbtp.bF.TSEG2 = tseg2 - 1;
+	nbtp.bF.SJW = jumpWidth - 1;
+
+	dbtp.bF.BRP = prescaler - 1;
+	// we don't currently do BRS switching, but we need to make sure that the values we set
+	// are valid. For now we set values that are sort of 4 times the nominal speed, but we need to
+	// ensure that the value is always > 0
+	dbtp.bF.SJW = (jumpWidth/4 > 0 ? jumpWidth/4 - 1 : 0);
+	dbtp.bF.TSEG1 = (tseg1/4 > 0 ? tseg1/4 - 1 : 0);
+	dbtp.bF.TSEG2 = (tseg2/4 > 0 ? tseg2/4 - 1 : 0);
 }
 
 void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
