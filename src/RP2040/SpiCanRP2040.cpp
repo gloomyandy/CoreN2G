@@ -615,19 +615,21 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 
 	if (jumpWidth > tseg2) { jumpWidth = tseg2; }	// jump width cannot exceed tseg2
 
-	debugPrintf("period %d prescaler %d tseg1 %d tseg2 %d jw %d\n", period, prescaler, tseg1, tseg2, jumpWidth);
 	nbtp.bF.BRP = prescaler - 1;
 	nbtp.bF.TSEG1 = tseg1 - 1;
 	nbtp.bF.TSEG2 = tseg2 - 1;
 	nbtp.bF.SJW = jumpWidth - 1;
 
+	// We don't currently use BRS. For now we default the fast data rate to 2Mbps (or lower if the prescaler is greater than 1) with fixed timing,
+	// just to have some sensible values to write to the register.
+	constexpr uint32_t fast_period = CanTiming::ClockFrequency/2'000'000;	// 2Mbps divided by the prescaler
+	constexpr uint32_t fast_tseg1 = fast_period/2 - 1;						// set sample point to 50%
+	constexpr uint32_t fast_tseg2 = fast_period - fast_tseg1 - 1;			// make up the correct period
+	constexpr uint32_t fast_jumpWidth = fast_tseg2;							// set jump width to maximum
 	dbtp.bF.BRP = prescaler - 1;
-	// we don't currently do BRS switching, but we need to make sure that the values we set
-	// are valid. For now we set values that are sort of 4 times the nominal speed, but we need to
-	// ensure that the value is always > 0
-	dbtp.bF.SJW = (jumpWidth/4 > 0 ? jumpWidth/4 - 1 : 0);
-	dbtp.bF.TSEG1 = (tseg1/4 > 0 ? tseg1/4 - 1 : 0);
-	dbtp.bF.TSEG2 = (tseg2/4 > 0 ? tseg2/4 - 1 : 0);
+	dbtp.bF.SJW = fast_jumpWidth - 1;
+	dbtp.bF.TSEG1 = fast_tseg1 - 1;
+	dbtp.bF.TSEG2 = fast_tseg2 - 1;
 }
 
 void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
