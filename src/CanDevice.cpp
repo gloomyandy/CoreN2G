@@ -979,7 +979,7 @@ void CanDevice::GetLocalCanTiming(CanTiming &timing) const noexcept
 
 void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
 {
-	UpdateLocalCanTiming(timing);				// set up nbtp and dbtp variables
+	UpdateLocalCanTiming(timing);					// set up nbtp and dbtp variables
 	Disable();
 	hw->REG(NBTP) = nbtp;
 	hw->REG(DBTP) = dbtp;
@@ -992,13 +992,14 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 	uint32_t period = timing.period;
 	uint32_t tseg1 = timing.tseg1;
 	uint32_t jumpWidth = timing.jumpWidth;
-	uint32_t prescaler = 1;						// 48MHz main clock
+	uint32_t prescaler = 1;							// 48MHz main clock
 	uint32_t tseg2;
 
+	// Use the highest prescaled clock frequency we can in order to get the most accurate timing
 	for (;;)
 	{
 		tseg2 = period - tseg1 - 1;
-		if (tseg1 <= 32 && tseg2 <= 16 && jumpWidth <= 16)
+		if (tseg1 <= 256 && tseg2 <= 128)
 		{
 			break;
 		}
@@ -1010,8 +1011,10 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 		jumpWidth >>= 1;
 	}
 
+	if (jumpWidth > tseg2) { jumpWidth = tseg2; }	// jump width cannot exceed tseg2
+
 #if !SAME70
-	bitPeriod = period * prescaler;				// the actual CAN normal bit period in 48MHz clocks (may be different from timing.period)
+	bitPeriod = period * prescaler;					// the actual CAN normal bit period in 48MHz clocks (may be different from timing.period)
 #endif
 
 	nbtp = ((tseg1 - 1) << CAN_(NBTP_NTSEG1_Pos))
@@ -1019,10 +1022,15 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 		| ((jumpWidth - 1) << CAN_(NBTP_NSJW_Pos))
 		| ((prescaler - 1) << CAN_(NBTP_NBRP_Pos));
 
-	// The fast data rate defaults to the same timing
-	dbtp = ((tseg1 - 1) << CAN_(DBTP_DTSEG1_Pos))
-		| ((tseg2 - 1) << CAN_(DBTP_DTSEG2_Pos))
-		| ((jumpWidth - 1) << CAN_(DBTP_DSJW_Pos))
+	// We don't currently use BRS. For now we default the fast data rate to 2Mbps (or lower if the prescaler is greater than 1) with fixed timing,
+	// just to have some sensible values to write to the register.
+	constexpr uint32_t fast_period = CanTiming::ClockFrequency/2'000'000;	// 2Mbps divided by the prescaler
+	constexpr uint32_t fast_tseg1 = fast_period/2 - 1;						// set sample point to 50%
+	constexpr uint32_t fast_tseg2 = fast_period - fast_tseg1 - 1;			// make up the correct period
+	constexpr uint32_t fast_jumpWidth = fast_tseg2;							// set jump width to maximum
+	dbtp = ((fast_tseg1 - 1) << CAN_(DBTP_DTSEG1_Pos))
+		| ((fast_tseg2 - 1) << CAN_(DBTP_DTSEG2_Pos))
+		| ((fast_jumpWidth - 1) << CAN_(DBTP_DSJW_Pos))
 		| ((prescaler - 1) << CAN_(DBTP_DBRP_Pos));
 }
 
