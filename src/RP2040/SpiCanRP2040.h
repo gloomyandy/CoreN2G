@@ -31,6 +31,7 @@ class CanMessageBuffer;
 class CanTiming;
 constexpr unsigned int NumCanDevices = 1;			// on other MCUs we only support one CAN device
 #include "CanFdSpiDefines.h"
+#include "CanFdSpiRegisters.h"
 extern "C" [[noreturn]] void Core1Entry() noexcept;
 
 // Queues used to communicate between the two cores.
@@ -275,6 +276,8 @@ private:
 	void DoReadTimeStampCounter() noexcept;
 	
 	bool busOff;
+	REG_CiNBTCFG nbtp;											//!< The NBTP register that gives the required normal bit timing
+	REG_CiDBTCFG dbtp;											//!< The DBTP register that gives the required bit timing when we use BRS
 
 	const Config *config;										//!< Configuration parameters
 	unsigned int txBufferFull;									// count of times TX FIFO was full

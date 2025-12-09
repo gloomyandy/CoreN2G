@@ -7,7 +7,7 @@
 
 #include "CanDevice.h"
 
-#if SUPPORT_CAN && !STM32H7
+#if SUPPORT_CAN && USE_SPICAN
 #include <CoreImp.h>
 #include <Cache.h>
 #include <CanSettings.h>
@@ -19,7 +19,6 @@
 // On devices without a built in CAN-FD module we use an external SPI based device based on the MCP251XFD
 
 // Note that this implementation is very basic and provides just enough functionality to support RRF.
-// It does not currently support the changing of timing parmeters.
 // Buffer/Queue allocation may be modified here to fit into available memory on the MCP251XFD.
 
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
@@ -119,10 +118,28 @@ bool CanDevice::ChangeMode(CAN_OPERATION_MODE newMode) noexcept
 		return nullptr;
 	}
 
-	status = DRV_CANFDSPI_BitTimeConfigure(0, CAN_1000K_1M, CAN_SSP_MODE_AUTO, CAN_SYSCLK_40M);
+	devices[0].nbtp.word = devices[0].dbtp.word = 0;
+	devices[0].UpdateLocalCanTiming(timing);
+	status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, devices[0].nbtp.word);
 	if (status != 0)
 	{
 		debugPrintf("SPI CAN Failed to set bit rates\n");
+		return nullptr;
+	}
+	status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiDBTCFG, devices[0].dbtp.word);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set data bit rates\n");
+		return nullptr;
+	}
+
+	// Disable TDC
+	REG_CiTDC tdc;
+    tdc.word = 0;
+	status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiTDC, tdc.word);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set tef config\n");
 		return nullptr;
 	}
 
@@ -671,15 +688,66 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 
 void CanDevice::GetLocalCanTiming(CanTiming &timing) const noexcept
 {
+	const uint32_t tseg1 = nbtp.bF.TSEG1;
+	const uint32_t tseg2 = nbtp.bF.TSEG2;
+	const uint32_t jw = nbtp.bF.SJW;
+	const uint32_t brp = nbtp.bF.BRP;
+	timing.period = (tseg1 + tseg2 + 3) * (brp + 1);
+	timing.tseg1 = (tseg1 + 1) * (brp + 1);
+	timing.jumpWidth = (jw + 1) * (brp + 1);
 }
 
 void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
 {
+	UpdateLocalCanTiming(timing);					// set up nbtp and dbtp variables
+	Disable();
+	DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, nbtp.word);
+	DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, dbtp.word);
+	Enable();
 }
 
 void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 {
+	// Sort out the bit timing
+	uint32_t period = timing.period;
+	uint32_t tseg1 = timing.tseg1;
+	uint32_t jumpWidth = timing.jumpWidth;
+	uint32_t prescaler = 1;							// 48MHz main clock
+	uint32_t tseg2;
 
+	// Use the highest prescaled clock frequency we can in order to get the most accurate timing
+	for (;;)
+	{
+		tseg2 = period - tseg1 - 1;
+		if (tseg1 <= 256 && tseg2 <= 128)
+		{
+			break;
+		}
+
+		// Currently we always use a prescaler that is a power of 2, but we could be more general
+		prescaler <<= 1;
+		period >>= 1;
+		tseg1 >>= 1;
+		jumpWidth >>= 1;
+	}
+
+	if (jumpWidth > tseg2) { jumpWidth = tseg2; }	// jump width cannot exceed tseg2
+
+	nbtp.bF.BRP = prescaler - 1;
+	nbtp.bF.TSEG1 = tseg1 - 1;
+	nbtp.bF.TSEG2 = tseg2 - 1;
+	nbtp.bF.SJW = jumpWidth - 1;
+
+	// We don't currently use BRS. For now we default the fast data rate to 2Mbps (or lower if the prescaler is greater than 1) with fixed timing,
+	// just to have some sensible values to write to the register.
+	constexpr uint32_t fast_period = CanTiming::ClockFrequency/2'000'000;	// 2Mbps divided by the prescaler
+	constexpr uint32_t fast_tseg1 = fast_period/2 - 1;						// set sample point to 50%
+	constexpr uint32_t fast_tseg2 = fast_period - fast_tseg1 - 1;			// make up the correct period
+	constexpr uint32_t fast_jumpWidth = fast_tseg2;							// set jump width to maximum
+	dbtp.bF.BRP = prescaler - 1;
+	dbtp.bF.SJW = fast_jumpWidth - 1;
+	dbtp.bF.TSEG1 = fast_tseg1 - 1;
+	dbtp.bF.TSEG2 = fast_tseg2 - 1;
 }
 
 void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
