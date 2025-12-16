@@ -261,6 +261,12 @@ void spi_init(spi_t *obj, SPI_TypeDef *dev, uint32_t spimode, uint32_t speed, sp
     uint32_t pull = (handle->Init.CLKPolarity == SPI_POLARITY_LOW) ? GPIO_PULLDOWN : GPIO_PULLUP;
     pin_PullConfig(get_GPIO_Port(STM_PORT(obj->pin_sclk)), STM_LL_GPIO_PIN(obj->pin_sclk), pull);
   }
+  else
+  {
+    pin_speed(obj->pin_sclk, GPIO_SPEED_FREQ_LOW);
+    pin_speed(obj->pin_mosi, GPIO_SPEED_FREQ_LOW);
+  }
+
 #if defined SPI1_BASE
   // Enable SPI clock
   if (handle->Instance == SPI1) {
