@@ -19,4 +19,7 @@ constexpr unsigned int TmcUartPioNumber = 1;
 // The WS2812 LED driver needs one state machine per string of LEDs
 constexpr unsigned int WS2812PioNumber = 1;
 
+// We need one sm for spi
+constexpr unsigned int PioSpiPioNumber = 1;
+
 #endif /* SRC_RP2040_PIOASSIGNMENTS_H_ */
