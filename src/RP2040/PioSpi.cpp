@@ -177,5 +177,6 @@ void pio_spi_set_format(const pio_spi_inst_t *spi, uint bits, bool cpol, bool cp
 
 void pio_spi_disable(const pio_spi_inst_t *spi) noexcept
 {
-        pio_sm_set_enabled(spi->pio, spi->sm, false);
+    pio_sm_set_enabled(spi->pio, spi->sm, false);
+    gpio_set_outover(spi->clk, GPIO_OVERRIDE_NORMAL);
 }
