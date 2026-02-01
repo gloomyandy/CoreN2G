@@ -102,7 +102,7 @@ static inline void pio_spi_init(PIO pio, uint sm, uint prog_offs, uint n_bits,
 }
 
 
-int32_t __time_critical_func(pio_spi_write_blocking)(const pio_spi_inst_t *spi, const uint8_t *src, size_t len) noexcept {
+static int32_t __time_critical_func(pio_spi_write_blocking)(const pio_spi_inst_t *spi, const uint8_t *src, size_t len) noexcept {
     size_t tx_remain = len, rx_remain = len;
     // Do 8 bit accesses on FIFO, so that write data is byte-replicated. This
     // gets us the left-justification for free (for MSB-first shift-out)
@@ -121,7 +121,7 @@ int32_t __time_critical_func(pio_spi_write_blocking)(const pio_spi_inst_t *spi, 
     return len;
 }
 
-int32_t __time_critical_func(pio_spi_read_blocking)(const pio_spi_inst_t *spi, uint8_t val, uint8_t *dst, size_t len) noexcept {
+static int32_t __time_critical_func(pio_spi_read_blocking)(const pio_spi_inst_t *spi, uint8_t val, uint8_t *dst, size_t len) noexcept {
     size_t tx_remain = len, rx_remain = len;
     io_rw_8 *txfifo = (io_rw_8 *) &spi->pio->txf[spi->sm];
     io_rw_8 *rxfifo = (io_rw_8 *) &spi->pio->rxf[spi->sm];
@@ -138,7 +138,7 @@ int32_t __time_critical_func(pio_spi_read_blocking)(const pio_spi_inst_t *spi, u
     return len;
 }
 
-int32_t __time_critical_func(pio_spi_write_read_blocking)(const pio_spi_inst_t *spi, const uint8_t *src, uint8_t *dst,
+static int32_t __time_critical_func(pio_spi_write_read_blocking)(const pio_spi_inst_t *spi, const uint8_t *src, uint8_t *dst,
                                                          size_t len) noexcept {
     size_t tx_remain = len, rx_remain = len;
     io_rw_8 *txfifo = (io_rw_8 *) &spi->pio->txf[spi->sm];
@@ -156,7 +156,7 @@ int32_t __time_critical_func(pio_spi_write_read_blocking)(const pio_spi_inst_t *
     return len;
 }
 
-void pio_spi_init(pio_spi_inst_t *spi, Pin clk, Pin miso, Pin mosi) noexcept
+static void pio_spi_init(pio_spi_inst_t *spi, Pin clk, Pin miso, Pin mosi) noexcept
 {
     spi->miso = miso;
     spi->mosi = mosi;
@@ -167,7 +167,7 @@ void pio_spi_init(pio_spi_inst_t *spi, Pin clk, Pin miso, Pin mosi) noexcept
     spi->cpha1_offs = pio_add_program(spi->pio, &spi_cpha1_program);
 }
 
-void pio_spi_set_format(const pio_spi_inst_t *spi, uint bits, bool cpol, bool cpha, uint msblsb, uint freq) noexcept
+static void pio_spi_set_format(const pio_spi_inst_t *spi, uint bits, bool cpol, bool cpha, uint msblsb, uint freq) noexcept
 {
     pio_sm_set_enabled(spi->pio, spi->sm, false);
     const float div = SystemCoreClock / (freq*((cpha ? spi_cpha1_program.length : spi_cpha1_program.length)+1));
@@ -175,8 +175,51 @@ void pio_spi_set_format(const pio_spi_inst_t *spi, uint bits, bool cpol, bool cp
         div, cpha, cpol, spi->clk, spi->mosi, spi->miso);
 }
 
-void pio_spi_disable(const pio_spi_inst_t *spi) noexcept
+#if 0
+static void pio_spi_disable(const pio_spi_inst_t *spi) noexcept
 {
     pio_sm_set_enabled(spi->pio, spi->sm, false);
     gpio_set_outover(spi->clk, GPIO_OVERRIDE_NORMAL);
+}
+#endif
+
+// Create SPI devices the actual configuration is set later
+PioSPI PioSPI::PIOSPI0;
+
+void PioSPI::initPins(Pin clk, Pin miso, Pin mosi, NvicPriority priority) noexcept
+{
+    pio_spi_init(&dev, clk, miso, mosi);
+}
+
+//setup the master device.
+void PioSPI::configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept
+{
+    if (clockMode != curClockMode || curBitRate != bitRate)
+    {
+	    pio_spi_set_format(&dev, 8, ((uint8_t)clockMode & 2) != 0, ((uint8_t)clockMode & 1) != 0, true, bitRate);
+        curClockMode = clockMode;
+        curBitRate = bitRate;
+    }
+}
+
+
+PioSPI::PioSPI() noexcept
+{
+    curBitRate = 0xffffffff;
+    curClockMode = 0xffffffff;
+    curBits = 0xffffffff;
+}
+
+
+spi_status_t PioSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs) noexcept
+{
+    spi_status_t ret = SPI_OK;
+    if (cs != NoPin) fastDigitalWriteLow(cs);
+	const int bytesTransferred = (rx_data == nullptr) ? pio_spi_write_blocking(&dev, tx_data, len)
+								: (tx_data == nullptr) ? pio_spi_read_blocking(&dev, 0xFF, rx_data, len)
+									: pio_spi_write_read_blocking(&dev, tx_data, rx_data, len);
+	ret = bytesTransferred == (int)len ? SPI_OK : SPI_ERROR;
+
+    if (cs != NoPin) fastDigitalWriteHigh(cs);
+    return ret;
 }
