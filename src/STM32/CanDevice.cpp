@@ -840,7 +840,7 @@ void CanDevice::Interrupt() noexcept
 		{
 			// Check which receive buffers have new messages
 			uint32_t newData;
-			while (((newData = hw->REG(NDAT1)) & rxBuffersWaiting) != 0)
+			while ((newData = hw->REG(NDAT1) & rxBuffersWaiting) != 0)
 			{
 				const unsigned int rxBufferNumber = LowestSetBit(newData);
 				rxBuffersWaiting &= ~((uint32_t)1 << rxBufferNumber);
@@ -1008,7 +1008,7 @@ extern "C" void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan
 {
 	CanDevice *dev = devicesByPort[hfdcan == hwByPort[0] ? 0 : 1];
 	uint32_t newData;
-	while (((newData = dev->hw.Instance->NDAT1) & dev->rxBuffersWaiting) != 0)
+	while ((newData = dev->hw.Instance->NDAT1 & dev->rxBuffersWaiting) != 0)
 	{
 		const unsigned int rxBufferNumber = LowestSetBit(newData);
 		dev->rxBuffersWaiting &= ~((uint32_t)1 << rxBufferNumber);
