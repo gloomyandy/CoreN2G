@@ -21,7 +21,7 @@
 class SerialCDC : public Stream
 {
 public:
-	SerialCDC() noexcept;
+	explicit SerialCDC(size_t interface_index = 0) noexcept;
 
 	void Start(Pin p_vBusPin) noexcept;
 	void end(void) noexcept;
@@ -44,6 +44,7 @@ private:
 	volatile TaskHandle txWaitingTask;
     bool running = false;
 	Pin vBusPin;
+	size_t interfaceIndex;
 
 #if RPXXXX
 	// On the 2040 we can't write directly to USB using tusb from core1, so we have hack to allow debug output

@@ -240,15 +240,15 @@ void Cache::Init() noexcept
 			ARM_MPU_RBAR(3, IRAM_ADDR),
 			ARM_MPU_RASR_EX(1u, ARM_MPU_AP_FULL, ARM_MPU_ACCESS_NORMAL(ARM_MPU_CACHEP_NOCACHE, ARM_MPU_CACHEP_NOCACHE, 1u), 0u, ARM_MPU_REGION_SIZE_64KB)
 		},
-		// Next 8kb RAM, read-write, shared, non-cacheable, execute disabled
+		// Next 16kb RAM, read-write, shared, non-cacheable, execute disabled
 		{
 			ARM_MPU_RBAR(4, IRAM_ADDR + 0x00010000),
-			ARM_MPU_RASR_EX(1u, ARM_MPU_AP_FULL, ARM_MPU_ACCESS_NORMAL(ARM_MPU_CACHEP_NOCACHE, ARM_MPU_CACHEP_NOCACHE, 1u), 0u, ARM_MPU_REGION_SIZE_8KB)
+			ARM_MPU_RASR_EX(1u, ARM_MPU_AP_FULL, ARM_MPU_ACCESS_NORMAL(ARM_MPU_CACHEP_NOCACHE, ARM_MPU_CACHEP_NOCACHE, 1u), 0u, ARM_MPU_REGION_SIZE_16KB)
 		},
 		// RAMFUNC memory. Read-only (the code has already been written to it), execution allowed. The initialised data memory follows, so it must be RW.
 		// 256 bytes is enough at present (check the linker memory map if adding more RAMFUNCs).
 		{
-			ARM_MPU_RBAR(5, IRAM_ADDR + 0x00012000),
+			ARM_MPU_RBAR(5, IRAM_ADDR + 0x00014000),
 			ARM_MPU_RASR_EX(0u, ARM_MPU_AP_FULL, ARM_MPU_ACCESS_NORMAL(CACHE_MODE, CACHE_MODE, 0u), 0u, ARM_MPU_REGION_SIZE_256B)
 		},
 		// Final 128kb RAM, read-write, cacheable, execute disabled
@@ -263,7 +263,7 @@ void Cache::Init() noexcept
 		},
 		// USBHS
 		{
-			ARM_MPU_RBAR(8, 0xA0100000),
+			ARM_MPU_RBAR(8, 0xA0100000u),
 			ARM_MPU_RASR_EX(1u, ARM_MPU_AP_FULL, ARM_MPU_ACCESS_DEVICE(1u), 0u, ARM_MPU_REGION_SIZE_1MB)
 		},
 		// ROM
@@ -273,7 +273,7 @@ void Cache::Init() noexcept
 		},
 		// ARM Private Peripheral Bus
 		{
-			ARM_MPU_RBAR(10, 0xE0000000),
+			ARM_MPU_RBAR(10, 0xE0000000u),
 			ARM_MPU_RASR_EX(1u, ARM_MPU_AP_FULL, ARM_MPU_ACCESS_ORDERED, 0u, ARM_MPU_REGION_SIZE_1MB)
 		}
 	};
@@ -353,7 +353,7 @@ bool Cache::Disable() noexcept
 
 #if SAME70 || STM32H7
 
-extern "C" [[noreturn]] void vAssertCalled(uint32_t line, const char *file) noexcept;
+extern "C" [[noreturn]] void vAssertCalled(uint32_t line, const char *_ecv_array file) noexcept;
 
 void Cache::Flush(const volatile void *start, size_t length) noexcept
 {
@@ -361,10 +361,10 @@ void Cache::Flush(const volatile void *start, size_t length) noexcept
 	{
 		// The DMA buffer should be entirely inside the non-cached RAM area
 #if STM32H7
-		if ((((const char *)start < (const char *)&_nocache_ram_start) || ((const char *)start + length > (const char *)&_nocache_ram_end)) && 
-			(((const char *)start < (const char *)&_nocache2_ram_start) || ((const char *)start + length > (const char *)&_nocache2_ram_end)))
+		if ((((const char *_ecv_array)start < (const char *_ecv_array)&_nocache_ram_start) || ((const char *_ecv_array)start + length > (const char *_ecv_array)&_nocache_ram_end)) && 
+			(((const char *_ecv_array)start < (const char *_ecv_array)&_nocache2_ram_start) || ((const char *_ecv_array)start + length > (const char *_ecv_array)&_nocache2_ram_end)))
 #else
-		if ((const char *)start < (const char *)&_nocache_ram_start || (const char *)start + length > (const char *)&_nocache_ram_end)
+		if ((const char *_ecv_array)start < (const char *_ecv_array)&_nocache_ram_start || (const char *_ecv_array)start + length > (const char *_ecv_array)&_nocache_ram_end)
 #endif
 		{
 			vAssertCalled(__LINE__, __FILE__);
@@ -382,11 +382,11 @@ void Cache::Invalidate(const volatile void *start, size_t length) noexcept
 	{
 #if STM32H7
 		// The DMA buffer should be entirely inside the non-cached RAM area
-		if ((((const char *)start < (const char *)&_nocache_ram_start) || ((const char *)start + length > (const char *)&_nocache_ram_end)) && 
-			(((const char *)start < (const char *)&_nocache2_ram_start) || ((const char *)start + length > (const char *)&_nocache2_ram_end)))
+		if ((((const char *_ecv_array)start < (const char *_ecv_array)&_nocache_ram_start) || ((const char *_ecv_array)start + length > (const char *_ecv_array)&_nocache_ram_end)) && 
+			(((const char *_ecv_array)start < (const char *_ecv_array)&_nocache2_ram_start) || ((const char *_ecv_array)start + length > (const char *_ecv_array)&_nocache2_ram_end)))
 #else
 		// The DMA buffer should be entirely inside the non-cached RAM area, unless we are reading the user signature area
-		if ((const char *)start < (const char *)&_nocache_ram_start || (const char *)start + length > (const char *)&_nocache_ram_end)
+		if ((const char *_ecv_array)start < (const char *_ecv_array)&_nocache_ram_start || (const char *_ecv_array)start + length > (const char *_ecv_array)&_nocache_ram_end)
 #endif
 		{
 #  if SAME70

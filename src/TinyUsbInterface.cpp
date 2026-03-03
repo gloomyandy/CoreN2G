@@ -60,13 +60,21 @@
 
 #endif
 
-#define DUAL_CDC		(0)		// dual CDC does not work yet!
+#if RPXXXX
+#define DUAL_CDC		(0)
+#else
+#define DUAL_CDC		(1)
+#endif
 
 #define USBD_MAX_POWER_MA (250)
 
 // USB VID/PID (note that PID can change depending on the add'l interfaces)
-#define USBD_VID		(0x1d50)		// Duet 3D
-#define USBD_PID		(0x60ee)		// Duet 3
+#define USBD_VID		(0x1d50)		// OpenMoku
+#if DUAL_CDC
+#define USBD_PID		(0x60ef)		// Duet 3 electronics with dual CDC channels
+#else
+#define USBD_PID		(0x60ee)		// Duet 3 electronics with single CDC channel
+#endif
 
 #define USB_BCD   		(0x0200)
 

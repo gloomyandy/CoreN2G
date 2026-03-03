@@ -32,7 +32,7 @@
 #define GET_ADC_CAL(CAL, DEF) (*CAL == 0xffff ? DEF : *CAL)
 #endif
 
-typedef void (*AnalogInCallbackFunction)(CallbackParameter p, uint32_t reading) noexcept;
+typedef void (*AnalogInCallbackFunction)(CallbackParameter p, int32_t reading) noexcept;
 
 namespace AnalogIn
 {
