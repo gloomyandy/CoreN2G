@@ -204,7 +204,7 @@ public:
 #else
 							unsigned int p_whichCan, unsigned int p_whichPort,
 #endif
-							const Config& p_config, uint32_t *memStart, const CanTiming& timing, TxEventCallbackFunction p_txCallback) noexcept;
+							const Config& p_config, uint32_t *_ecv_array memStart, const CanTiming& timing, TxEventCallbackFunction p_txCallback) noexcept;
 
 #if !RPXXXX
 	// Set the extended ID mask. May only be used while the interface is disabled. Only needed when using dedicated buffers.
@@ -244,7 +244,7 @@ public:
 	// Set a short ID field filter element
 	// If whichBuffer is a buffer number not a fifo number, the mask field is ignored except that a zero mask disables the filter element; so only the XIDAM mask filters the ID.
 	void SetShortFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
-		pre(index < NumShortFilterElements);
+		pre(index < config->numShortFilterElements);
 
 	// Disable an extended ID filter element
 	void DisableExtendedFilterElement(unsigned int index) noexcept;
@@ -252,7 +252,7 @@ public:
 	// Set an extended ID field filter element
 	// If whichBuffer is a buffer number not a fifo number, the mask field is ignored except that a zero mask disables the filter element; so only the XIDAM mask filters the ID.
 	void SetExtendedFilterElement(unsigned int index, RxBufferNumber whichBuffer, uint32_t id, uint32_t mask) noexcept
-		pre(index < NumShortFilterElements);
+		pre(index < config->numExtendedFilterElements);
 
 	void GetLocalCanTiming(CanTiming& timing) const noexcept;
 
@@ -324,7 +324,7 @@ private:
 	VirtualCanRegisters registers;								// virtual register set used to pass info between cores
 	bool inUse = false;
 #else
-	Can *hw = nullptr;											// address of the CAN peripheral we are using
+	Can *_ecv_null hw = nullptr;								// address of the CAN peripheral we are using
 	unsigned int whichCan;										// which CAN device we are
 	unsigned int whichPort;										// which CAN port number we use, 0 or 1
 
