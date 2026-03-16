@@ -39,15 +39,8 @@
 #include <CoreImp.h>
 #include <stm32h7xx_hal_rcc.h>
 # define __nocache		__attribute__((section(".ram_nocache")))
-#define USB_PERIPH_BASE USB_OTG_HS_PERIPH_BASE
-#define OTG_IRQn OTG_HS_IRQn
-#define IRQ_HANDLER OTG_HS_IRQHandler
-#define USBOTGEN RCC_AHB1ENR_USB1OTGHSEN
-#define GPIO_D_NEG PA_11
-#define GPIO_D_POS PA_12
-#define OTG ((USB_OTG_GlobalTypeDef*)USB_PERIPH_BASE)
-#define OTGD ((USB_OTG_DeviceTypeDef*)(USB_PERIPH_BASE + USB_OTG_DEVICE_BASE))
-
+# define GPIO_D_NEG PA_11
+# define GPIO_D_POS PA_12
 #else
 
 # define __nocache		// nothing
@@ -338,21 +331,32 @@ void CoreUsbInit(NvicPriority priority) noexcept
 	// Set the USB interrupt priority to a suitable level
 	NVIC_SetPriority((IRQn_Type)USBCTRL_IRQ, priority);
 #elif STM32H7
+#ifdef USE_USB_HS_IN_FS
 	NVIC_SetPriority(OTG_HS_IRQn, priority);
 	pinmap_pinout(GPIO_D_NEG, PinMap_USB_OTG_HS);
 	pinmap_pinout(GPIO_D_POS, PinMap_USB_OTG_HS);
-	//HAL_PWREx_EnableUSBVoltageDetector();
-//  __HAL_RCC_USB1_OTG_HS_ULPI_CLK_ENABLE();
 	__HAL_RCC_USB1_OTG_HS_CLK_ENABLE();	
 	USB_OTG_HS->GCCFG &= ~USB_OTG_GCCFG_VBDEN;
 
 	// B-peripheral session valid override enable
 	USB_OTG_HS->GOTGCTL |= USB_OTG_GOTGCTL_BVALOEN;
 	USB_OTG_HS->GOTGCTL |= USB_OTG_GOTGCTL_BVALOVAL;
-  USB_OTG_HS->GUSBCFG &= ~USB_OTG_GUSBCFG_FHMOD;
-  USB_OTG_HS->GUSBCFG |= USB_OTG_GUSBCFG_FDMOD;
-HAL_PWREx_EnableUSBVoltageDetector();
-//HAL_NVIC_EnableIRQ(OTG_IRQn);
+	USB_OTG_HS->GUSBCFG &= ~USB_OTG_GUSBCFG_FHMOD;
+	USB_OTG_HS->GUSBCFG |= USB_OTG_GUSBCFG_FDMOD;
+#else
+	NVIC_SetPriority(OTG_FS_IRQn, priority);
+	pinmap_pinout(GPIO_D_NEG, PinMap_USB_OTG_FS);
+	pinmap_pinout(GPIO_D_POS, PinMap_USB_OTG_FS);
+	__HAL_RCC_USB_OTG_FS_CLK_ENABLE();	
+	USB_OTG_FS->GCCFG &= ~USB_OTG_GCCFG_VBDEN;
+
+	// B-peripheral session valid override enable
+	USB_OTG_FS->GOTGCTL |= USB_OTG_GOTGCTL_BVALOEN;
+	USB_OTG_FS->GOTGCTL |= USB_OTG_GOTGCTL_BVALOVAL;
+	USB_OTG_FS->GUSBCFG &= ~USB_OTG_GUSBCFG_FHMOD;
+	USB_OTG_FS->GUSBCFG |= USB_OTG_GUSBCFG_FDMOD;
+#endif
+	HAL_PWREx_EnableUSBVoltageDetector();
 #else
 # error Unsupported processor
 #endif
@@ -458,8 +462,11 @@ extern "C" void USB_3_Handler(void)
 }
 
 #elif STM32H7
-
+#ifdef USE_USB_HS_IN_FS
 extern "C" void OTG_HS_IRQHandler(void)
+#else
+extern "C" void OTG_FS_IRQHandler(void)
+#endif
 {
   tud_int_handler(0);
 }
