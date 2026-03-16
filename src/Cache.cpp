@@ -21,11 +21,11 @@
 #define USE_MPU		1
 #endif
 
-extern uint32_t _nocache_ram_start;
-extern uint32_t _nocache_ram_end;
+extern uint8_t _nocache_ram_start;
+extern uint8_t _nocache_ram_end;
 #if STM32H7
-extern uint32_t _nocache2_ram_start;
-extern uint32_t _nocache2_ram_end;
+extern uint8_t _nocache2_ram_start;
+extern uint8_t _nocache2_ram_end;
 #endif
 # if USE_MPU
 #  include <mpu_armv7.h>

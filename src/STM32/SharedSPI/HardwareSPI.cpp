@@ -62,10 +62,10 @@ latency. This is of particular use for the TMC SPI interface as transactions are
 // Create SPI devices the actual configuration is set later
 #if STM32H7
 // On the H7 we need to make sure that and dma address is within a none cached memory area
-extern uint32_t _nocache_ram_start;
-extern uint32_t _nocache_ram_end;
-extern uint32_t _nocache2_ram_start;
-extern uint32_t _nocache2_ram_end;
+extern uint8_t _nocache_ram_start;
+extern uint8_t _nocache_ram_end;
+extern uint8_t _nocache2_ram_start;
+extern uint8_t _nocache2_ram_end;
 #define CAN_USE_DMA(ptr, len) ((ptr) == nullptr || (((const char *)(ptr) >= (const char *)&_nocache_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache_ram_end)) || (((const char *)(ptr) >= (const char *)&_nocache2_ram_start) && ((const char *)(ptr) + (len) < (const char *)&_nocache2_ram_end)))
 
 // Create SPI devices the actual configuration is set later

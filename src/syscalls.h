@@ -17,7 +17,7 @@
 #endif
 
 extern char _end;										// defined by the linker script
-extern uint32_t _estack;
+extern uint8_t _estack;
 
 [[noreturn]] void OutOfMemoryHandler() noexcept;		// this must be provided by the client application
 
