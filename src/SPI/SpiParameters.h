@@ -10,6 +10,9 @@
 
 #include <CoreIO.h>
 #include <CoreTypes.h>
+#if STM32 
+# include <SPI.h>
+#endif
 
 // Structure to pass SPI device parameters. The details depend on the MCU.
 
@@ -39,6 +42,13 @@ struct SpiParameters
 	Pin misoPin;
 	Pin sclkPin;
 	GpioPinFunction pinFunction;
+};
+
+#elif STM32
+
+struct SpiParameters
+{
+	SSPChannel instanceNumber;
 };
 
 #elif RP2040

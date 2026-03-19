@@ -1,15 +1,13 @@
 /*
  * SpiDevice.cpp
  *
- *  Modified 23 Dec 2025 to support HW and PIO based SPI devices
- *      Author: Andy
+ * Author: Andy
  */
 
-#include <Hardware/SpiDevice.h>
-SpiDevice::SpiDevice(const SpiParameters& params) noexcept
+#include <SPI/SpiDevice.h>
+ SpiDevice::SpiDevice(const SpiParameters& params) noexcept
 	: hardware(SPI::getSPIDevice(params.instanceNumber))
 {
-	hardware->initPins(params.sclkPin, params.misoPin, params.mosiPin);
 }
 
 void SpiDevice::Disable() const noexcept

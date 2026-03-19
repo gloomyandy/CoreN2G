@@ -51,7 +51,7 @@ public:
     virtual spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs = NoPin) noexcept;    
     virtual bool waitForTxEmpty() noexcept;
     virtual void initPins(Pin sck, Pin miso, Pin mosi, NvicPriority priority = -1) noexcept;
-    static SPI *getSSPDevice(SSPChannel channel) noexcept;
+    static SPI *getSPIDevice(SSPChannel channel) noexcept;
 };
 
 #endif

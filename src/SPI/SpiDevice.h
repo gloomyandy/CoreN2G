@@ -21,6 +21,10 @@
 # include <hardware/spi.h>
 #endif
 
+#if STM32
+# include <SPI.h>
+#endif
+
 // This class represents a master SPI interface, but not the associated CS pin(s).
 // It is used as the base class for SharedSpiDevice. It can also be used by itself to control a non-shared SPI master.
 class SpiDevice
@@ -70,6 +74,8 @@ private:
 	DmaPriority dmaPrioTx;
 #elif SAME70 || SAM4E || SAM4S
 	Usart * const hardware;
+#elif STM32
+	SPI *hardware;
 #elif RP2040
 	spi_inst_t *hardware;
 #else

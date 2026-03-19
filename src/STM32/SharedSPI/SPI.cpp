@@ -6,7 +6,7 @@
 #include "SoftwareSPI.h"
 #include "HardwareSPI.h"
 
-SPI *SPI::getSSPDevice(SSPChannel channel)
+SPI *SPI::getSPIDevice(SSPChannel channel)
 {
     switch(channel)
     {
