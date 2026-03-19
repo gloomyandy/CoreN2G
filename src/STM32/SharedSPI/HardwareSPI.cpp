@@ -585,7 +585,7 @@ void transferComplete(HardwareSPI *spiDevice) noexcept
     if (spiDevice->csPin != NoPin) fastDigitalWriteHigh(spiDevice->csPin);
 #ifdef RTOS
     if (spiDevice->waitingTask != nullptr)
-        spiDevice->waitingTask->GiveFromISR(NotifyIndices::HardwareSpi);
+        spiDevice->waitingTask->GiveFromISR(NotifyIndices::Spi);
 #endif
 }
 
@@ -749,7 +749,7 @@ spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_d
     startTransfer(tx_data, rx_data, len, transferComplete, minDMAThreshold);
     while (transferActive)
     {
-        if (!TaskBase::TakeIndexed(NotifyIndices::HardwareSpi, SPITimeoutMillis))
+        if (!TaskBase::TakeIndexed(NotifyIndices::Spi, SPITimeoutMillis))
         {
             break;
         }

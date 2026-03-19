@@ -19,9 +19,9 @@ namespace NotifyIndices
 	constexpr uint32_t Usb = UartTx;
 	constexpr uint32_t Sdhc = UartTx;
 #if STM32
-	constexpr uint32_t HardwareSpi = UartTx;
 	constexpr uint32_t Sdio = UartTx;
 #endif
+	constexpr uint32_t Spi = UartTx;
 	constexpr uint32_t AnalogIn = UartTx + 1;				// analog in best have its own because it calls a hook function that may call device drivers
 	constexpr uint32_t NextAvailableAfterCore = NextAvailableAfterRTOS + 2;
 }
