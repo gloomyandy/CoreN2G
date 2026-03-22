@@ -5,9 +5,9 @@
  *      Author: Andy
  */
 
-#include <Hardware/SpiDevice.h>
+#include <SPI/SpiDevice.h>
 SpiDevice::SpiDevice(const SpiParameters& params) noexcept
-	: hardware(SPI::getSPIDevice(params.instanceNumber))
+	: hardware(SPI::getSPIDevice((SPIChannel)params.instanceNumber))
 {
 	hardware->initPins(params.sclkPin, params.misoPin, params.mosiPin);
 }

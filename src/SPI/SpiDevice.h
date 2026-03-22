@@ -17,8 +17,9 @@
 # include <DmacManager.h>
 #endif
 
-#if RP2040
+#if RPXXXX
 # include <hardware/spi.h>
+# include <SPI.h>
 #endif
 
 #if STM32
@@ -76,8 +77,8 @@ private:
 	Usart * const hardware;
 #elif STM32
 	SPI *hardware;
-#elif RP2040
-	spi_inst_t *hardware;
+#elif RPXXXX
+	SPI *hardware;
 #else
 # error Unsupported configuration
 #endif

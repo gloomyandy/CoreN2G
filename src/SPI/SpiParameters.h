@@ -51,7 +51,7 @@ struct SpiParameters
 	SSPChannel instanceNumber;
 };
 
-#elif RP2040
+#elif RPXXXX
 
 struct SpiParameters
 {
