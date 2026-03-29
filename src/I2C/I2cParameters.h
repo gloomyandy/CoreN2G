@@ -18,11 +18,10 @@ struct I2cParameters
 	Pin sdaPin;
 	GpioPinFunction pinFunction;
 	NvicPriority irqPriority;
-#elif RP2040
+#elif RPXXXX
 	uint8_t instanceNumber;
 	Pin sclPin;
 	Pin sdaPin;
-	NvicPriority irqPriority;
 #endif
 };
 

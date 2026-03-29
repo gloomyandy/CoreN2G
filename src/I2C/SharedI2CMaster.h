@@ -14,6 +14,9 @@
 #ifdef RTOS					// we dn't support I2C in non-RTOS builds
 
 #include <RTOSIface/RTOSIface.h>
+#if RPXXXX
+# include "hardware/i2c.h"
+#endif
 
 struct I2cErrors
 {
@@ -58,6 +61,8 @@ private:
 	void Interrupt() noexcept;
 
 	Sercom * const hardware;
+#elif RPXXXX
+	i2c_inst_t *hardware;
 #endif
 
 	TaskHandle taskWaiting;
