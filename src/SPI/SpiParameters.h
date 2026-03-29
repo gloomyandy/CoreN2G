@@ -15,11 +15,9 @@
 #endif
 
 // Structure to pass SPI device parameters. The details depend on the MCU.
-
-#if SAME5x || SAMC21
-
 struct SpiParameters
 {
+#if SAME5x || SAMC21
 	uint8_t sercomNumber;
 	Pin mosiPin;
 	Pin misoPin;
@@ -31,36 +29,20 @@ struct SpiParameters
 	DmaChannel dmaChanRx;
 	DmaPriority dmaPrioTx;
 	DmaPriority dmaPrioRx;
-};
-
 #elif SAME70 || SAM4E || SAM4S
-
-struct SpiParameters
-{
 	uint8_t usartNumber;
 	Pin mosiPin;
 	Pin misoPin;
 	Pin sclkPin;
 	GpioPinFunction pinFunction;
-};
-
 #elif STM32
-
-struct SpiParameters
-{
 	SSPChannel instanceNumber;
-};
-
 #elif RPXXXX
-
-struct SpiParameters
-{
 	uint8_t instanceNumber;
 	Pin mosiPin;
 	Pin misoPin;
 	Pin sclkPin;
-};
-
 #endif
+};
 
 #endif /* SRC_HARDWARE_SPI_SPIPARAMETERS_H_ */

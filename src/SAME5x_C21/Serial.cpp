@@ -22,9 +22,6 @@
 constexpr uint32_t DiagBaudRate = 57600;		// the baud rate we default to
 
 // Enable the clocks for the SERCOM.
-// Set the "useSdhcClock" parameter true to use GCLK5 as the main SERCOM clock instead of the 60MHz clock.
-// This will only be useful if GCLK5 has been set up at a suitable frequency, for example on Duet 3 Mini main boards it is set to 96MHz to use as the SDHC clock.
-// Setting this will of course mess up the baud rate calculation, so it's most likely to be useful in SPI slave mode.
 void Serial::EnableSercomClock(uint8_t sercomNumber) noexcept
 {
 	struct SercomClockParams
@@ -68,7 +65,7 @@ void Serial::EnableSercomClock(uint8_t sercomNumber) noexcept
 }
 
 // Initialise the serial port. This does not set up the I/O pins. It assumes that we always transmit on pad 0.
-void Serial::InitUart(uint8_t sercomNumber, uint32_t baudRate, uint8_t rxPad
+void Serial::InitUart(uint8_t sercomNumber, uint32_t baudRate, uint8_t rxPad, uint8_t txPad
 #if SAME5x
 						, bool use32bitMode
 #endif
@@ -83,7 +80,7 @@ void Serial::InitUart(uint8_t sercomNumber, uint32_t baudRate, uint8_t rxPad
 						 | (0u << SERCOM_USART_CTRLA_FORM_Pos)				// usart frame, no parity
 						 | (0u << SERCOM_USART_CTRLA_SAMPA_Pos)				// sample on clocks 7-8-9
 						 | ((uint32_t)rxPad << SERCOM_USART_CTRLA_RXPO_Pos)	// receive data pad
-						 | (0u << SERCOM_USART_CTRLA_TXPO_Pos)				// transmit on pad 0
+						 | ((uint32_t)txPad << SERCOM_USART_CTRLA_TXPO_Pos)	// transmit data pad
 						 | (0u << SERCOM_USART_CTRLA_SAMPR_Pos)				// 16x over sampling, normal baud rate generation
 #if SAME5x
 						 | (0u << SERCOM_USART_CTRLA_RXINV_Pos)				// don't invert receive data
@@ -125,6 +122,90 @@ void Serial::Disable(uint8_t sercomNumber) noexcept
 	Sercom * const sercom = GetSercom(sercomNumber);
 	hri_sercomusart_clear_CTRLA_ENABLE_bit(sercom);
 	hri_sercomusart_set_CTRLA_SWRST_bit(sercom);
+}
+
+static void DummyHandler(void*) noexcept
+{
+	// Maybe we should record an exception instead of just looping?
+	while (1) { }
+}
+
+#if SAMC21
+
+static Serial::IrqFunc sercomIrq[6];
+static void *sercomParam[6];
+
+void Serial::SetSercomVector(uint8_t sercomNumber, Serial::IrqFunc f, void *param) noexcept
+{
+	sercomParam[sercomNumber] = param;
+	sercomIrq[sercomNumber] = f;
+}
+
+void Serial::ReleaseSercomVector(uint8_t sercomNumber) noexcept
+{
+	sercomIrq[sercomNumber] = DummyHandler;
+}
+
+# define DEFINE_SERCOM_IRQ(_sercom) \
+	void SERCOM ## _sercom ## _Handler() noexcept { sercomIrq[_sercom](sercomParam[_sercom]); }
+
+#elif SAME5x
+
+static Serial::IrqFunc sercomIrq[8][4];
+static void *sercomParam[8];
+
+void Serial::SetSercomVector(uint8_t sercomNumber, Serial::IrqFunc f0, Serial::IrqFunc f1, Serial::IrqFunc f2, Serial::IrqFunc f3, void *param) noexcept
+{
+	sercomParam[sercomNumber] = param;
+	sercomIrq[sercomNumber][0] = (f0 == nullptr) ? DummyHandler : f0;
+	sercomIrq[sercomNumber][1] = (f1 == nullptr) ? DummyHandler : f1;
+	sercomIrq[sercomNumber][2] = (f2 == nullptr) ? DummyHandler : f2;
+	sercomIrq[sercomNumber][3] = (f3 == nullptr) ? DummyHandler : f3;
+}
+
+void Serial::ReleaseSercomVector(uint8_t sercomNumber) noexcept
+{
+	sercomIrq[sercomNumber][0] = sercomIrq[sercomNumber][1] = sercomIrq[sercomNumber][2] = sercomIrq[sercomNumber][3] = DummyHandler;
+}
+
+# define DEFINE_SERCOM_IRQ(_sercom) \
+	void SERCOM ## _sercom ## _0_Handler() noexcept { sercomIrq[_sercom][0](sercomParam[_sercom]); } \
+	void SERCOM ## _sercom ## _1_Handler() noexcept { sercomIrq[_sercom][1](sercomParam[_sercom]); } \
+	void SERCOM ## _sercom ## _2_Handler() noexcept { sercomIrq[_sercom][2](sercomParam[_sercom]); } \
+	void SERCOM ## _sercom ## _3_Handler() noexcept { sercomIrq[_sercom][3](sercomParam[_sercom]); }
+
+#endif
+
+DEFINE_SERCOM_IRQ(0)
+DEFINE_SERCOM_IRQ(1)
+DEFINE_SERCOM_IRQ(2)
+DEFINE_SERCOM_IRQ(3)
+DEFINE_SERCOM_IRQ(4)
+DEFINE_SERCOM_IRQ(5)
+
+#if SAME5x
+
+DEFINE_SERCOM_IRQ(6)
+DEFINE_SERCOM_IRQ(7)
+
+#endif
+
+void Serial::Init() noexcept
+{
+#if SAMC21
+	for (IrqFunc& f : sercomIrq)
+	{
+		f = DummyHandler;
+	}
+#elif SAME5x
+	for (size_t i = 0; i < 8; ++i)
+	{
+		for (size_t j = 0; j < 4; ++j)
+		{
+			sercomIrq[i][j] = DummyHandler;
+		}
+	}
+#endif
 }
 
 // End
