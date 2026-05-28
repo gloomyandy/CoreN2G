@@ -172,7 +172,7 @@ extern "C" {
 # define RP2350				0
 #endif
 #if !defined(CORE_USES_TINYUSB)
-#if defined(RTOS) && (SAME70 || RP2040 || SAME5x)
+#if defined(RTOS) && (SAME70 || RPXXXX || SAME5x)
 # define CORE_USES_TINYUSB		1
 #else
 # define CORE_USES_TINYUSB		0
