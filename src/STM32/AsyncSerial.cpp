@@ -127,7 +127,8 @@ void AsyncSerial::end(void) noexcept
         flush();
         deinit();
         // clear any received data
-        rx_head = rx_tail = 0;
+        rx_head = 0;
+        rx_tail = 0;
     }
 }
 
