@@ -256,7 +256,7 @@ public:
 
 	void GetLocalCanTiming(CanTiming& timing) const noexcept;
 
-	void SetLocalCanTiming(const CanTiming& timing) noexcept;
+	void ChangeLocalCanTiming(const CanTiming& timing) noexcept;
 
 	void GetAndClearStats(CanDevice::CanStats& dst) noexcept;
 
@@ -371,6 +371,7 @@ private:
 
 #if !RPXXXX
 	bool useFDMode;
+	bool usingBrs;
 #endif
 };
 
