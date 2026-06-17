@@ -225,6 +225,8 @@ public:
 
 	void SetLocalCanTiming(const CanTiming& timing) noexcept;
 
+	void ChangeLocalCanTiming(const CanTiming& timing) noexcept;
+
 	void GetAndClearStats(CanDevice::CanStats& dst) noexcept;
 
 	void GetAndClearStats(unsigned int& rMessagesQueuedForSending, unsigned int& rMessagesReceived, unsigned int& rMessagesLost, unsigned int& rBusOffCount) noexcept;
@@ -303,6 +305,7 @@ private:
 #endif
 
 	bool useFDMode;
+	bool usingBrs;
 
 #if STM32H7
 	friend void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEventFifoITs);
