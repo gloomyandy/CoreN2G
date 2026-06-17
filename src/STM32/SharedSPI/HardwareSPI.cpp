@@ -295,7 +295,9 @@ void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept
     else
       // Just discard the data
       *(__IO uint8_t *)&hspi->Instance->RXDR;
-    hspi->RxXferCount--;
+    //hspi->RxXferCount--;
+    // very ugly fix for c++20 warning
+    (*const_cast<uint16_t*>(&(hspi->RxXferCount)))--;
   }
   // Write data to fifo if we have any left
   while (hspi->TxXferCount != 0UL && HAL_IS_BIT_SET(hspi->Instance->SR, SPI_FLAG_TXP))
@@ -306,8 +308,10 @@ void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept
     }
     else
       *(__IO uint8_t *)&hspi->Instance->TXDR = 0xff;
-    hspi->TxXferCount--;
-  }
+    //hspi->TxXferCount--;
+    // very ugly fix for c++20 warning
+    (*const_cast<uint16_t*>(&(hspi->TxXferCount)))--;
+}
   if (hspi->RxXferCount == 0)
   {
     // finished receiving data, transfer now complete
