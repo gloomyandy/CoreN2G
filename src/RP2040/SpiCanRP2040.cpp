@@ -38,6 +38,8 @@ extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf
 #include "CanFdSpiApi.h"
 #include "CanSpi.h"
 
+#define USE_TRANSCEIVER_COMPENSATION 1
+
 static bool core1Initialised = false;
 extern "C" void CAN_Handler() noexcept;
 extern "C" void Core1Entry() noexcept;
@@ -121,6 +123,7 @@ void CanDevice::CanStats::Clear() noexcept
 		debugPrintf("SPI CAN Failed to set can config\n");
 		return nullptr;
 	}
+	devices[0].useFDMode = (p_config.dataSize > 8);							// assume we want standard CAN if the max data size is 8
 	devices[0].nbtp.word = devices[0].dbtp.word = 0;
 	devices[0].UpdateLocalCanTiming(timing);
 	status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, devices[0].nbtp.word);
@@ -135,14 +138,22 @@ void CanDevice::CanStats::Clear() noexcept
 		debugPrintf("SPI CAN Failed to set data bit rates\n");
 		return nullptr;
 	}
-
-	// Disable TDC
+	debugPrintf("Set nbtp %x and dbtp %x\n", devices[0].nbtp.word, devices[0].dbtp.word);
+	// Sort out TDC
 	REG_CiTDC tdc;
     tdc.word = 0;
+#if USE_TRANSCEIVER_COMPENSATION
+	if (devices[0].usingBrs)
+	{
+		tdc.bF.TDCMode = CAN_SSP_MODE_AUTO;
+		tdc.bF.TDCOffset = devices[0].dbtp.bF.TSEG1 + 1;
+		tdc.bF.TDCValue = 0;
+	}
+#endif
 	status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiTDC, tdc.word);
 	if (status != 0)
 	{
-		debugPrintf("SPI CAN Failed to set tef config\n");
+		debugPrintf("SPI CAN Failed to set tdc config\n");
 		return nullptr;
 	}
 
@@ -442,7 +453,7 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 			txObj.bF.id.SID = buffer->id.GetWholeId() >> 18;
 			txObj.bF.ctrl.IDE = buffer->extId;
 			txObj.bF.ctrl.FDF = buffer->fdMode;
-			txObj.bF.ctrl.BRS = buffer->useBrs;
+			txObj.bF.ctrl.BRS = (usingBrs && buffer->useBrs);
 			txObj.bF.ctrl.RTR = buffer->remote;
 			if (buffer->reportInFifo)
 				txObj.bF.ctrl.SEQ = buffer->marker;
@@ -579,66 +590,146 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 
 void CanDevice::GetLocalCanTiming(CanTiming &timing) const noexcept
 {
-	const uint32_t tseg1 = nbtp.bF.TSEG1;
-	const uint32_t tseg2 = nbtp.bF.TSEG2;
-	const uint32_t jw = nbtp.bF.SJW;
-	const uint32_t brp = nbtp.bF.BRP;
-	timing.period = (tseg1 + tseg2 + 3) * (brp + 1);
-	timing.tseg1 = (tseg1 + 1) * (brp + 1);
-	timing.jumpWidth = (jw + 1) * (brp + 1);
+	debugPrintf("Get nbtp %x and dbtp %x\n", nbtp.word, dbtp.word);
+
+	const uint32_t nTseg1 = nbtp.bF.TSEG1 + 1;
+	const uint32_t nTseg2 = nbtp.bF.TSEG2 + 1;
+	const uint32_t nJw = nbtp.bF.SJW + 1;
+	const uint32_t nBrp = nbtp.bF.BRP + 1;
+	timing.period = (nTseg1 + nTseg2 + 1) * nBrp;
+	timing.nTseg1 = nTseg1 * nBrp - 1;
+	timing.nJumpWidth = nJw * nBrp;
+	debugPrintf("nbtp period %d seg1 %d jw %d seg2 %d brp %d\n", timing.period, timing.nTseg1, timing.nJumpWidth, nTseg2, nBrp);
+	const uint32_t dTseg1 = dbtp.bF.TSEG1 + 1;
+	const uint32_t dTseg2 = dbtp.bF.TSEG2 + 1;
+	const uint32_t dJw = dbtp.bF.SJW + 1;
+	const uint32_t dBrp = dbtp.bF.BRP + 1;
+	const uint32_t dPeriod = (dTseg1 + dTseg2 + 1) * dBrp;
+	debugPrintf("dbtp drm %d seg1 %d jw %d seg2 %d brp %d\n", timing.dataRateMultiplier, timing.dTseg1, timing.dJumpWidth, dTseg2, dBrp);
+	timing.dataRateMultiplier = timing.period/dPeriod - 1;
+	timing.dTseg1 = dTseg1 * dBrp - 1;
+	timing.dJumpWidth = dJw * dBrp;
+	timing.spare1 = 0x0F;
+	timing.spare2 = 0xFF;
+
 }
 
-void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
+void CanDevice::ChangeLocalCanTiming(const CanTiming &timing) noexcept
 {
 	UpdateLocalCanTiming(timing);					// set up nbtp and dbtp variables
 	Disable();
 	DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, nbtp.word);
-	DRV_CANFDSPI_WriteWord(0, cREGADDR_CiNBTCFG, dbtp.word);
+	DRV_CANFDSPI_WriteWord(0, cREGADDR_CiDBTCFG, dbtp.word);
+	debugPrintf("Set nbtp %x and dbtp %x\n", nbtp.word, dbtp.word);
+	REG_CiTDC tdc;
+	tdc.word = 0;
+#if USE_TRANSCEIVER_COMPENSATION
+	if (usingBrs)
+	{
+		tdc.bF.TDCMode = CAN_SSP_MODE_AUTO;
+		tdc.bF.TDCOffset = dbtp.bF.TSEG1 + 1;
+		tdc.bF.TDCValue = 0;
+	}
+#endif
+	int8_t status = DRV_CANFDSPI_WriteWord(0, cREGADDR_CiTDC, tdc.word);
+	if (status != 0)
+	{
+		debugPrintf("SPI CAN Failed to set tdc config\n");
+	}
 	Enable();
 }
 
 void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 {
-	// Sort out the bit timing
-	uint32_t period = timing.period;
-	uint32_t tseg1 = timing.tseg1;
-	uint32_t jumpWidth = timing.jumpWidth;
-	uint32_t prescaler = 1;							// 48MHz main clock
-	uint32_t tseg2;
+	// Sort out the bit timing for the arbitration phase
+	uint32_t nPeriod = timing.period;
+	uint32_t nTseg1 = timing.nTseg1 + 1;
+	//uint32_t nTseg1 = timing.nTseg1;
+	uint32_t nJumpWidth = timing.nJumpWidth;
+	uint32_t nPrescaler = 1;							// 48MHz main clock
+	uint32_t nTseg2;
+	debugPrintf("update nbtp period %d seg1 %d jw %d\n", timing.period, timing.nTseg1, timing.nJumpWidth);
 
 	// Use the highest prescaled clock frequency we can in order to get the most accurate timing
 	for (;;)
 	{
-		tseg2 = period - tseg1 - 1;
-		if (tseg1 <= 256 && tseg2 <= 128)
+		nTseg2 = nPeriod - nTseg1 - 1;
+		if (nTseg1 <= 256 && nTseg2 <= 128)
 		{
 			break;
 		}
 
 		// Currently we always use a prescaler that is a power of 2, but we could be more general
-		prescaler <<= 1;
-		period >>= 1;
-		tseg1 >>= 1;
-		jumpWidth >>= 1;
+		nPrescaler <<= 1;
+		nPeriod >>= 1;
+		nTseg1 >>= 1;
+		nJumpWidth >>= 1;
 	}
 
-	if (jumpWidth > tseg2) { jumpWidth = tseg2; }	// jump width cannot exceed tseg2
+	if (nJumpWidth > nTseg2) { nJumpWidth = nTseg2; }	// jump width cannot exceed tseg2
 
-	nbtp.bF.BRP = prescaler - 1;
-	nbtp.bF.TSEG1 = tseg1 - 1;
-	nbtp.bF.TSEG2 = tseg2 - 1;
-	nbtp.bF.SJW = jumpWidth - 1;
+#if !SAME70
+	//bitPeriod = nPeriod * nPrescaler;					// the actual CAN normal bit period in 48MHz clocks (may be different from timing.period)
+#endif
+	debugPrintf("update2 nbtp seg1 %d jw %d seg2 %d brp %d\n", nTseg1, nJumpWidth, nTseg2, nPrescaler);
 
-	// We don't currently use BRS. For now we default the fast data rate to 2Mbps (or lower if the prescaler is greater than 1) with fixed timing,
-	// just to have some sensible values to write to the register.
-	constexpr uint32_t fast_period = CanTiming::ClockFrequency/2'000'000;	// 2Mbps divided by the prescaler
-	constexpr uint32_t fast_tseg1 = fast_period/2 - 1;						// set sample point to 50%
-	constexpr uint32_t fast_tseg2 = fast_period - fast_tseg1 - 1;			// make up the correct period
-	constexpr uint32_t fast_jumpWidth = fast_tseg2;							// set jump width to maximum
-	dbtp.bF.BRP = prescaler - 1;
-	dbtp.bF.SJW = fast_jumpWidth - 1;
-	dbtp.bF.TSEG1 = fast_tseg1 - 1;
-	dbtp.bF.TSEG2 = fast_tseg2 - 1;
+	nbtp.bF.BRP = nPrescaler - 1;
+	nbtp.bF.TSEG1 = nTseg1 - 1;
+	nbtp.bF.TSEG2 = nTseg2 - 1;
+	nbtp.bF.SJW = nJumpWidth - 1;
+
+	if (useFDMode && timing.IsUsingBrs())
+	{
+		uint32_t dPeriod = timing.period/(timing.dataRateMultiplier + 1);
+		uint32_t dTseg1 = timing.dTseg1 + 1;
+		uint32_t dJumpWidth = timing.dJumpWidth;
+		uint32_t dPrescaler = 1;							// 48MHz main clock
+		uint32_t dTseg2;
+	debugPrintf("dbtp drm %d seg1 %d jw %d\n", timing.dataRateMultiplier, timing.dTseg1, timing.dJumpWidth);
+
+		// Use the highest prescaled clock frequency we can in order to get the most accurate timing
+		for (;;)
+		{
+			dTseg2 = dPeriod - dTseg1 - 1;
+			if (dTseg1 <= 32 && dTseg2 <= 16)
+			{
+				break;
+			}
+
+			// Currently we always use a prescaler that is a power of 2, but we could be more general
+			dPrescaler <<= 1;
+			dPeriod >>= 1;
+			dTseg1 >>= 1;
+			dJumpWidth >>= 1;
+		}
+
+		if (dJumpWidth > dTseg2) { dJumpWidth = dTseg2; }	// jump width cannot exceed tseg2
+#if SAME70
+		if (dJumpWidth > 8) { dJumpWidth = 8; }				// jump width cannot exceed 8 on the SAME70 (on the SAME5x it can be as large as tseg2)
+#endif
+	debugPrintf("update2 dbtp seg1 %d jw %d seg2 %d brp %d\n", dTseg1, dJumpWidth, dTseg2, dPrescaler);
+
+		dbtp.bF.BRP = dPrescaler - 1;
+		dbtp.bF.SJW = dJumpWidth - 1;
+		dbtp.bF.TSEG1 = dTseg1 - 1;
+		dbtp.bF.TSEG2 = dTseg2 - 1;
+
+		usingBrs = true;
+	}
+	else
+	{
+		// We are not using BRS. We default the fast data rate to 2Mbps (or lower if the prescaler is greater than 1) with fixed timing,
+		// just to have some sensible values to write to the register.
+		constexpr uint32_t fast_period = CanTiming::ClockFrequency/2'000'000;	// 2Mbps divided by the prescaler
+		constexpr uint32_t fast_tseg1 = fast_period/2 - 1;						// set sample point to 50%
+		constexpr uint32_t fast_tseg2 = fast_period - fast_tseg1 - 1;			// make up the correct period
+		constexpr uint32_t fast_jumpWidth = fast_tseg2;							// set jump width to maximum
+		dbtp.bF.BRP = nPrescaler - 1;
+		dbtp.bF.SJW = fast_jumpWidth - 1;
+		dbtp.bF.TSEG1 = fast_tseg1 - 1;
+		dbtp.bF.TSEG2 = fast_tseg2 - 1;
+		usingBrs = false;
+	}
 }
 
 void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept

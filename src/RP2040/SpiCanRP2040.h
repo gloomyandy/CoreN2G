@@ -236,7 +236,7 @@ public:
 
 	void GetLocalCanTiming(CanTiming& timing) const noexcept;
 
-	void SetLocalCanTiming(const CanTiming& timing) noexcept;
+	void ChangeLocalCanTiming(const CanTiming& timing) noexcept;
 
 	void GetAndClearStats(CanDevice::CanStats& dst) noexcept;
 
@@ -287,6 +287,7 @@ private:
 	uint16_t bitPeriod;											// how many clocks in a CAN normal bit
 
 	bool useFDMode;
+	bool usingBrs;
 	volatile uint32_t *rx0Fifo;									//!< Receive message fifo start
 	volatile uint32_t *rx1Fifo;									//!< Receive message fifo start
 	volatile uint32_t *tx0Fifo;

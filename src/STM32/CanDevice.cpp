@@ -69,6 +69,7 @@ void CanDevice::CanStats::Clear() noexcept
 		dataSize = FDCAN_DATA_BYTES_64;
 		debugPrintf("Unxepected Can data size %d\n", p_config.dataSize);
 	}
+	dev.useFDMode = (p_config.dataSize > 8);							// assume we want standard CAN if the max data size is 8
 
 	dev.hw.Instance = CanInstance[p_whichPort];
 	FDCAN_InitTypeDef& Init = dev.hw.Init;
@@ -106,6 +107,10 @@ void CanDevice::CanStats::Clear() noexcept
 		debugPrintf("FDCAN init failed %x\n", status);
 		return nullptr;
 	}
+	// Use our bit timing
+	dev.hw.Instance->NBTP = dev.nbtp;
+	dev.hw.Instance->DBTP = dev.dbtp;
+
 	for(uint32_t i = 0; i < Init.StdFiltersNbr; i++)
 		dev.DisableShortFilterElement(i);
 	for(uint32_t i = 0; i < Init.ExtFiltersNbr; i++)
@@ -153,12 +158,12 @@ void CanDevice::CanStats::Clear() noexcept
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_FIFO1_MESSAGE_LOST, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
 	HAL_FDCAN_ActivateNotification(&dev.hw, FDCAN_IT_BUS_OFF, 0);
-	//HAL_FDCAN_DisableTxDelayCompensation(&dev.hw);
 #if USE_TRANSCEIVER_COMPENSATION
 	const uint32_t dTseg1 = ((dev.dbtp & CAN_(DBTP_DTSEG1_Msk)) >> CAN_(DBTP_DTSEG1_Pos)) + 1;
 	dev.hw.Instance->TDCR = ((FDCAN_TDCR_TDCO_Msk & ((dTseg1) << FDCAN_TDCR_TDCO_Pos))) | ((FDCAN_TDCR_TDCF_Msk & ((dTseg1) << FDCAN_TDCR_TDCF_Pos)));
 #else
-	dev.hw.Instance->TDCR = 0;														// use just the measured transceiver delay
+	//dev.hw.Instance->TDCR = 0;														// use just the measured transceiver delay
+	HAL_FDCAN_DisableTxDelayCompensation(&dev.hw);
 #endif
 
 #ifdef RTOS
@@ -399,7 +404,8 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 			buffer->msg.raw[dataLen++] = 0;				// zero fill up to the CANFD buffer length
 		}
 		hdr.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-		hdr.BitRateSwitch = (buffer->useBrs ? FDCAN_BRS_ON : FDCAN_BRS_OFF);
+		hdr.BitRateSwitch = (usingBrs && buffer->useBrs ? FDCAN_BRS_ON : FDCAN_BRS_OFF);
+		if (hdr.BitRateSwitch != 0) debugPrintf("Sending message length %d with brs %x\n", dataLen, hdr.BitRateSwitch);
 		hdr.FDFormat = (buffer->fdMode ? FDCAN_FD_CAN : FDCAN_CLASSIC_CAN);
 		hdr.TxEventFifoControl = (buffer->reportInFifo ? FDCAN_STORE_TX_EVENTS : FDCAN_NO_TX_EVENTS);
 		hdr.MessageMarker = buffer->marker;
@@ -877,71 +883,6 @@ void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
 	}
 }
 
-void CanDevice::SetLocalCanTiming(const CanTiming &timing) noexcept
-{
-	UpdateLocalCanTiming(timing);					// set up nbtp and dbtp variables
-	Disable();
-	hw.Instance->NBTP = ((((uint32_t)hw.Init.NominalSyncJumpWidth - 1U) << FDCAN_NBTP_NSJW_Pos) |
-							(((uint32_t)hw.Init.NominalTimeSeg1 - 1U) << FDCAN_NBTP_NTSEG1_Pos)	|
-							(((uint32_t)hw.Init.NominalTimeSeg2 - 1U) << FDCAN_NBTP_NTSEG2_Pos)	|
-							(((uint32_t)hw.Init.NominalPrescaler - 1U) << FDCAN_NBTP_NBRP_Pos));
-
-	hw.Instance->DBTP = ((((uint32_t)hw.Init.DataSyncJumpWidth - 1U) << FDCAN_DBTP_DSJW_Pos) |
-							  (((uint32_t)hw.Init.DataTimeSeg1 - 1U) << FDCAN_DBTP_DTSEG1_Pos)	|
-							  (((uint32_t)hw.Init.DataTimeSeg2 - 1U) << FDCAN_DBTP_DTSEG2_Pos)	|
-							  (((uint32_t)hw.Init.DataPrescaler - 1U) << FDCAN_DBTP_DBRP_Pos));
-	Enable();
-}
-#if 0
-
-void CanDevice::UpdateLocalCanTiming(const CanTiming &timing) noexcept
-{
-	// Sort out the bit timing
-	uint32_t period = timing.period;
-	uint32_t tseg1 = timing.nTseg1;
-	uint32_t jumpWidth = timing.nJumpWidth;
-	uint32_t prescaler = 1;							// 48MHz main clock
-	uint32_t tseg2;
-
-	// Use the highest prescaled clock frequency we can in order to get the most accurate timing
-	for (;;)
-	{
-		tseg2 = period - tseg1 - 1;
-		if (tseg1 <= 256 && tseg2 <= 128)
-		{
-			break;
-		}
-
-		// Currently we always use a prescaler that is a power of 2, but we could be more general
-		prescaler <<= 1;
-		period >>= 1;
-		tseg1 >>= 1;
-		jumpWidth >>= 1;
-	}
-
-	if (jumpWidth > tseg2) { jumpWidth = tseg2; }	// jump width cannot exceed tseg2
-#if !SAME70
-	bitPeriod = period * prescaler;					// the actual CAN normal bit period in 48MHz clocks (may be different from timing.period)
-#endif
-
-	FDCAN_InitTypeDef& Init = hw.Init;
-	Init.NominalPrescaler = prescaler;
-	Init.NominalSyncJumpWidth = jumpWidth;
-	Init.NominalTimeSeg1 = tseg1;
-	Init.NominalTimeSeg2 = tseg2;
-	Init.DataPrescaler = prescaler;
-	// We don't currently use BRS. For now we default the fast data rate to 2Mbps (or lower if the prescaler is greater than 1) with fixed timing,
-	// just to have some sensible values to write to the register.
-	constexpr uint32_t fast_period = CanTiming::ClockFrequency/2'000'000;	// 2Mbps divided by the prescaler
-	constexpr uint32_t fast_tseg1 = fast_period/2 - 1;						// set sample point to 50%
-	constexpr uint32_t fast_tseg2 = fast_period - fast_tseg1 - 1;			// make up the correct period
-	constexpr uint32_t fast_jumpWidth = fast_tseg2;							// set jump width to maximum
-	Init.DataPrescaler = prescaler;
-	Init.DataSyncJumpWidth = fast_jumpWidth;
-	Init.DataTimeSeg1 = fast_tseg1;
-	Init.DataTimeSeg2 = fast_tseg2;
-}
-#endif
 void CanDevice::GetAndClearStats(CanDevice::CanStats& dst) noexcept
 {
 	AtomicCriticalSectionLocker lock;
