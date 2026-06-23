@@ -11,7 +11,6 @@ static HardwarePWM PWMChans[MaxPWMChannels];
 
 // Create the timers we can use
 HardwareTimer Timer2(TIM2);
-HardwareTimer Timer3(TIM3);
 HardwareTimer Timer4(TIM4);
 HardwareTimer Timer8(TIM8);
 HardwareTimer Timer12(TIM12);
@@ -21,19 +20,20 @@ HardwareTimer Timer14(TIM14);
 HardwareTimer Timer15(TIM15);
 HardwareTimer Timer16(TIM16);
 HardwareTimer Timer17(TIM17);
+static HardwareTimer* PWMTimers[] = {
+                                        &Timer2, &Timer4, &Timer8, &Timer12, &Timer13, &Timer14,
+                                        &Timer15, &Timer16, &Timer17
+};
 #else
+HardwareTimer Timer3(TIM3);
 HardwareTimer Timer9(TIM9);
 HardwareTimer Timer10(TIM10);
 HardwareTimer Timer11(TIM11);
-#endif
 static HardwareTimer* PWMTimers[] = {
                                         &Timer2, &Timer3, &Timer4, &Timer8, &Timer12, &Timer13, &Timer14,
-#if STM32H7
-                                        &Timer15, &Timer16, &Timer17
-#else
                                         &Timer9, &Timer10, &Timer11
-#endif
 };
+#endif
 
 HardwarePWM::HardwarePWM() noexcept : timer(nullptr), channel(0)
 {
