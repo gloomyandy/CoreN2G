@@ -136,7 +136,6 @@ extern "C" {
 # define SAM4S				0
 # define SAME5x				0
 # define SAME70				0
-# define STM32				0
 # define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
 #elif defined __RP2350__
 extern "C" {
