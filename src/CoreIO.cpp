@@ -265,7 +265,16 @@ void SetDriveStrength(Pin p, unsigned int strength) noexcept
 {
 	if (p < NumTotalPins)
 	{
-#if SAME5x || SAMC21
+#if SAME70
+		if (strength != 0)
+		{
+			GpioPort(p)->PIO_DRIVER |= GpioMask(p);
+		}
+		else
+		{
+			GpioPort(p)->PIO_DRIVER &= ~GpioMask(p);
+		}
+#elif SAME5x || SAMC21
 		if (strength != 0)
 		{
 			PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].reg |= PORT_PINCFG_DRVSTR;
