@@ -405,7 +405,6 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 		}
 		hdr.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
 		hdr.BitRateSwitch = (usingBrs && buffer->useBrs ? FDCAN_BRS_ON : FDCAN_BRS_OFF);
-		if (hdr.BitRateSwitch != 0) debugPrintf("Sending message length %d with brs %x\n", dataLen, hdr.BitRateSwitch);
 		hdr.FDFormat = (buffer->fdMode ? FDCAN_FD_CAN : FDCAN_CLASSIC_CAN);
 		hdr.TxEventFifoControl = (buffer->reportInFifo ? FDCAN_STORE_TX_EVENTS : FDCAN_NO_TX_EVENTS);
 		hdr.MessageMarker = buffer->marker;
