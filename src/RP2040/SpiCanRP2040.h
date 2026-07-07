@@ -249,6 +249,13 @@ public:
 
 	uint32_t GetErrorRegister() const noexcept;
 
+	// Park/resume core 1 without changing the CAN chip mode. Used around flash operations: unlike
+	// Disable()/Enable() this needs no SPI transactions (which could race core 1) and does not take the
+	// node off the bus; the chip buffers traffic internally for the duration. PauseCore1 waits (bounded)
+	// for core 1 to acknowledge that it has parked in its RAM-resident idle loop.
+	bool PauseCore1() noexcept;
+	void ResumeCore1() noexcept;
+
 #ifdef RTOS
 	void Interrupt() noexcept;
 #endif
@@ -305,6 +312,8 @@ private:
 	volatile uint32_t latestTimeStamp;
 	volatile uint32_t latestStepTime;
 	volatile RunState runState;
+	volatile bool core1Paused;									//!< request for core 1 to park in its RAM-resident idle loop (no chip mode change)
+	volatile bool core1Idle;									//!< set by core 1 when it is parked and making no SPI accesses or flash fetches
 	volatile bool abortTx[NumCanTxFifos];
 
 	friend void Core1Entry() noexcept;

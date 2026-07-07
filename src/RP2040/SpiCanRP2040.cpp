@@ -932,8 +932,9 @@ void CanDevice::DoReadTimeStampCounter() noexcept
 	uint32_t pendingInterrupts = 0;
 	for(;;)
 	{
-		if (runState == RunState::enabled)
+		if (runState == RunState::enabled && !core1Paused)
 		{
+			core1Idle = false;
 			// Check for incomming data
 			for(size_t rx = 0; rx < NumCanRxFifos; rx++)
 			{
@@ -989,6 +990,10 @@ void CanDevice::DoReadTimeStampCounter() noexcept
 				}
 			}
 		}
+		else
+		{
+			core1Idle = true;			// parked: no SPI accesses and no flash fetches until re-enabled
+		}
 	}
 }
 
@@ -997,14 +1002,41 @@ extern "C" [[noreturn]]void Core1Entry() noexcept
 	devices[0].CanIO();
 }
 
+// Park core 1 in its RAM-resident idle loop without touching the CAN chip (see header comment).
+// Returns true if core 1 acknowledged the park, false if we timed out waiting (we proceed anyway,
+// which is no worse than the previous behaviour of not waiting at all).
+bool CanDevice::PauseCore1() noexcept
+{
+	core1Paused = true;
+	const uint32_t start = millis();
+	while (!core1Idle)
+	{
+		if (millis() - start >= 50)
+		{
+			return false;
+		}
+		delay(1);
+	}
+	return true;
+}
+
+void CanDevice::ResumeCore1() noexcept
+{
+	core1Paused = false;
+}
+
+// These are called (via CoreIO's DisableCore1Processing/EnableCore1Processing) around flash operations,
+// which require that core 1 does not execute code from flash. Parking core 1 is all that is needed;
+// the previous implementation also took the CAN chip off the bus via SPI mode-change transactions,
+// which could race a transaction in progress on core 1 (the 10ms settle delay was not a handshake).
 void DisableCanCore1Processing() noexcept
 {
-	devices[0].Disable();
+	devices[0].PauseCore1();
 }
 
 void EnableCanCore1Processing() noexcept
 {
-	devices[0].Enable();
+	devices[0].ResumeCore1();
 }
 
 #endif
