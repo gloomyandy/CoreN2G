@@ -30,5 +30,13 @@ void runtime_init(void) {
     for (void (**p)(void) = &__init_array_start; p < &__init_array_end; ++p) {
         (*p)();
     }
+#if defined(__RP2350__) && defined(BOARD_OVERCLOCK_SYS_KHZ)
+    // Raise the system clock above the stock 150MHz. The SDK runtime library is prebuilt with the stock
+    // clock configuration, so the PLL must be reprogrammed at runtime after the standard initialisers
+    // have run. clk_peri follows clk_sys so that peripheral (SPI/UART) baud dividers stay correct.
+    set_sys_clock_khz(BOARD_OVERCLOCK_SYS_KHZ, true);
+    clock_configure(clk_peri, 0, CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLK_SYS,
+                    BOARD_OVERCLOCK_SYS_KHZ * 1000u, BOARD_OVERCLOCK_SYS_KHZ * 1000u);
+#endif
     SystemCoreClock = clock_get_hz(clk_sys);
 }

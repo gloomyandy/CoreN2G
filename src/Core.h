@@ -245,7 +245,11 @@ static const uint32_t SystemCoreClockFreq = 200000000;	///< The processor clock 
 
 #elif RP2350
 
+# ifdef BOARD_OVERCLOCK_SYS_KHZ
+static const uint32_t SystemCoreClockFreq = (uint32_t)BOARD_OVERCLOCK_SYS_KHZ * 1000u;	///< The processor clock frequency after PicoInit raises the PLL at runtime
+# else
 static const uint32_t SystemCoreClockFreq = 150000000;	///< The processor clock frequency after initialisation
+# endif
 
 #else
 # error unsupported processor
