@@ -12,9 +12,8 @@
 SharedSpiDevice::SharedSpiDevice(const SpiParameters& params) noexcept : SpiDevice(params)
 {
 #if STM32 || RPXXXX
-	static char name[] = "SPI0";
-	name[3] = '0' + params.instanceNumber;
-	mutex.Create(name);
+	static const char *name[] = {"SPI0", "SPI1", "SPI2", "SPI3", "SPI4", "SPI5", "SPI6", "SPI7", "SPI8"};
+	mutex.Create(name[params.instanceNumber]);
 #else
 	mutex.Create("SPI");
 #endif
