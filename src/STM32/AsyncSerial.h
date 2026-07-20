@@ -8,6 +8,7 @@
 #include "Stream.h"
 #include "Print.h"
 #include <UART/UartParameters.h>
+#include <UART/UartMode.h>
 
 #ifdef RTOS
 # include <RTOSIface/RTOSIface.h>
@@ -19,25 +20,6 @@
 #define SERIAL_RX_BUFFER_SIZE 512
 #endif
 
-
-#ifdef UART_WORDLENGTH_7B
-#define SERIAL_7N1 0x04
-#define SERIAL_7N2 0x0C
-#define SERIAL_6E1 0x22
-#define SERIAL_6E2 0x2A
-#define SERIAL_6O1 0x32
-#define SERIAL_6O2 0x3A
-#endif
-#define SERIAL_8N1 0x06
-#define SERIAL_8N2 0x0E
-#define SERIAL_7E1 0x24
-#define SERIAL_8E1 0x26
-#define SERIAL_7E2 0x2C
-#define SERIAL_8E2 0x2E
-#define SERIAL_7O1 0x34
-#define SERIAL_8O1 0x36
-#define SERIAL_7O2 0x3C
-#define SERIAL_8O2 0x3E
 
 class AsyncSerial : public Stream
 {
@@ -60,8 +42,7 @@ public:
 
     bool Configure(Pin rx, Pin tx) noexcept;
     
-    void begin(uint32_t baud, uint8_t config) noexcept;
-    void begin(uint32_t baud) noexcept;
+	void begin(uint32_t baudRate, UartMode mode = UartMode::Mode8N1) noexcept;
     void end() noexcept;
 
     size_t write(const uint8_t *buffer, size_t size) noexcept override;

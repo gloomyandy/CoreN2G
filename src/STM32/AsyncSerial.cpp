@@ -36,71 +36,34 @@ bool AsyncSerial::Configure(Pin rx, Pin tx) noexcept
     return false;    
 }
 
-void AsyncSerial::begin(uint32_t baud, uint8_t config) noexcept
+void AsyncSerial::begin(uint32_t baud, UartMode mode) noexcept
 {
     uint32_t databits = 0;
     uint32_t stopbits = 0;
     uint32_t parity = 0;
 
-    // Manage databits
-    switch (config & 0x07) 
+    switch (mode)
     {
-    case 0x02:
-        databits = 6;
-        break;
-    case 0x04:
-        databits = 7;
-        break;
-    case 0x06:
-        databits = 8;
-        break;
+    case UartMode::Mode8N1:
     default:
-        databits = 0;
-        break;
-    }
-
-    if ((config & 0x30) == 0x30) 
-    {
-        parity = UART_PARITY_ODD;
-        databits++;
-    } 
-    else if ((config & 0x20) == 0x20) 
-    {
-        parity = UART_PARITY_EVEN;
-        databits++;
-    } 
-    else 
-    {
-        parity = UART_PARITY_NONE;
-    }
-
-    if ((config & 0x08) == 0x08) 
-    {
-        stopbits = UART_STOPBITS_2;
-    } 
-    else 
-    {
-        stopbits = UART_STOPBITS_1;
-    }
-
-    switch (databits) 
-    {
-    #ifdef UART_WORDLENGTH_7B
-        case 7:
-        databits = UART_WORDLENGTH_7B;
-        break;
-    #endif
-        case 8:
         databits = UART_WORDLENGTH_8B;
+        stopbits = UART_STOPBITS_1;
+        parity = UART_PARITY_NONE;
         break;
-        case 9:
+
+    case UartMode::Mode8E1:
         databits = UART_WORDLENGTH_9B;
+        stopbits = UART_STOPBITS_1;
+        parity = UART_PARITY_EVEN;
         break;
-        default:
-        case 0:
-        Error_Handler();
+
+    case UartMode::Mode8O1:
+        databits = UART_WORDLENGTH_9B;
+        stopbits = UART_STOPBITS_1;
+        parity = UART_PARITY_ODD;
         break;
     }
+
 
     init( (uint32_t)baud, databits, parity, stopbits);
     if (uart != nullptr)
@@ -112,11 +75,6 @@ void AsyncSerial::begin(uint32_t baud, uint8_t config) noexcept
         txEnabled = true;
         start_rx();
     }
-}
-
-void AsyncSerial::begin(uint32_t baud) noexcept
-{
-    begin(baud, SERIAL_8N1);
 }
 
 void AsyncSerial::end(void) noexcept
