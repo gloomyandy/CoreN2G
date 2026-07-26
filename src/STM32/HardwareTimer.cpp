@@ -25,6 +25,7 @@
 
 #include <CoreImp.h>
 #include "HardwareTimer.h"
+#include <stm32h7xx_hal_tim_ex.h>
 
 #ifdef HAL_TIM_MODULE_ENABLED
 
@@ -371,29 +372,6 @@ static uint8_t getTimerClkSrc(TIM_TypeDef *tim) noexcept
   return clkSrc;
 }
 
-static uint32_t get_pwm_channel(PinName pin)
-{
-  uint32_t function = pinmap_function(pin, PinMap_PWM);
-  uint32_t channel = 0;
-  switch (STM_PIN_CHANNEL(function)) {
-    case 1:
-      channel = TIM_CHANNEL_1;
-      break;
-    case 2:
-      channel = TIM_CHANNEL_2;
-      break;
-    case 3:
-      channel = TIM_CHANNEL_3;
-      break;
-    case 4:
-      channel = TIM_CHANNEL_4;
-      break;
-    default:
-      channel = 0;
-      break;
-  }
-  return channel;
-}
 
 static uint32_t get_timer_id(TIM_TypeDef *instance) noexcept
 {
@@ -619,7 +597,10 @@ void HardwareTimer::resumeChannel(uint32_t channel) noexcept
   if (timChannel == -1) {
     Error_Handler();
   }
-  if (IS_TIM_PWM_MODE(OCMode[channel - 1])) {
+  uint8_t mode = OCMode[channel - 1];
+  bool inverted = mode & TIMER_INVERTED_PIN;
+  mode &= ~TIMER_INVERTED_PIN;
+  if (IS_TIM_PWM_MODE(mode)) {
     TIM_OC_InitTypeDef channelOC;
     memset(&channelOC, 0, sizeof(channelOC));
     switch (timChannel)
@@ -637,9 +618,12 @@ void HardwareTimer::resumeChannel(uint32_t channel) noexcept
       channelOC.Pulse =  handle.Instance->CCR4;
       break;
     }
-    channelOC.OCMode = OCMode[channel -1];
+    channelOC.OCMode = mode;
     HAL_TIM_PWM_ConfigChannel(&( handle), &channelOC, timChannel);
-    HAL_TIM_PWM_Start(&( handle), timChannel);
+    if (inverted)
+      HAL_TIMEx_PWMN_Start(&( handle), timChannel);
+    else
+      HAL_TIM_PWM_Start(&( handle), timChannel);
   }
 }
 
@@ -760,7 +744,7 @@ void HardwareTimer::setCount(uint32_t counter, TimerFormat_t format) noexcept
   * @param  pin: pin name, ex: PB_0
   * @retval None
   */
-void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin) noexcept
+void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, const PinMap *pinEntry) noexcept
 {
   if (getChannel(channel) == -1) {
     Error_Handler();
@@ -769,6 +753,8 @@ void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin) no
   switch (mode) {
     case TIMER_OUTPUT_COMPARE_PWM1:
       OCMode[channel - 1] = TIM_OCMODE_PWM1;
+      if (STM_PIN_INVERTED(pinEntry->function))
+              OCMode[channel - 1] |= TIMER_INVERTED_PIN;
       break;
 
     case TIMER_DISABLED:
@@ -780,14 +766,8 @@ void HardwareTimer::setMode(uint32_t channel, TimerModes_t mode, PinName pin) no
       break;
   }
 
-  if (pin != NC) {
-    if ((int)get_pwm_channel(pin) == getChannel(channel)) {
-      /* Configure PWM GPIO pins */
-      pinmap_pinout(pin, PinMap_PWM);
-    } else {
-      // Pin doesn't match with timer output channels
-      Error_Handler();
-    }
+  if (pinEntry != nullptr) {
+    pin_function(pinEntry->pin, pinEntry->function);
   }
 }
 

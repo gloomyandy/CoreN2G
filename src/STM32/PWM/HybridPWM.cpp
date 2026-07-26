@@ -59,7 +59,7 @@ void HybridPWMPin::free() noexcept
 
 void HybridPWMPin::set(float value, uint32_t freq) noexcept
 {
-    // Don't allocate a time until we actually need it!
+    // Don't allocate a timer until we actually need it!
     if (!pwm)
     {
         if (value != 0.0 && value != 1.0 && freq != 0)

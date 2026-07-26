@@ -26,7 +26,7 @@
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef HARDWARETIMER_H_
 #define HARDWARETIMER_H_
-
+#include <pinmap.h>
 /* Includes ------------------------------------------------------------------*/
 
 #ifdef HAL_TIM_MODULE_ENABLED
@@ -55,6 +55,7 @@ typedef enum {
   // This mode is very useful for Frequency and Dutycycle measurement
   TIMER_INPUT_FREQ_DUTY_MEASUREMENT,
 
+  TIMER_INVERTED_PIN = 0x80,              // Use the complimentary pin
   TIMER_NOT_USED = 0xFF  // This must be the last item of this enum
 } TimerModes_t;
 
@@ -90,7 +91,7 @@ class HardwareTimer {
     void setCount(uint32_t val, TimerFormat_t format = TICK_FORMAT) noexcept; // set timer counter to value 'val' depending on format provided
     uint32_t getCount(TimerFormat_t format = TICK_FORMAT) noexcept;  // return current counter value of timer depending on format provided
 
-    void setMode(uint32_t channel, TimerModes_t mode, PinName pin = NC) noexcept; // Configure timer channel with specified mode on specified pin if available
+    void setMode(uint32_t channel, TimerModes_t mode, const PinMap *pinEntry = nullptr) noexcept; // Configure timer channel with specified mode on specified pin if available
 
     void setCaptureCompare(uint32_t channel, uint32_t compare, TimerCompareFormat_t format = TICK_COMPARE_FORMAT) noexcept;  // set Compare register value of specified channel depending on format provided
 
