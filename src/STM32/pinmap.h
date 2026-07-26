@@ -47,9 +47,9 @@ typedef struct {
   int function;
 } PinMap;
 
-bool pin_in_pinmap(PinName pin, const PinMap *map);
 void pin_function(PinName pin, int function);
 void pin_speed(PinName pin, int speed);
+const PinMap *pinmap_find_entry(void *peripheral, PinName pin, const PinMap *map);
 
 static inline PinName pin_pinName(const PinMap *map)
 {
@@ -58,14 +58,9 @@ static inline PinName pin_pinName(const PinMap *map)
 
 void  pinmap_pinout(PinName pin, const PinMap *map);
 bool  pinmap_pinout2(void *peripheral, PinName pin, const PinMap *map);
-void *pinmap_find_peripheral(PinName pin, const PinMap *map);
 void *pinmap_peripheral(PinName pin, const PinMap *map);
-PinName pinmap_find_pin(void *peripheral, const PinMap *map);
-PinName pinmap_pin(void *peripheral, const PinMap *map);
-uint32_t pinmap_find_function(PinName pin, const PinMap *map);
 uint32_t pinmap_function(PinName pin, const PinMap *map);
 void *pinmap_merge_peripheral(void *a, void *b);
-uint32_t pin_get_function(PinName pin);
 #ifdef __cplusplus
 }
 #endif

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 //Based on mbed-os/hal/mbed_pinmap_common.c
+// Heavily modifed for use with RRF by Andy.
+
 #include "pinmap.h"
 #include "pinconfig.h"
 #if defined(__STM32H7__)
@@ -42,64 +44,6 @@ const uint32_t pin_map_ll[16] = {
   LL_GPIO_PIN_15
 };
 
-bool pin_in_pinmap(PinName pin, const PinMap *map)
-{
-  if (pin != (PinName)NC) {
-    while (map->pin != NC) {
-      if (map->pin == pin) {
-        return true;
-      }
-      map++;
-    }
-  }
-  return false;
-}
-
-/**
- * Configure pin (mode, speed, output type and pull-up/pull-down)
- */
-uint32_t pin_get_function(PinName pin)
-{
-  /* Get the pin informations */
-  uint32_t mode=0;
-  uint32_t afnum=0;
-  uint32_t port = STM_PORT(pin);
-  uint32_t ll_pin  = STM_LL_GPIO_PIN(pin);
-  uint32_t ll_mode = 0;
-
-  if (pin == (PinName)NC) {
-    Error_Handler();
-  }
-  GPIO_TypeDef *gpio = set_GPIO_Port_Clock(port);
-
-  ll_mode = LL_GPIO_GetPinMode(gpio, ll_pin);
-
-  switch (ll_mode) {
-    case LL_GPIO_MODE_INPUT:
-      mode = STM_PIN_INPUT;
-      break;
-    case LL_GPIO_MODE_OUTPUT:
-      mode = LL_GPIO_MODE_OUTPUT;
-      break;
-    case LL_GPIO_MODE_ALTERNATE:
-      ll_mode = LL_GPIO_MODE_ALTERNATE;
-      /* In case of ALT function, also set the afnum */
-      if (STM_PIN(pin) > 7) {
-        afnum = LL_GPIO_GetAFPin_8_15(gpio, ll_pin);
-      } else {
-        afnum = LL_GPIO_GetAFPin_0_7(gpio, ll_pin);
-      }
-      mode = STM_PIN_ALTERNATE;
-      break;
-    case LL_GPIO_MODE_ANALOG:
-      mode = STM_PIN_ANALOG;
-      break;
-    default:
-      Error_Handler();
-      break;
-  }
-  return STM_PIN_DEFINE(mode, 0, afnum);
-}
 
 /**
  * Configure pin (mode, speed, output type and pull-up/pull-down)
@@ -205,18 +149,27 @@ void pin_speed(PinName pin, int speed)
   LL_GPIO_SetPinSpeed(gpio, ll_pin, speed);
 }
 
-void pinmap_pinout(PinName pin, const PinMap *map)
+const PinMap *pinmap_find_entry(void *peripheral, PinName pin, const PinMap *map)
 {
-  if (pin == NC) {
-    return;
+  // Search for an entry matching both pin and peripheral. Null values act as wildcard
+  if (map == NULL || (pin == NC && peripheral == NULL)) {
+    return NULL;
   }
-
   while (map->pin != NC) {
-    if (map->pin == pin) {
-      pin_function(pin, map->function);
-      return;
+    if ((pin == NC || map->pin == pin) && (peripheral == NULL || map->peripheral == peripheral)) {
+      return map;
     }
     map++;
+  }
+  return NULL;
+}
+  
+void pinmap_pinout(PinName pin, const PinMap *map)
+{
+  const PinMap * entry = pinmap_find_entry(NULL, pin, map);
+  if (entry != NULL) {
+      pin_function(pin, entry->function);
+      return;
   }
   Error_Handler();
 }
@@ -226,78 +179,30 @@ bool pinmap_pinout2(void *peripheral, PinName pin, const PinMap *map)
   if (pin == NC) {
     return true;
   }
-
-  while (map->pin != NC) {
-    if (map->pin == pin && map->peripheral == peripheral) {
-      pin_function(pin, map->function);
+  const PinMap * entry = pinmap_find_entry(peripheral, pin, map);
+  if (entry != NULL) {
+      pin_function(pin, entry->function);
       return true;
-    }
-    map++;
   }
   return false;
 }
 
-void *pinmap_find_peripheral(PinName pin, const PinMap *map)
+void *pinmap_peripheral(PinName pin, const PinMap *map)
 {
-  while (map->pin != NC) {
-    if (map->pin == pin) {
-      return map->peripheral;
-    }
-    map++;
+  const PinMap * entry = pinmap_find_entry(NULL, pin, map);
+  if (entry != NULL) {
+    return entry->peripheral;
   }
   return NP;
 }
 
-void *pinmap_peripheral(PinName pin, const PinMap *map)
-{
-  void *peripheral = NP;
-
-  if (pin != (PinName)NC) {
-    peripheral = pinmap_find_peripheral(pin, map);
-  }
-  return peripheral;
-}
-
-PinName pinmap_find_pin(void *peripheral, const PinMap *map)
-{
-  while (map->peripheral != NP) {
-    if (map->peripheral == peripheral) {
-      return map->pin;
-    }
-    map++;
-  }
-  return NC;
-}
-
-PinName pinmap_pin(void *peripheral, const PinMap *map)
-{
-  PinName pin = NC;
-
-  if (peripheral != NP) {
-    pin = pinmap_find_pin(peripheral, map);
-  }
-  return pin;
-}
-
-uint32_t pinmap_find_function(PinName pin, const PinMap *map)
-{
-  while (map->pin != NC) {
-    if (map->pin == pin) {
-      return map->function;
-    }
-    map++;
-  }
-  return (uint32_t)NC;
-}
-
 uint32_t pinmap_function(PinName pin, const PinMap *map)
 {
-  uint32_t function = (uint32_t)NC;
-
-  if (pin != (PinName)NC) {
-    function = pinmap_find_function(pin, map);
+  const PinMap * entry = pinmap_find_entry(NULL, pin, map);
+  if (entry != NULL) {
+    return entry->function;
   }
-  return function;
+  return (uint32_t)NC;
 }
 
 // Merge peripherals
