@@ -56,6 +56,7 @@ void HardwarePWM::free() noexcept
 
 HybridPWMBase *HardwarePWM::allocate(Pin pin, uint32_t freq, float value) noexcept
 {
+#if 0
     //debugPrintf("HWPWM allocate pin %x, freq %d\n", static_cast<int>(pin), static_cast<int>(freq));
     // search for all of the possible timers that can drive this pin
     for(const PinMap *PMEntry = PinMap_PWM; (PMEntry = pinmap_find_entry(nullptr, pin, PMEntry)) != nullptr; PMEntry++)
@@ -119,6 +120,7 @@ HybridPWMBase *HardwarePWM::allocate(Pin pin, uint32_t freq, float value) noexce
             return &PWMChans[free];
         }
     }
+#endif
     return nullptr;
 }
 

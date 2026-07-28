@@ -57,43 +57,18 @@ uint32_t pwmStartTicks = 0;
 uint32_t pwmOOB = 0;
 #endif
 
-static void updateActive()
+static void updateActive(uint32_t newChan = 0xffffffff)
 {
     int32_t first = -1;
     int32_t last = -1;
     for(uint32_t i = 0; i < MaxPWMChannels; i++)
-        if (States[i].enabled)
+        if (States[i].enabled || i == newChan)
         {
-            last = i;
+            last = i + 1;
             if (first < 0) first = i;
         }
-    bool timerRunning = (endActive >= 0);
-    if (last >= 0)
-    {
-        startActive = first;
-        endActive = last + 1;
-        // If timer not currently running restart it
-        if (!timerRunning)
-        {
-#ifdef PWM_DEBUG
-            pwmStartTicks = StepTimer::GetTimerTicks();
-            //debugPrintf("Resume timer\n");
-            if (__HAL_TIM_GET_COUNTER(timerHandle) > baseDelta)
-            {
-                debugPrintf("Current time > base delta\n");
-                __HAL_TIM_SET_COUNTER(timerHandle, baseDelta);
-            }
-#endif
-            __HAL_TIM_SET_AUTORELOAD(timerHandle, baseDelta);
-        }
-    }
-    else
-    {
-        __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
-        endActive = -1;
-        startActive = -1;
-        //debugPrintf("Pause timer\n");
-    }
+    endActive = last;
+    startActive = first;
 }
 
 static void disable(int chan)
@@ -103,6 +78,8 @@ static void disable(int chan)
     debugPrintf("disable %d\n", chan);
 #endif
     updateActive();
+    if (endActive < 0)
+        __HAL_TIM_DISABLE_IT(timerHandle, TIM_IT_UPDATE);
 }
 
 static int enable(Pin pin, uint32_t onTime, uint32_t offTime)
@@ -131,46 +108,20 @@ static int enable(Pin pin, uint32_t onTime, uint32_t offTime)
     s.onOffBuffer = 0;
     s.state = 1;
     s.newTimes = false;
-    //Stop the timer while we complete the setup.
-    __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
-    // see if we can find an existing channel that shares the same frequency
-    uint32_t cycleTime = onTime + offTime;
-    int32_t syncSlot = -1;
-    for(int32_t i = startActive; i < endActive; i++)
-    {
-        if (States[i].enabled && (States[i].onOffTimes[States[i].onOffBuffer][0] + States[i].onOffTimes[States[i].onOffBuffer][1]) == cycleTime)
-        {
-            syncSlot = i;
-            break;
-        }
-    }
-#ifdef PWM_DEBUG
-    debugPrintf("found sync slot %d\n", (int)syncSlot);
-#endif
-
-    if (syncSlot >= 0)
-    {
-        PWMState& sync = States[syncSlot];
-        // we have something to sync with, set our event to match
-        s.nextEvent = sync.nextEvent + (sync.state == 1 ? 0 : sync.onOffTimes[sync.onOffBuffer][1]);
-        // we don't need to adjust the timer
-    }
-    else
-    {
-        uint32_t curDelta = __HAL_TIM_GET_COUNTER(timerHandle);
-        // avoid setting reload time to 0 - this should never happen!
-        if (curDelta == 0)
-        {
-            debugPrintf("curDelta is zero\n");
-            curDelta++;
-        }
-        s.nextEvent = baseTime + curDelta;
-        baseDelta = curDelta;
-    }
+    updateActive(newSlot);
+    // Pause things while we complete the setup and then trigger an updated asap
+    __HAL_TIM_DISABLE_IT(timerHandle, TIM_IT_UPDATE);
+    __HAL_TIM_SET_AUTORELOAD(timerHandle, 0xffff);
+    uint32_t curDelta = __HAL_TIM_GET_COUNTER(timerHandle);
     s.enabled = true;
-    // Force a timer restart
-    endActive = -1;
-    updateActive();
+    if (__HAL_TIM_GET_ITSTATUS(timerHandle, TIM_IT_UPDATE))
+        // the timer has completed the planned cycle, plus whatever ticks may have happened since we diabled ints
+        baseDelta += __HAL_TIM_GET_COUNTER(timerHandle);
+    else
+        baseDelta = curDelta;
+    s.nextEvent = baseTime + baseDelta;;
+    timerHandle->Instance->EGR = TIM_EVENTSOURCE_UPDATE;
+    __HAL_TIM_ENABLE_IT(timerHandle, TIM_IT_UPDATE);
     return newSlot;
 }
 
@@ -253,16 +204,8 @@ void TIM7_IRQHandler(void) noexcept
                 delta += s.onOffTimes[s.onOffBuffer][newState];
                 s.nextEvent = now + delta;
                 // don't allow correction to go too far!
-                if (delta < 0)
+                if (delta <= 0)
                 {
-                    // If delta is still -ve then this means that the call to the int handler
-                    // was so late that it has exceeded the length of time of the current pulse.
-                    // This may happen with very short pulses (ones that are less than our defined
-                    // minimum). In this case we will have set a nextEvent time that is in the past.
-                    // this is not a problem so long as the next pulse length is long enough that it
-                    // can cover the accumulated delay and allow us to catch up. This is typically
-                    // the case with a PWM signal. Obviously we can't set a next event time in the
-                    // past so we set a minimum here, but carry the delta forwards in nextEvent.
                     delta = 0;
 #ifdef PWM_DEBUG
                     pwmBigDelta++;
@@ -272,7 +215,7 @@ void TIM7_IRQHandler(void) noexcept
                 pwmCalls++;
 #endif
             }
-            // at this point delta >= 0, now track the smallest delta as the next target time
+            // at this point delta >= 1, now track the smallest delta as the next target time
             if ((uint32_t)delta < next)
                 next = (uint32_t)delta;
         }
@@ -285,29 +228,26 @@ void TIM7_IRQHandler(void) noexcept
         pwmVBigDelta++;
 #endif
     }
-    // Stop the counter
-    __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
-    // Clear any pending interrupt
-    __HAL_TIM_CLEAR_IT(timerHandle, TIM_IT_UPDATE);
-    // time expires when it ticks past reload value, so add 1 to adjust 
-    uint16_t curTick = __HAL_TIM_GET_COUNTER(timerHandle) + 1;
-#ifdef PWM_DEBUG
-    if (curTick == 0)
-        pwmBad++;
-#endif
-    if (curTick > next)
+    else if (next > 1)
+        next--;
+    else
+        next = 1;
+    // at this point next must be >= 1 becasue setting a reload of 0 will freeze the timer
+    // update the reload time. We need to ensure that it is >= the current tick count
+    for(;;)
     {
+        // Clear any pending interrupt
+        __HAL_TIM_CLEAR_IT(timerHandle, TIM_IT_UPDATE);
+        // set new target
+        __HAL_TIM_SET_AUTORELOAD(timerHandle, next);
+        uint16_t curTick = __HAL_TIM_GET_COUNTER(timerHandle);
+        if (next >= curTick) break;
         next = curTick;
-#ifdef PWM_DEBUG
-        pwmAdjust++;
-#endif
     }
-    baseDelta = next;
-    __HAL_TIM_SET_COUNTER(timerHandle, curTick);
-    // set new target and re-enable counter 
-    __HAL_TIM_SET_AUTORELOAD(timerHandle, next);
+    // The actual elapsed time for a autoreload of n is n+1
+    baseDelta = next + 1;
 #ifdef PWM_DEBUG
-    const uint32_t dt = SPWMTimer.getCount() - startTime;
+    const uint32_t dt = __HAL_TIM_GET_COUNTER(timerHandle) - startTime;
     if (dt < pwmMinTime)
         pwmMinTime = dt;
     else if (dt > pwmMaxTime)
@@ -325,14 +265,10 @@ static void initTimer() noexcept
     SPWMTimer.setOverflow(0xffff, TICK_FORMAT);
     // init hardware and interrupts
     timerHandle = SPWMTimer.getHandle();
-    __HAL_TIM_SET_COUNTER(timerHandle, 1);
+    __HAL_TIM_SET_COUNTER(timerHandle, 0);
     NVIC_EnableIRQ(TIM7_IRQn);
-    SPWMTimer.resume();
-    // stop the counter for now
-    __HAL_TIM_SET_AUTORELOAD(timerHandle, 0);
-    // enable interrupt on timer overflow
-    __HAL_TIM_ENABLE_IT(timerHandle, TIM_IT_UPDATE);
     timerReady = true;
+    SPWMTimer.resume();
 }
 
 
