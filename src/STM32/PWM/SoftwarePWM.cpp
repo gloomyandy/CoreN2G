@@ -1,10 +1,30 @@
-
+/*
+ * Software PWM
+ * 
+ * Provide PWM outputs for up to 16 channels using any gpio pin.
+ * This module uses a single basic hardware timer runing at 1MHz to provide the base clock.
+ * It uses an interrupt generated when the timer hits the update threshold to generate the
+ * next falling/rising edge of the PWM signal as required. Channels which require a full on/off
+ * value simply set the gpio as needed and the channel is marked as unused. 
+ * 
+ * Care must be taken to ensure that the reload value of the timer is not ever set to 0 as this
+ * in effect will freeze the timer when the counter overflows back to 0. This in effect means that
+ * minimum period between two updates is 2uS (as setting the reload value to n generates a reload
+ * after n+1 ticks). This along with delays when other parts pf RRF diable interrupts or when a
+ * higher priority interrupt is generated means that events may be a few ticks late (a typical maximum
+ * is 3uS). We have two options for how to deal with this:
+ * a) ignore it and set things up so that the next edge is "on time" in effect preserving the update freq.
+ * b) take the lateness in to account and set things so that the next edge is also late, prioritising the pulse length.
+ * This implementation chooses option b as this produces less chatter on common servos.
+ * 
+ * Author: Andy
+ * */
 
 #include <CoreImp.h>
 #include "HybridPWM.h"
 extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 // NOTE: The debug error calculations assume a Step Timer running at 1MHz
-//#define PWM_DEBUG
+#define PWM_DEBUG
 # if STM32H7
 # define SYNC_GPIO() __DSB()
 #else
@@ -34,7 +54,7 @@ static bool timerReady = false;
 static TIM_HandleTypeDef *timerHandle;
 
 static SoftwarePWM PWMChans[MaxPWMChannels];
-#define PWM_DEBUG
+
 #ifdef PWM_DEBUG
 HardwareTimer dbtimer(TIM5);
 uint32_t pwmInts = 0;
@@ -48,7 +68,9 @@ uint32_t pwmBadRange = 0;
 int32_t pwmAccErr = 0;
 int pwmBadVal = 0;
 uint32_t pwmPending = 0;
-uint32_t pwmNegDelta = 0;
+uint32_t pwmNegADelta = 0;
+uint32_t pwmNegCDelta = 0;
+uint32_t pwmEarly = 0;
 uint32_t pwmOneDelta = 0;
 int32_t pwmMaxErr = -0x7fffffff;
 int32_t pwmMinErr = 0x7fffffff;
@@ -110,6 +132,7 @@ static int enable(Pin pin, uint32_t onTime, uint32_t offTime)
     s.newTimes = false;
     updateActive(newSlot);
     int32_t syncSlot = -1;
+#if 0
     uint32_t cycleTime = onTime + offTime;
     for(int32_t i = startActive; i < endActive; i++)
     {
@@ -119,6 +142,7 @@ static int enable(Pin pin, uint32_t onTime, uint32_t offTime)
             break;
         }
     }
+#endif
 #ifdef PWM_DEBUG
     debugPrintf("found sync slot %d\n", (int)syncSlot);
 #endif
@@ -180,19 +204,20 @@ void TIM7_IRQHandler(void) noexcept
 {
     // ensure we do not reset the counter a 2nd time
     __HAL_TIM_SET_AUTORELOAD(timerHandle, 0xffff);
-    uint32_t now = baseTime + baseDelta;
+    uint32_t computedNow = baseTime + baseDelta;
+    uint32_t actualNow = computedNow + __HAL_TIM_GET_COUNTER(timerHandle);
 #ifdef PWM_DEBUG
     pwmInts++;
     const uint32_t startTime = dbtimer.getCount();
-    int32_t err = (now - baseTime) - (startTime - pwmStartTicks);
-    pwmAccErr = now - (startTime - pwmBaseTicks);
+    int32_t err = (actualNow - baseTime) - (startTime - pwmStartTicks);
+    pwmAccErr = actualNow - (startTime - pwmBaseTicks);
     pwmStartTicks = startTime;
     if (err > pwmMaxErr) pwmMaxErr = err;
     if (err < pwmMinErr) pwmMinErr = err;
     if (err > 5 || err < -5) pwmOOB++;
 #endif
     uint32_t next = 0x7fffffff;
-    baseTime = now;
+    baseTime = computedNow;
     for(int i = startActive; i < endActive; i++)
     {
 #ifdef PWM_DEBUG
@@ -206,8 +231,10 @@ void TIM7_IRQHandler(void) noexcept
         if (States[i].enabled)
         {
             PWMState& s = States[i];
-            int32_t delta = (s.nextEvent - now);
-            if (delta <= 0)
+            int32_t actualDelta = (s.nextEvent - actualNow);
+            int32_t computedDelta = (s.nextEvent - computedNow);
+//            if (actualDelta <= 0)
+            if (computedDelta <= 0)
             {
                 // time has expired, move to next state
                 s.state ^= 1;
@@ -227,24 +254,21 @@ void TIM7_IRQHandler(void) noexcept
                 SYNC_GPIO();
 #ifdef PWM_DEBUG
                 pwmCalls++;
-                if (delta < 0)
-                    pwmNegDelta++;
+                if (actualDelta < 0)
+                    pwmNegADelta++;
+                if (computedDelta < 0)
+                    pwmNegCDelta++;
+                if (computedDelta > 0)
+                    pwmEarly++;
 #endif
                 // adjust next time by any drift to keep things in sync
-                delta += s.onOffTimes[s.onOffBuffer][newState];
-                s.nextEvent = now + delta;
+                computedDelta = s.onOffTimes[s.onOffBuffer][newState] + __HAL_TIM_GET_COUNTER(timerHandle);
+                s.nextEvent += computedDelta;
                 // don't allow correction to go too far!
-                if (delta <= 0)
-                {
-                    delta = 0;
-#ifdef PWM_DEBUG
-                    pwmBigDelta++;
-#endif
-                }
             }
-            // at this point delta >= 1, now track the smallest delta as the next target time
-            if ((uint32_t)delta < next)
-                next = (uint32_t)delta;
+            // track the smallest delta as the next target time increment
+            if ((uint32_t)computedDelta < next)
+                next = (uint32_t)computedDelta;
         }
     }
     // Set the new compare value
@@ -274,6 +298,7 @@ void TIM7_IRQHandler(void) noexcept
         __HAL_TIM_SET_AUTORELOAD(timerHandle, next);
         uint16_t curTick = __HAL_TIM_GET_COUNTER(timerHandle);
         if (next >= curTick) break;
+//        if (next > curTick) break;
 #ifdef PWM_DEBUG
         pwmAdjust++;
 #endif
@@ -318,7 +343,7 @@ static void initTimer() noexcept
 void SPWMDiagnostics(const StringRef& reply)
 {
 #ifdef PWM_DEBUG
-    reply.printf("\nErr: %d/%d; Acc %d; OOB: %u; Pend: %u; Neg %u; One %u Ints: %u; Calls %u; \nfast: %uuS; slow %uuS adj %u big delta %u vbd %u range %u badval %d\n", (int)pwmMinErr, (int)pwmMaxErr, (int)pwmAccErr, (unsigned)pwmOOB, (unsigned)pwmPending, (unsigned)pwmNegDelta, (unsigned)pwmOneDelta, (unsigned)pwmInts, (unsigned)pwmCalls, (unsigned)pwmMinTime, (unsigned)pwmMaxTime, (unsigned)pwmAdjust, (unsigned)pwmBigDelta, (unsigned)pwmVBigDelta, (unsigned)pwmBadRange, pwmBadVal);
+    reply.printf("\nErr: %d/%d; Acc %d; OOB: %u; Pend: %u; ANeg %u; CNeg %u; Early %u; One %u Ints: %u; Calls %u; \nfast: %uuS; slow %uuS adj %u vbd %u range %u badval %d\n", (int)pwmMinErr, (int)pwmMaxErr, (int)pwmAccErr, (unsigned)pwmOOB, (unsigned)pwmPending, (unsigned)pwmNegADelta, (unsigned)pwmNegCDelta, (unsigned)pwmEarly, (unsigned)pwmOneDelta, (unsigned)pwmInts, (unsigned)pwmCalls, (unsigned)pwmMinTime, (unsigned)pwmMaxTime, (unsigned)pwmAdjust, (unsigned)pwmVBigDelta, (unsigned)pwmBadRange, pwmBadVal);
     pwmMinTime = UINT32_MAX;
     pwmMaxTime = 0;
     pwmInts = 0;
@@ -327,7 +352,9 @@ void SPWMDiagnostics(const StringRef& reply)
     pwmBigDelta = 0;
     pwmBadRange = 0;
     pwmPending = 0;
-    pwmNegDelta = 0;
+    pwmNegADelta = 0;
+    pwmNegCDelta = 0;
+    pwmEarly = 0;
     pwmOneDelta = 0;
     pwmMaxErr = -0x7fffffff;
     pwmMinErr = 0x7fffffff;
