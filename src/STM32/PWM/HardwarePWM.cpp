@@ -18,12 +18,12 @@ HardwareTimer Timer12(TIM12);
 HardwareTimer Timer13(TIM13);
 HardwareTimer Timer14(TIM14);
 #if STM32H7
-HardwareTimer Timer5(TIM5);
+//HardwareTimer Timer5(TIM5);
 HardwareTimer Timer15(TIM15);
 HardwareTimer Timer16(TIM16);
 HardwareTimer Timer17(TIM17);
 static HardwareTimer* PWMTimers[] = {
-                                        &Timer1, &Timer2, &Timer4, &Timer5, &Timer8, &Timer12,
+                                        &Timer1, &Timer2, &Timer4, /*&Timer5,*/ &Timer8, &Timer12,
                                         &Timer13, &Timer14, &Timer15, &Timer16, &Timer17
 };
 #else

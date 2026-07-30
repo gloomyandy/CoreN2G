@@ -32,7 +32,7 @@ class HybridPWMPin
         static HybridPWMPin *find(Pin pin) noexcept;
         void free() noexcept;
         void set(float value, uint32_t freq) noexcept;
-        void appendStatus(const StringRef& reply) noexcept;
+        void getStatus(const StringRef& reply) noexcept;
 
         Pin pin;
         float value;
@@ -70,4 +70,5 @@ class SoftwarePWM : HybridPWMBase
 };
 
 extern HybridPWMPin PWMPins[MaxPWMChannels];
+extern void SPWMDiagnostics(const StringRef& reply);
 #endif
