@@ -52,7 +52,7 @@ void DisablePinInterrupt(Pin pin) noexcept;
 ExintNumber AttachEvent(Pin pin, InterruptMode mode, bool enableFilter) noexcept;
 void DetachEvent(Pin pin) noexcept;
 
-#if STM32
+#if STM32BTC
 void initInterruptPins() noexcept;
 Pin getAttachedPin(uint32_t id) noexcept;
 #endif

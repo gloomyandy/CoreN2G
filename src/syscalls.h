@@ -12,7 +12,7 @@
 #include <cerrno>
 #include <new>
 
-#if STM32
+#if STM32BTC
 #include "ccmram.h"
 #endif
 

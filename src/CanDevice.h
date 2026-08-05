@@ -6,7 +6,7 @@
  */
 #include <CoreIO.h>
 
-#if STM32
+#if STM32BTC
 #include <stm32CanDevice.h>
 #elif RPXXXX && USE_SPICAN
 #include <SpiCanRP2040.h>

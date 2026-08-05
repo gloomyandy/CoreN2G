@@ -34,7 +34,7 @@
 # include <pmc/pmc.h>
 # include <pio/pio.h>
 # include <rstc/rstc.h>
-#elif STM32
+#elif STM32BTC
 #include <CoreImp.h>
 #ifdef RTOS
 #include <HybridPWM.h>
@@ -45,7 +45,7 @@ static IWDG_HandleTypeDef wdHandle;
 # include <hardware/adc.h>
 #endif
 
-#if STM32
+#if STM32BTC
 void SetPinMode(Pin pin, enum PinMode ulMode, bool debounce) noexcept
 {
     if(pin == NoPin) return;
@@ -506,7 +506,7 @@ void delay(uint32_t ms) noexcept
 // CoreSysTick assumes that ISRs don't use the 64-bit tick counter, so incrementing g_ms_ticks non-atomiclly from the tick ISR is OK
 void CoreSysTick() noexcept
 {
-#if STM32
+#if STM32BTC
 	HAL_IncTick();
 #endif
 	// This is called by the tick ISR. We don't call millis64() from any higher priority ISR
@@ -721,7 +721,7 @@ void CoreInit() noexcept
 #if SAME5x || SAMC21
 	InitialiseExints();
 #endif
-#if !RPXXXX && !STM32
+#if !RPXXXX && !STM32BTC
 	Serial::Init();
 #endif
 
@@ -745,13 +745,13 @@ void WatchdogInit() noexcept
 	// This assumes the slow clock is running at 32.768 kHz, watchdog frequency is therefore 32768 / 128 = 256 Hz
 	constexpr uint16_t watchdogTicks = 256;						// about 1 second
 	WDT->WDT_MR = WDT_MR_WDRSTEN | WDT_MR_WDV(watchdogTicks) | WDT_MR_WDD(watchdogTicks);
-#elif STM32
-#if STM32H7
+#elif STM32BTC
+# if STM32H7
     wdHandle.Instance = IWDG1;
 	wdHandle.Init.Window = IWDG_WINDOW_DISABLE;
-#else
+# else
     wdHandle.Instance = IWDG;
-#endif
+# endif
 	wdHandle.Init.Reload = IWDG_RLR_RL;
     wdHandle.Init.Prescaler = IWDG_PRESCALER_16;
     HAL_IWDG_Init(&wdHandle);
@@ -772,7 +772,7 @@ void WatchdogReset() noexcept
 	}
 #elif SAME70 || SAM4E || SAM4S
 	WDT->WDT_CR = WDT_CR_KEY_PASSWD | WDT_CR_WDRSTT;
-#elif STM32
+#elif STM32BTC
     HAL_IWDG_Refresh(&wdHandle);
 #elif RPXXXX
 	watchdog_update();
@@ -795,7 +795,7 @@ void ResetProcessor() noexcept
 {
 #if SAME70 || SAM4E || SAM4S
 	rstc_start_software_reset(RSTC);
-#elif STM32
+#elif STM32BTC
 	NVIC_SystemReset();
 #elif RPXXXX
 	watchdog_reboot(0, 0, 0);
@@ -805,7 +805,7 @@ void ResetProcessor() noexcept
 	for (;;) { }
 }
 
-#if !STM32
+#if !STM32BTC
 #if SAME5x || SAMC21
 
 // Enable a GCLK. This function doesn't allow access to some GCLK features, e.g. the DIVSEL or OOV or RUNSTDBY bits.
@@ -924,7 +924,7 @@ void EnableTccClock(unsigned int tccNumber, unsigned int gclkNum) noexcept
 #endif
 #endif
 
-#if STM32
+#if STM32BTC
 // Get the analog input channel that a pin uses
 AnalogChannelNumber PinToAdcChannel(Pin p) noexcept
 {

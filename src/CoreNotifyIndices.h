@@ -18,7 +18,7 @@ namespace NotifyIndices
 	constexpr uint32_t CanDevice = UartTx;					// CAN can share with UART
 	constexpr uint32_t Usb = UartTx;
 	constexpr uint32_t Sdhc = UartTx;
-#if STM32
+#if STM32BTC
 	constexpr uint32_t Sdio = UartTx;
 #endif
 	constexpr uint32_t Spi = UartTx;

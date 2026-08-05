@@ -10,7 +10,7 @@
 
 #include <CoreIO.h>
 #include <CoreTypes.h>
-#if STM32 
+#if STM32BTC 
 # include <SPI.h>
 #endif
 
@@ -35,7 +35,7 @@ struct SpiParameters
 	Pin misoPin;
 	Pin sclkPin;
 	GpioPinFunction pinFunction;
-#elif STM32
+#elif STM32BTC
 	SSPChannel instanceNumber;
 #elif RPXXXX
 	uint8_t instanceNumber;

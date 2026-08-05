@@ -9,7 +9,7 @@
 #define SRC_FLASH_H_
 
 #include <CoreIO.h>
-#if STM32
+#if STM32BTC
 #include <stm32Flash.h>
 #else
 namespace Flash

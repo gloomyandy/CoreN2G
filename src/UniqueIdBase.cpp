@@ -64,7 +64,7 @@ void UniqueIdBase::SetFromCurrentBoard() noexcept
 	{
 		SetChecksumWord();
 	}
-#elif STM32
+#elif STM32BTC
 	for (size_t i = 0; i < 3; ++i)
 	{
 		data[i] = ((uint32_t *)UID_BASE)[i];

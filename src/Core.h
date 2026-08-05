@@ -37,6 +37,7 @@
 # define SAME70				0
 # define RP2040				0
 # define RP2350				0
+# define STM32BTC			0
 # define STM32				0
 #elif defined(__SAME51N19A__) || defined(__SAME51G19A__) || defined(__SAME51J19A__)
 # include <same51.h>
@@ -48,6 +49,7 @@
 # define SAME70				0
 # define RP2040				0
 # define RP2350				0
+# define STM32BTC			0
 # define STM32				0
 #elif defined(__SAMD51N19A__)
 # include <samd51.h>
@@ -59,6 +61,7 @@
 # define SAME70				0
 # define RP2040				0
 # define RP2350				0
+# define STM32BTC			0
 # define STM32				0
 #elif defined(__SAMC21G18A__)
 # include <samc21.h>
@@ -70,6 +73,7 @@
 # define SAME70				0
 # define RP2040				0
 # define RP2350				0
+# define STM32BTC			0
 # define STM32				0
 # define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
 # define SUPPORT_USB		0			// SAMC21 doesn't support USB
@@ -79,6 +83,7 @@
 # define SAME5x				0
 # define RP2040				0
 # define RP2350				0
+# define STM32BTC			0
 # define STM32				0
 # define SUPPORT_CAN		0			// SAM4E doesn't support CAN-FD
 #elif defined(__SAM4S8C__)
@@ -87,38 +92,43 @@
 # define SAME5x				0
 # define RP2040				0
 # define RP2350				0
+# define STM32BTC			0
 # define STM32				0
 # define SUPPORT_CAN		0			// SAM4S doesn't support CAN-FD
 #elif defined(__SAME70Q20B__)
 # include <parts.h>
 # include <same70q20b.h>
 # define SAME5x				0
-#elif defined(__STM32F4__)
-# include <stm32f4.h>
-# include <dwt.h>
-# define STM32				1
-# define STM32F4			1
-# define SAMC21				0
-# define SAM3XA				0
-# define SAM4E				0
-# define SAM4S				0
-# define SAME5x				0
-# define SAME70				0
-# define RP2040				0
-# define RP2350				0
-#elif defined(__STM32H7__)
-# include <stm32h7.h>
-# include <dwt.h>
-# define STM32  			1
-# define STM32H7			1
-# define SAMC21				0
-# define SAM3XA				0
-# define SAM4E				0
-# define SAM4S				0
-# define SAME5x				0
-# define SAME70				0
-# define RP2040				0
-# define RP2350				0
+#elif STM32BTC
+# if defined(__STM32F4__)
+#  include <stm32f4.h>
+#  include <dwt.h>
+#  define STM32				1
+#  define STM32F4			1
+#  define SAMC21				0
+#  define SAM3XA				0
+#  define SAM4E				0
+#  define SAM4S				0
+#  define SAME5x				0
+#  define SAME70				0
+#  define RP2040				0
+#  define RP2350				0
+# elif defined(__STM32H7__)
+#  include <stm32h7.h>
+#  include <dwt.h>
+#  define STM32  			1
+#  define STM32H7			1
+#  define SAMC21				0
+#  define SAM3XA				0
+#  define SAM4E				0
+#  define SAM4S				0
+#  define SAME5x				0
+#  define SAME70				0
+#  define RP2040				0
+#  define RP2350				0
+# else
+#  error "Unsupported STM32 Configuration"
+# endif
 #elif defined __RP2040__
 extern "C" {
 # include <hardware/gpio.h>
@@ -154,13 +164,15 @@ extern "C" {
 # define SAM4S				0
 # define SAME5x				0
 # define SAME70				0
+# define STM32BTC			0
 # define STM32				0
 # define SUPPORT_SDHC		0			// SAMC21 doesn't support SDHC
 #else
 # error unsupported processor
 #endif
 
-#if !defined(STM32)
+#if !defined(STM32BTC)
+# define STM32BTC			0
 # define STM32				0
 # define STM32H7			0
 # define STM32F4			0
@@ -353,7 +365,7 @@ void digitalWrite(Pin pin, bool high) noexcept;
  */
 uint32_t random32(void) noexcept;		// needed by lwip
 
-#if STM32
+#if STM32BTC
 // Delay in cycles
 static inline uint32_t DelayCycles(const uint32_t start, const uint32_t cycles) noexcept __attribute__((always_inline, unused));
 #ifdef __cplusplus

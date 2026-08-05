@@ -22,7 +22,7 @@
 # include <SPI.h>
 #endif
 
-#if STM32
+#if STM32BTC
 # include <SPI.h>
 #endif
 
@@ -75,7 +75,7 @@ private:
 	DmaPriority dmaPrioTx;
 #elif SAME70 || SAM4E || SAM4S
 	Usart * const hardware;
-#elif STM32
+#elif STM32BTC
 	SPI *hardware;
 #elif RPXXXX
 	SPI *hardware;

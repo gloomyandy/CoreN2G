@@ -16,7 +16,7 @@
 #if SAME70 || STM32H7
 # include <core_cm7.h>
 
-// STM32 memory protection handled in varient
+// STM32BTC memory protection handled in varient
 #if !STM32H7
 #define USE_MPU		1
 #endif
@@ -423,7 +423,7 @@ uint32_t Cache::GetHitCount() noexcept
 #endif
 
 #endif	// SAM4E || SAME70 || SAME5x
-#if STM32
+#if STM32BTC
 void Cache::FlushECC(void *ptr, int bytes) noexcept
 {
 	// On some mcus we need to flush write to RAM before doing a reset if we want to read

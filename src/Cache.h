@@ -21,7 +21,7 @@ namespace Cache
 	inline void FlushBeforeDMAReceive(const volatile void *start, size_t length) noexcept { Flush(start, length); }
 	inline void InvalidateAfterDMAReceive(const volatile void *start, size_t length) noexcept { Invalidate(start, length); }
 	inline void FlushBeforeDMASend(const volatile void *start, size_t length) noexcept { Flush(start, length); }
-#if STM32
+#if STM32BTC
 	void FlushECC(void *ptr, int bytes) noexcept;
 #endif
 #if SAM4E || SAME5x
@@ -34,7 +34,7 @@ extern "C" void CacheFlushBeforeDMAReceive(const volatile void *start, size_t le
 extern "C" void CacheInvalidateAfterDMAReceive(const volatile void *start, size_t length) noexcept;
 extern "C" void CacheFlushBeforeDMASend(const volatile void *start, size_t length) noexcept;
 
-#if SAM4S || SAMC21 || (STM32 && !STM32H7) || RPXXXX
+#if SAM4S || SAMC21 || (STM32BTC && !STM32H7) || RPXXXX
 
 // These processors have no cache
 inline void Cache::Init() noexcept { __DSB(); }

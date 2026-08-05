@@ -41,7 +41,7 @@ namespace AnalogIn
 	constexpr unsigned int AdcBits = 16;
 #elif SAME5x
 	constexpr unsigned int AdcBits = 16;
-#elif STM32
+#elif STM32BTC
 	constexpr unsigned int AdcBits = 14;
 #elif RPXXXX
 	constexpr unsigned int AdcBits = 12;
@@ -159,7 +159,7 @@ namespace LegacyAnalogIn
 	// Get the temperature measurement channel
 	extern AnalogChannelNumber GetTemperatureAdcChannel() noexcept;
 
-#if STM32
+#if STM32BTC
 	// Get the VRef measurement channel
 	extern AnalogChannelNumber GetVREFAdcChannel() noexcept;
 #endif
@@ -171,7 +171,7 @@ namespace LegacyAnalogIn
 // This function is for backwards compatibility with CoreNG
 inline uint16_t AnalogInReadChannel(AdcInput adcin) noexcept
 {
-#if SAME70 || SAM4E || SAM4S || STM32
+#if SAME70 || SAM4E || SAM4S || STM32BTC
 	return LegacyAnalogIn::AnalogInReadChannel(adcin);
 #else
 	return AnalogIn::ReadChannel(adcin);
@@ -181,7 +181,7 @@ inline uint16_t AnalogInReadChannel(AdcInput adcin) noexcept
 // This function is for backwards compatibility with CoreNG
 inline void AnalogInEnableChannel(AdcInput adcin, bool enable) noexcept
 {
-#if SAME70 || SAM4E || SAM4S || STM32
+#if SAME70 || SAM4E || SAM4S || STM32BTC
 	LegacyAnalogIn::AnalogInEnableChannel(adcin, enable);
 #else
 	if (enable)

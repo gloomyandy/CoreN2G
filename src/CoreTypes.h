@@ -9,17 +9,19 @@
 #define SRC_CORETYPES_H_
 
 #include <stdint.h>
-#if defined(__STM32H7__)
-# include <stm32h7.h>
-#elif defined(__STM32F4__)
-# include <stm32f4.h>
+#if STM32BTC
+# if defined(__STM32H7__)
+#  include <stm32h7.h>
+# elif defined(__STM32F4__)
+#  include <stm32f4.h>
+# endif
 #endif
 
 // Core types used in interfaces and associated constants
 
 typedef uint8_t DmaChannel;			///< A type that represents a DMA channel number
 typedef uint8_t DmaPriority;		///< A type that represents a DMA priority
-#if STM32
+#if STM32BTC
 typedef PinName Pin;                ///< A type that represents an I/O pin on the microcontroller
 #else
 typedef uint8_t Pin;				///< A type that represents an I/O pin on the microcontroller
@@ -35,7 +37,7 @@ typedef uint8_t EventNumber;		///< A type that represents an event number (used 
 typedef __fp16 float16_t;			///< A 16-bit floating point type
 #endif
 
-#if STM32
+#if STM32BTC
 static const Pin NoPin = NC;		///< A number that represents no I/O pin
 #else
 static const Pin NoPin = 0xFF;		///< A number that represents no I/O pin

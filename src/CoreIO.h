@@ -35,7 +35,7 @@ constexpr unsigned int NumTotalPins = (4 * 32) + 6;		// SAM4E8E goes up to PE5
 constexpr unsigned int NumTotalPins = 3 * 32;			// SAM4S8C goes up to PC31
 #elif SAME70
 constexpr unsigned int NumTotalPins = (4 * 32) + 6;		// SAME70 goes up to PE5
-#elif STM32
+#elif STM32BTC
 constexpr int NumTotalPins = P_END;
 #elif RP2040
 constexpr unsigned int NumTotalPins = 30;				// RP2040 goes up to GPIO29
@@ -45,7 +45,7 @@ constexpr unsigned int NumTotalPins = 48;				// RP2350B goes up to GPIO47
 # error Unsupported processor
 #endif
 
-#if STM32
+#if STM32BTC
 inline uint32_t GpioPortNumber(Pin p) noexcept { return STM_PORT(p);}
 inline constexpr uint32_t GpioPinNumber(Pin p) noexcept { return STM_PIN(p); }
 inline constexpr uint32_t GpioMask(Pin p) noexcept { return (uint32_t)STM_GPIO_PIN(p); }
@@ -118,7 +118,7 @@ inline constexpr Pin PortEPin(unsigned int n) noexcept { return (Pin)(128+n); }
 
 #endif	// !RP2040
 
-#if !STM32
+#if !STM32BTC
 
 /**
  * @brief Pin function numbers for calls to SetPinFunction
@@ -160,7 +160,7 @@ void SetDriveStrength(Pin p, unsigned int strength) noexcept;
  * @param p The pin number
  */
 void ClearPinFunction(Pin p) noexcept;
-#endif // !STM32
+#endif // !STM32BTC
 
 // Enable or disable the pullup[ resistor
 void SetPullup(Pin p, bool on) noexcept;
@@ -323,7 +323,7 @@ private:
 	coreIrqflags_t flags;
 };
 
-#if SAME5x || SAM4E || SAM4S || SAME70 || STM32		// SAMC21 doesn't support these
+#if SAME5x || SAM4E || SAM4S || SAME70 || STM32BTC		// SAMC21 doesn't support these
 
 // Functions to change the base priority, to shut out interrupts up to a priority level
 
@@ -451,7 +451,7 @@ static inline uint32_t random(uint32_t howsmall, uint32_t howbig) noexcept
 	return random(howbig - howsmall) + howsmall;
 }
 
-#if STM32
+#if STM32BTC
 // Set a pin high with no error checking
 #ifdef __cplusplus
 [[gnu::always_inline, gnu::optimize("O3")]] static inline void fastDigitalWriteHigh(const uint32_t pin) noexcept
@@ -544,7 +544,7 @@ inline bool fastDigitalRead(uint32_t pin) noexcept
  */
 [[noreturn]] void ResetProcessor() noexcept;
 
-#if !STM32 && !RPXXXX
+#if !STM32BTC && !RPXXXX
 
 /**
  * @brief TC output identifiers used in pin tables
@@ -776,7 +776,7 @@ static inline constexpr GpioPinFunction GetPeriNumber(PwmOutput pwm) noexcept
 
 #endif
 
-#if STM32
+#if STM32BTC
 typedef uint32_t AdcInput;
 typedef AdcInput AnalogChannelNumber;
 constexpr AnalogChannelNumber NO_ADC = (AnalogChannelNumber)0xffffffff;
@@ -828,7 +828,7 @@ typedef AdcInput AnalogChannelNumber;						///< for backwards compatibility
 constexpr AnalogChannelNumber NO_ADC = AdcInput::none;		///< for backwards compatibility
 #endif
 
-#if !STM32 && !RPXXXX
+#if !STM32BTC && !RPXXXX
 
 /**
  * @brief Get the ADC number that an ADC input is on
@@ -960,7 +960,7 @@ constexpr uint32_t SerialNumberAddresses[4] = { 0x0080A00C, 0x0080A040, 0x0080A0
  * @section AppInterface Functions that must be provided by the application project
  */
 
-#if !STM32
+#if !STM32BTC
 /**
  * @brief Layout of an entry in the pin table. The client project may add additional fields by deriving from this.
  */
@@ -1032,7 +1032,7 @@ extern void AppInit() noexcept;
  */
 [[noreturn]] extern void AppMain() noexcept;
 
-#if !STM32
+#if !STM32BTC
 /**
  * @brief Get the frequency in MHz of the crystal connected to the MCU. Should be 12, 16 or 25.
  * @return Frequency in MHz

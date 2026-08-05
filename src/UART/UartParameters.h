@@ -36,7 +36,7 @@ struct UartParameters
 	Pin txPin;
 	size_t numRxSlots;
 	size_t numTxSlots;
-#elif STM32
+#elif STM32BTC
 	uint8_t instanceNumber;
 	size_t numRxSlots;
 	size_t numTxSlots;

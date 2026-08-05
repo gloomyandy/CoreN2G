@@ -7,7 +7,7 @@
 
 #include "CanDevice.h"
 
-#if SUPPORT_CAN && !RPXXXX && !STM32
+#if SUPPORT_CAN && !RPXXXX && !STM32BTC
 
 #define USE_TRANSCEIVER_COMPENSATION	(1)
 
