@@ -365,6 +365,15 @@ void digitalWrite(Pin pin, bool high) noexcept;
  */
 uint32_t random32(void) noexcept;		// needed by lwip
 
+#ifdef __cplusplus
+static inline constexpr uint32_t NanosecondsToCycles(uint32_t ns) noexcept
+#else
+static inline uint32_t NanosecondsToCycles(uint32_t ns) noexcept
+#endif
+{
+	return (ns * (uint64_t)SystemCoreClockFreq)/1000000000u;
+}
+
 #if STM32BTC
 // Delay in cycles
 static inline uint32_t DelayCycles(const uint32_t start, const uint32_t cycles) noexcept __attribute__((always_inline, unused));
@@ -386,16 +395,8 @@ static inline uint32_t GetElapsedCyclesBetween(uint32_t startCycles, uint32_t en
 	return endCycles - startCycles;
 }
 
-#ifdef __cplusplus
-static inline constexpr uint32_t NanosecondsToCycles(uint32_t ns) noexcept
 #else
-static inline uint32_t NanosecondsToCycles(uint32_t ns) noexcept
-#endif
-{
-  return (ns * (uint64_t)SystemCoreClockFreq)/1000000000u;
-}
 
-#else
 /**
  * @brief Delay for a specified number of CPU clock cycles from the starting time
  *

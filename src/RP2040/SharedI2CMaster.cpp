@@ -12,6 +12,7 @@
 
 constexpr uint32_t DefaultSharedI2CClockFrequency = 400000;
 constexpr uint32_t I2CTimeoutTicks = 100;
+constexpr uint32_t ShutdownTimeoutMillis = 50;
 
 SharedI2CMaster::SharedI2CMaster(const I2cParameters& params) noexcept
 	: hardware((params.instanceNumber == 0) ? i2c0 : i2c1), taskWaiting(nullptr), state(I2cState::idle)
@@ -23,6 +24,15 @@ SharedI2CMaster::SharedI2CMaster(const I2cParameters& params) noexcept
 	currentClockRate = DefaultSharedI2CClockFrequency;
 	Enable();
 }
+
+// Resetting the processor part way through a transfer leaves the slave device driving SDA low, which hangs the bus until the next power cycle
+// Not sure if needed on RPXXXX
+void SharedI2CMaster::End() noexcept
+{
+	(void)Take(ShutdownTimeoutMillis);											// if we time out then the bus is already stuck, so reset anyway
+	Disable();
+}
+
 
 // Set the I2C clock frequency. Caller must own the mutex first.
 void SharedI2CMaster::SetClockFrequency(uint32_t freq) noexcept
