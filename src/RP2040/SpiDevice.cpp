@@ -21,7 +21,11 @@ void SpiDevice::SetClockFrequencyAndMode(uint32_t freq, SpiMode mode) const noex
 	hardware->configureDevice(8, (uint32_t)mode, freq);
 }
 
+#if RP2350
+bool __time_critical_func(SpiDevice::TransceivePacket)(const uint8_t* tx_data, uint8_t* rx_data, size_t len) noexcept
+#else
 bool SpiDevice::TransceivePacket(const uint8_t* tx_data, uint8_t* rx_data, size_t len) noexcept
+#endif
 {
 	return hardware->transceivePacket(tx_data, rx_data, len) == SPI_OK;
 }

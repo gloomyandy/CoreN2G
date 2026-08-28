@@ -45,7 +45,11 @@ HardwareSPI::HardwareSPI(spi_inst_t *hardware) noexcept : dev(hardware)
 }
 
 
+#if RP2350
+spi_status_t __time_critical_func(HardwareSPI::transceivePacket)(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs) noexcept
+#else
 spi_status_t HardwareSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs) noexcept
+#endif
 {
     spi_status_t ret = SPI_OK;
     if (cs != NoPin) fastDigitalWriteLow(cs);

@@ -49,7 +49,11 @@ void SharedSpiClient::Deselect() const noexcept
 	device.Release();
 }
 
+#if RP2350
+bool __time_critical_func(SharedSpiClient::TransceivePacket)(const uint8_t *_ecv_array _ecv_null tx_data, uint8_t *_ecv_array _ecv_null rx_data, size_t len) const noexcept
+#else
 bool SharedSpiClient::TransceivePacket(const uint8_t *_ecv_array _ecv_null tx_data, uint8_t *_ecv_array _ecv_null rx_data, size_t len) const noexcept
+#endif
 {
 	return device.TransceivePacket(tx_data, rx_data, len);
 }

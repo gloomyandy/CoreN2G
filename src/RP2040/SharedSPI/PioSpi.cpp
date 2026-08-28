@@ -102,7 +102,7 @@ static inline void pio_spi_init(PIO pio, uint sm, uint prog_offs, uint n_bits,
 }
 
 
-static int32_t __time_critical_func(pio_spi_write_blocking)(const pio_spi_inst_t *spi, const uint8_t *src, size_t len) noexcept {
+static inline int32_t __time_critical_func(pio_spi_write_blocking)(const pio_spi_inst_t *spi, const uint8_t *src, size_t len) noexcept {
     size_t tx_remain = len, rx_remain = len;
     // Do 8 bit accesses on FIFO, so that write data is byte-replicated. This
     // gets us the left-justification for free (for MSB-first shift-out)
@@ -121,7 +121,7 @@ static int32_t __time_critical_func(pio_spi_write_blocking)(const pio_spi_inst_t
     return len;
 }
 
-static int32_t __time_critical_func(pio_spi_read_blocking)(const pio_spi_inst_t *spi, uint8_t val, uint8_t *dst, size_t len) noexcept {
+static inline int32_t __time_critical_func(pio_spi_read_blocking)(const pio_spi_inst_t *spi, uint8_t val, uint8_t *dst, size_t len) noexcept {
     size_t tx_remain = len, rx_remain = len;
     io_rw_8 *txfifo = (io_rw_8 *) &spi->pio->txf[spi->sm];
     io_rw_8 *rxfifo = (io_rw_8 *) &spi->pio->rxf[spi->sm];
@@ -138,7 +138,7 @@ static int32_t __time_critical_func(pio_spi_read_blocking)(const pio_spi_inst_t 
     return len;
 }
 
-static int32_t __time_critical_func(pio_spi_write_read_blocking)(const pio_spi_inst_t *spi, const uint8_t *src, uint8_t *dst,
+static inline int32_t __time_critical_func(pio_spi_write_read_blocking)(const pio_spi_inst_t *spi, const uint8_t *src, uint8_t *dst,
                                                          size_t len) noexcept {
     size_t tx_remain = len, rx_remain = len;
     io_rw_8 *txfifo = (io_rw_8 *) &spi->pio->txf[spi->sm];
@@ -211,7 +211,11 @@ PioSPI::PioSPI() noexcept
 }
 
 
+#if RP2350
+spi_status_t __time_critical_func(PioSPI::transceivePacket)(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs) noexcept
+#else
 spi_status_t PioSPI::transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs) noexcept
+#endif
 {
     spi_status_t ret = SPI_OK;
     if (cs != NoPin) fastDigitalWriteLow(cs);
