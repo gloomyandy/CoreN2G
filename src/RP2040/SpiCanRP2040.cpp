@@ -1015,7 +1015,8 @@ bool CanDevice::PauseCore1() noexcept
 		{
 			return false;
 		}
-		delay(1);
+		// don't call delay as this function may be called from an interrupt (systick watchdog failure).
+		//delay(1);
 	}
 	return true;
 }
