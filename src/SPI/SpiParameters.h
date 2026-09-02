@@ -42,6 +42,8 @@ struct SpiParameters
 	Pin mosiPin;
 	Pin misoPin;
 	Pin sclkPin;
+	DmaChannel dmaChanTx;
+	DmaChannel dmaChanRx;
 #endif
 };
 

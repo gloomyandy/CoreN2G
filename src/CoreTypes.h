@@ -42,6 +42,9 @@ static const Pin NoPin = NC;		///< A number that represents no I/O pin
 #else
 static const Pin NoPin = 0xFF;		///< A number that represents no I/O pin
 static const Pin Nx = 0xFF;			///< A number that represents no I/O EXINT number
+#if RPXXXX
+static const DmaChannel NoChan = 0xff;
+#endif 
 #endif
 
 #endif /* SRC_CORETYPES_H_ */

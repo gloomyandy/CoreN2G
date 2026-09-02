@@ -10,6 +10,8 @@ SpiDevice::SpiDevice(const SpiParameters& params) noexcept
 	: hardware(SPI::getSPIDevice((SPIChannel)params.instanceNumber))
 {
 	hardware->initPins(params.sclkPin, params.misoPin, params.mosiPin);
+	if (params.dmaChanRx != NoChan && params.dmaChanTx != NoChan)
+		hardware->initDma(params.dmaChanTx, params.dmaChanRx);
 }
 
 void SpiDevice::Disable() const noexcept

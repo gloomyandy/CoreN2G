@@ -119,7 +119,11 @@ uint32_t DmacManager::GetAndClearChannelStatus(uint8_t channel) noexcept
 	return ret;
 }
 
+#if RP2350
+extern "C" void __time_critical_func(DMAC_0_Handler)() noexcept
+#else
 extern "C" void DMAC_0_Handler() noexcept
+#endif
 {
 	uint32_t status = dma_hw->ints0;
 	dma_hw->ints0 = status;

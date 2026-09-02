@@ -29,6 +29,7 @@ public:
     virtual void configureDevice(uint32_t bits, uint32_t clockMode, uint32_t bitRate) noexcept;
     virtual spi_status_t transceivePacket(const uint8_t *tx_data, uint8_t *rx_data, size_t len, Pin cs = NoPin) noexcept;    
     virtual void initPins(Pin sck, Pin miso, Pin mosi, NvicPriority priority = -1) noexcept;
+    virtual void initDma(DmaChannel txChan, DmaChannel rxChan) noexcept;
     static SPI *getSPIDevice(SPIChannel channel) noexcept;
 };
 

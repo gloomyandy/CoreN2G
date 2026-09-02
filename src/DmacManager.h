@@ -16,8 +16,10 @@ constexpr unsigned int NumDmaChannelsSupported = 15;	// max is 32
 constexpr unsigned int NumDmaChannelsSupported = 8;		// max is 12
 #elif SAME70
 constexpr unsigned int NumDmaChannelsSupported = 10;	// max for SAME70 is 24
-#elif RPXXXX
-constexpr unsigned int NumDmaChannelsSupported = 8;		// max is 12
+#elif RP2040
+constexpr unsigned int NumDmaChannelsSupported = 12;		// max is 12
+#elif RP2350
+constexpr unsigned int NumDmaChannelsSupported = 16;		// max is 16
 #endif
 
 // Status code indicating why a DMAC callback is happening
