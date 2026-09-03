@@ -33,8 +33,13 @@ class SpiDevice
 public:
 	explicit SpiDevice(const SpiParameters& params) noexcept;
 
+#if RPXXXX
+	void inline Disable() const noexcept {};
+	void inline Enable() const noexcept {};
+#else
 	void Disable() const noexcept;
 	void Enable() const noexcept;
+#endif
 
 	// Set the clock frequency, SPI mode and character length. 9-bit mode is currently only implemented on the SAME5x.
 	void SetClockFrequencyAndMode(uint32_t freq, SpiMode mode

@@ -24,7 +24,11 @@ void SharedSpiClient::InitCsPin() const noexcept
 }
 
 // Get ownership of this SPI and assert CS, returning true if successful
+#if RP2350
+bool __time_critical_func(SharedSpiClient::Select)(uint32_t timeout) const noexcept
+#else
 bool SharedSpiClient::Select(uint32_t timeout) const noexcept
+#endif
 {
 	const bool ok = device.Take(timeout);
 	if (ok)
@@ -41,6 +45,9 @@ bool SharedSpiClient::Select(uint32_t timeout) const noexcept
 }
 
 // Release CS and release ownership of the SPI bus
+#if RP2350
+void __time_critical_func(SharedSpiClient::Deselect)() const noexcept
+#else
 void SharedSpiClient::Deselect() const noexcept
 {
 	digitalWrite(csPin, !csActivePolarity);

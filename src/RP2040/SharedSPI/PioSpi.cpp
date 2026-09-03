@@ -203,7 +203,7 @@ void PioSPI::initDma(DmaChannel txChan, DmaChannel rxChan) noexcept
     io_rw_8 *rxfifo = (io_rw_8 *) &dev.pio->rxf[dev.sm];
     dma_channel_claim(rxChan);
     dma_channel_claim(txChan);
-    useDma = false;
+    useDma = true;
     this->rxChan = rxChan;
     this->txChan = txChan;
     DmacManager::SetInterruptCallback(rxChan, DmaCompleteCallback, CallbackParameter(this));

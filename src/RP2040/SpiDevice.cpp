@@ -14,9 +14,11 @@ SpiDevice::SpiDevice(const SpiParameters& params) noexcept
 		hardware->initDma(params.dmaChanTx, params.dmaChanRx);
 }
 
+#if 0
 void SpiDevice::Disable() const noexcept
 {
 }
+#endif
 
 void SpiDevice::SetClockFrequencyAndMode(uint32_t freq, SpiMode mode) const noexcept
 {
