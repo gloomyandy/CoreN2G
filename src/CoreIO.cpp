@@ -37,6 +37,7 @@
 #include <HybridPWM.h>
 #endif
 static IWDG_HandleTypeDef wdHandle;
+static RNG_HandleTypeDef rngHandle;
 #elif STM32H5
 # include <STM32/Serial.h>
 # include <stm32h5xx_hal_conf.h>
@@ -817,7 +818,7 @@ void memseti32(int32_t *_ecv_array dst, int32_t val, size_t numWords) noexcept
 	}
 }
 
-#if SAME5x || SAME70 || (STM32 && !STMBTC)
+#if SAME5x || SAME70 || STM32BTC || STM32
 
 //True random number generator
 static void RandomInit()
@@ -829,6 +830,10 @@ static void RandomInit()
 	pmc_enable_periph_clk(ID_TRNG);
 	TRNG->TRNG_IDR = TRNG_IDR_DATRDY;							// Disable all interrupts
 	TRNG->TRNG_CR = TRNG_CR_KEY(0x524e47) | TRNG_CR_ENABLE;		// Enable TRNG with security key (required)
+#elif STM32BTC
+	 __HAL_RCC_RNG_CLK_ENABLE();
+	 rngHandle.Instance = RNG;
+	 HAL_RNG_Init(&rngHandle);
 #elif STM32H5
 	RNG->CR |= RNG_CR_CONDRST;
 	RNG->CR &= ~RNG_CR_CONDRST;
@@ -851,7 +856,7 @@ void CoreInit() noexcept
 #if !RPXXXX && !STM32BTC
 	Serial::Init();
 #endif
-#if SAME5x || SAME70 || (STM32 && !STMBTC)
+#if SAME5x || SAME70 || STM32BTC || STM32
 	RandomInit();
 #endif
 
@@ -1211,7 +1216,13 @@ extern "C" uint32_t random32() noexcept
 	while (!(TRNG->TRNG_ISR & TRNG_ISR_DATRDY)) {}
 	return TRNG->TRNG_ODATA;
 
-#elif STM32
+#elif STM32BTC
+
+	uint32_t value;
+	HAL_RNG_GenerateRandomNumber(&rngHandle, &value);
+	return value;
+
+#elif STM32 && !STM32BTC
 
 	uint32_t val;
 	while (!(RNG->SR & RNG_SR_DRDY) || (val = RNG->DR) == 0) { }

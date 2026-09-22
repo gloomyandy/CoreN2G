@@ -22,6 +22,7 @@
 #define HAL_SD_MODULE_ENABLED
 #define USE_SD_TRANSCEIVER 0
 #define HAL_CAN_MODULE_ENABLED
+#define HAL_RNG_MODULE_ENABLED
 
 #ifdef __cplusplus
 extern "C" {
