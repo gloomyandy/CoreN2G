@@ -13,7 +13,7 @@
 #include <SPI/SpiMode.h>
 #include <SPI/SpiParameters.h>
 
-#if SAME5x || SAMC21
+#if SAME5x || SAMC21 || STM32
 # include <DmacManager.h>
 #endif
 
@@ -31,7 +31,7 @@
 class SpiDevice
 {
 public:
-	explicit SpiDevice(const SpiParameters& params) noexcept;
+	SpiDevice(const SpiParameters& params) noexcept;
 
 #if RPXXXX
 	void inline Disable() const noexcept {};
@@ -43,7 +43,7 @@ public:
 
 	// Set the clock frequency, SPI mode and character length. 9-bit mode is currently only implemented on the SAME5x.
 	void SetClockFrequencyAndMode(uint32_t freq, SpiMode mode
-#if SAME5x
+#if SAME5x || (!STM32BTC && STM32)
 									, bool nineBits
 #endif
 								 ) const noexcept;
@@ -51,23 +51,33 @@ public:
 	// Send and receive data returning true if successful.
 	// If this is a shared SPI device then the caller must already own the mutex.
 	// Either way, caller must already have asserted CS for the selected SPI slave.
-	bool TransceivePacket(const uint8_t *_ecv_array null tx_data, uint8_t *_ecv_array null rx_data, size_t len) noexcept;
+	bool TransceivePacket(const uint8_t *_ecv_array null tx_data, uint8_t *_ecv_array null rx_data, size_t len, uint32_t timeout = SpiDmaTimeout) noexcept;
 
-#if SAME5x
-	bool TransceivePacketNineBit(const uint16_t *_ecv_array null tx_data, uint16_t *_ecv_array null rx_data, size_t len) noexcept;
+#if SAME5x || (!STM32BTC && STM32)
+	bool TransceivePacketNineBit(const uint16_t *_ecv_array null tx_data, uint16_t *_ecv_array null rx_data, size_t len, uint32_t timeout = SpiDmaTimeout) noexcept;
 #endif
 
-#if SAME5x || SAMC21
+#if SAME5x || SAMC21 || (!STM32BTC && STM32)
 	static void DmaComplete(CallbackParameter param, DmaCallbackReason reason) noexcept;
 #endif
+
+#if (!STM32BTC && STM32)
+	static void CommonInterrupt(void *param) noexcept;
+#endif
+
+	static constexpr uint32_t SpiDmaTimeout = 10;				// timeout for a whole SPI transaction, in clock ticks (ms)
 
 private:
 	bool waitForTxReady() const noexcept;
 	bool waitForTxEmpty() const noexcept;
 	bool waitForRxReady() const noexcept;
 
-#if SAME5x || SAMC21
+#if SAME5x || SAMC21 || (!STM32BTC && STM32)
 	void DmaComplete(DmaCallbackReason reason) noexcept;
+#endif
+
+#if (!STM32BTC && STM32)
+	void Interrupt() noexcept;
 #endif
 
 #if SAME5x || SAMC21
@@ -84,6 +94,14 @@ private:
 	SPI *hardware;
 #elif RPXXXX
 	SPI *hardware;
+#elif STM32
+	SPI_TypeDef * const hardware;
+	const uint8_t instanceNumber;
+# ifdef RTOS
+	TaskBase *null waitingTask = nullptr;
+# endif
+	DmaChannel dmaChanTx, dmaChanRx;
+	DmaPriority dmaPrioTx, dmaPrioRx;
 #else
 # error Unsupported configuration
 #endif

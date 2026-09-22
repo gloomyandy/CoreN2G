@@ -34,11 +34,11 @@ bool SharedSpiClient::Select(uint32_t timeout) const noexcept
 	if (ok)
 	{
 		device.SetClockFrequencyAndMode(clockFrequency, mode
-#if SAME5x
-										, false						// for now we always use 8-bit mode
+#if SAME5x || (!STM32BTC && STM32)
+										, false							// for now we always use 8-bit mode
 #endif
-									   );							// this also enables the SPI peripheral
-		delayMicroseconds(1);										// allow the clock time to settle
+									   );
+		delayMicroseconds(1);											// allow the clock time to settle
 		digitalWrite(csPin, csActivePolarity);
 	}
 	return ok;
@@ -49,20 +49,21 @@ bool SharedSpiClient::Select(uint32_t timeout) const noexcept
 void __time_critical_func(SharedSpiClient::Deselect)() const noexcept
 #else
 void SharedSpiClient::Deselect() const noexcept
+#endif
 {
 	digitalWrite(csPin, !csActivePolarity);
-	delayMicroseconds(1);											// in case the clock makes an abrupt transition when we disable SPI
+	delayMicroseconds(1);												// in case the clock makes an abrupt transition when we disable SPI
 	device.Disable();
 	device.Release();
 }
 
 #if RP2350
-bool __time_critical_func(SharedSpiClient::TransceivePacket)(const uint8_t *_ecv_array _ecv_null tx_data, uint8_t *_ecv_array _ecv_null rx_data, size_t len) const noexcept
+bool __time_critical_func(SharedSpiClient::TransceivePacket)(const uint8_t *_ecv_array _ecv_null tx_data, uint8_t *_ecv_array _ecv_null rx_data, size_t len, uint32_t dmaTimeout) const noexcept
 #else
-bool SharedSpiClient::TransceivePacket(const uint8_t *_ecv_array _ecv_null tx_data, uint8_t *_ecv_array _ecv_null rx_data, size_t len) const noexcept
+bool SharedSpiClient::TransceivePacket(const uint8_t *_ecv_array _ecv_null tx_data, uint8_t *_ecv_array _ecv_null rx_data, size_t len, uint32_t dmaTimeout) const noexcept
 #endif
 {
-	return device.TransceivePacket(tx_data, rx_data, len);
+	return device.TransceivePacket(tx_data, rx_data, len, dmaTimeout);
 }
 
 // End

@@ -9,7 +9,6 @@
 #define SRC_UART_UARTPARAMETERS_H_
 
 #include <CoreIO.h>
-#include <CoreTypes.h>
 
 // Structure to pass async serial device parameters. The details depend on the MCU.
 struct UartParameters
@@ -30,14 +29,21 @@ struct UartParameters
 	GpioPinFunction pinFunction;
 	size_t numRxSlots;
 	size_t numTxSlots;
+#elif STM32BTC
+	uint8_t instanceNumber;
+	size_t numRxSlots;
+	size_t numTxSlots;
+#elif STM32
+	uint8_t instanceNumber;						// the STM32 UART/USART number starting at 1
+	Pin rxPin;
+	Pin txPin;
+	GpioPinFunction pinFunction;
+	size_t numRxSlots;
+	size_t numTxSlots;
 #elif RPXXXX
 	uint8_t instanceNumber;
 	Pin rxPin;
 	Pin txPin;
-	size_t numRxSlots;
-	size_t numTxSlots;
-#elif STM32BTC
-	uint8_t instanceNumber;
 	size_t numRxSlots;
 	size_t numTxSlots;
 #endif

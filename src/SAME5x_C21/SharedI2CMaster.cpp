@@ -7,7 +7,7 @@
 
 #include <I2C/SharedI2CMaster.h>
 
-#ifdef RTOS					// we dn't support I2C in non-RTOS builds
+#if defined(RTOS)					// we don't support I2C in non-RTOS builds
 
 #include <SAME5x_C21/Serial.h>
 #include <CoreNotifyIndices.h>
@@ -18,19 +18,19 @@
 # include <hri_sercom_c21.h>
 #endif
 
-#define USE_I2C_DMA		(0)
-
 constexpr uint32_t DefaultSharedI2CClockFrequency = 400000;
 constexpr uint32_t I2CTimeoutTicks = 100;
 constexpr uint32_t ShutdownTimeoutMillis = 50;
+constexpr uint32_t RecoveryHalfClockMicros = 5;
+constexpr size_t MinBytesForDmaRead = 8;			// shorter reads are not worth the DMA setup cost
 
 SharedI2CMaster::SharedI2CMaster(const I2cParameters& params) noexcept
-	: hardware(Serial::Sercoms[params.sercomNumber]), taskWaiting(nullptr), state(I2cState::idle)
+	: sclPin(params.sclPin), sdaPin(params.sdaPin), pinFunction(params.pinFunction),
+	  rxDmaChannel(params.rxDmaChannel), rxDmaPriority(params.rxDmaPriority), hardware(Serial::Sercoms[params.sercomNumber]), taskWaiting(nullptr), state(I2cState::idle)
 {
 	errors.Clear();
 
-	SetPinFunction(params.sclPin, params.pinFunction);
-	SetPinFunction(params.sdaPin, params.pinFunction);
+	RecoverBus();								// this also connects the pins to the SERCOM
 
 	Serial::EnableSercomClock(params.sercomNumber);
 
@@ -58,23 +58,15 @@ SharedI2CMaster::SharedI2CMaster(const I2cParameters& params) noexcept
 	currentClockRate = DefaultSharedI2CClockFrequency;
 	hri_sercomi2cm_write_DBGCTRL_reg(hardware, SERCOM_I2CM_DBGCTRL_DBGSTOP);		// baud rate generator is stopped when CPU halted by debugger
 
-#if USE_I2C_DMA
-	// Set up the DMA descriptors
-	// We use separate write-back descriptors, so we only need to set this up once, but it must be in SRAM
-	DmacSetBtctrl(I2CRxDmaChannel, DMAC_BTCTRL_VALID | DMAC_BTCTRL_EVOSEL_DISABLE | DMAC_BTCTRL_BLOCKACT_INT | DMAC_BTCTRL_BEATSIZE_BYTE
-								| DMAC_BTCTRL_DSTINC | DMAC_BTCTRL_STEPSEL_DST | DMAC_BTCTRL_STEPSIZE_X1);
-	DmacSetSourceAddress(I2CRxDmaChannel, &(hardware->I2CM.DATA.reg));
-	DmacSetDestinationAddress(I2CRxDmaChannel, rcvData);
-	DmacSetDataLength(I2CRxDmaChannel, ARRAY_SIZE(rcvData));
-
-	DmacSetBtctrl(I2CTxDmaChannel, DMAC_BTCTRL_VALID | DMAC_BTCTRL_EVOSEL_DISABLE | DMAC_BTCTRL_BLOCKACT_INT | DMAC_BTCTRL_BEATSIZE_BYTE
-								| DMAC_BTCTRL_SRCINC | DMAC_BTCTRL_STEPSEL_SRC | DMAC_BTCTRL_STEPSIZE_X1);
-	DmacSetSourceAddress(I2CTxDmaChannel, sendData);
-	DmacSetDestinationAddress(I2CTxDmaChannel, &(hardware->I2CM.DATA.reg));
-	DmacSetDataLength(I2CTxDmaChannel, ARRAY_SIZE(sendData));
-
-	DmacSetInterruptCallbacks(I2CRxDmaChannel, RxDmaCompleteCallback, nullptr, 0U);
-#endif
+	if (rxDmaChannel != NoDmaChannel)
+	{
+		// Set up the parts of the receive DMA descriptor that do not change. The destination address and the length are set for each transfer
+		DmacManager::SetBtctrl(rxDmaChannel, DMAC_BTCTRL_VALID | DMAC_BTCTRL_EVOSEL_DISABLE | DMAC_BTCTRL_BLOCKACT_INT | DMAC_BTCTRL_BEATSIZE_BYTE
+											| DMAC_BTCTRL_DSTINC | DMAC_BTCTRL_STEPSEL_DST | DMAC_BTCTRL_STEPSIZE_X1);
+		DmacManager::SetSourceAddress(rxDmaChannel, &(hardware->I2CM.DATA.reg));
+		DmacManager::SetTriggerSourceSercomRx(rxDmaChannel, params.sercomNumber);
+		DmacManager::SetInterruptCallback(rxDmaChannel, RxDmaCompleteCallback, CallbackParameter(this));
+	}
 
 	const IRQn irqn = Serial::GetSercomIRQn(params.sercomNumber);
 #if SAMC21
@@ -97,11 +89,42 @@ SharedI2CMaster::SharedI2CMaster(const I2cParameters& params) noexcept
 	Enable();
 }
 
-// Resetting the processor part way through a transfer leaves the slave device driving SDA low, which hangs the bus until the next power cycle
+// Resetting the processor part way through a transfer leaves the slave device driving SDA low. RecoverBus() clears that at the next startup, but better not to get there
 void SharedI2CMaster::End() noexcept
 {
 	(void)Take(ShutdownTimeoutMillis);											// if we time out then the bus is already stuck, so reset anyway
 	Disable();
+}
+
+// Release the bus if a slave device is holding SDA low, e.g. because the processor was reset part way through a read transfer.
+// Nine clocks let the slave shift out the rest of its byte and see a NACK, then a STOP condition returns it to idle. Stopping early when SDA reads high is not enough,
+// the slave is still mid-byte then and drives SDA low again on the next clock if its next bit is zero.
+// The pins are driven as GPIO while doing this and connected to the SERCOM afterwards, so the SERCOM must be disabled or not yet set up
+void SharedI2CMaster::RecoverBus() noexcept
+{
+	SetPinMode(sclPin, INPUT);
+	SetPinMode(sdaPin, INPUT);
+	if (!digitalRead(sdaPin))
+	{
+		for (unsigned int i = 0; i < 9; i++)
+		{
+			SetPinMode(sclPin, OUTPUT_LOW);
+			delayMicroseconds(RecoveryHalfClockMicros);
+			SetPinMode(sclPin, INPUT);
+			delayMicroseconds(RecoveryHalfClockMicros);
+		}
+		SetPinMode(sclPin, OUTPUT_LOW);
+		delayMicroseconds(RecoveryHalfClockMicros);
+		SetPinMode(sdaPin, OUTPUT_LOW);
+		delayMicroseconds(RecoveryHalfClockMicros);
+		SetPinMode(sclPin, INPUT);
+		delayMicroseconds(RecoveryHalfClockMicros);
+		SetPinMode(sdaPin, INPUT);
+		delayMicroseconds(RecoveryHalfClockMicros);
+		errors.recoveries++;
+	}
+	SetPinFunction(sclPin, pinFunction);
+	SetPinFunction(sdaPin, pinFunction);
 }
 
 // Set the I2C clock frequency. Caller must own the mutex first.
@@ -149,6 +172,7 @@ bool SharedI2CMaster::Transfer(uint16_t address, const uint8_t *txBuffer, uint8_
 
 		// Had an I2C error, so re-initialise
 		Disable();
+		RecoverBus();
 		Enable();
 	}
 	return false;
@@ -173,6 +197,59 @@ void SharedI2CMaster::Release() noexcept
 	{
 		mutex.Release();
 	}
+}
+
+// Send the read address and prepare to receive the data. Called with interrupts deferred, either from InternalTransfer or from the interrupt handler.
+// Reads long enough to be worth it are received by DMA except for the last byte, which the interrupt handler must NAK before reading it.
+// The DMA is armed before the address goes out so that it cannot miss the first byte
+void SharedI2CMaster::StartReading(uint32_t addressToSend) noexcept
+{
+	if (rxDmaChannel != NoDmaChannel && numLeftToRead >= MinBytesForDmaRead)
+	{
+		DmacManager::SetDestinationAddress(rxDmaChannel, rxTransferBuffer);
+		DmacManager::SetDataLength(rxDmaChannel, numLeftToRead - 1);
+		DmacManager::EnableCompletedInterrupt(rxDmaChannel);
+		DmacManager::EnableChannel(rxDmaChannel, rxDmaPriority);
+		state = I2cState::readingWithDma;
+		hardware->I2CM.ADDR.reg = addressToSend;
+		while (hardware->I2CM.SYNCBUSY.bit.SYSOP) { }
+		hardware->I2CM.INTENSET.reg = SERCOM_I2CM_INTFLAG_MB | SERCOM_I2CM_INTFLAG_ERROR;	// SB is serviced by the DMA; MB is only raised here if the slave NAKs the address
+	}
+	else
+	{
+		state = I2cState::reading;
+		hardware->I2CM.ADDR.reg = addressToSend;
+		while (hardware->I2CM.SYNCBUSY.bit.SYSOP) { }
+		hardware->I2CM.INTENSET.reg = SERCOM_I2CM_INTFLAG_MB | SERCOM_I2CM_INTFLAG_SB;
+	}
+}
+
+// Callback from the DMA controller when all but the last byte of a read have been received
+/*static*/ void SharedI2CMaster::RxDmaCompleteCallback(CallbackParameter cp, DmaCallbackReason reason) noexcept
+{
+	static_cast<SharedI2CMaster *>(cp.vp)->RxDmaComplete(reason);
+}
+
+void SharedI2CMaster::RxDmaComplete(DmaCallbackReason reason) noexcept
+{
+	if (state != I2cState::readingWithDma)
+	{
+		return;
+	}
+
+	DmacManager::DisableCompletedInterrupt(rxDmaChannel);
+	if ((uint8_t)reason & (uint8_t)DmaCallbackReason::error)
+	{
+		DmacManager::DisableChannel(rxDmaChannel);
+		ProtocolError();
+		return;
+	}
+
+	// Hand the last byte back to the interrupt handler. INTFLAG.SB is level sensitive, so if that byte has already arrived we get the interrupt as soon as we enable it
+	rxTransferBuffer += numLeftToRead - 1;
+	numLeftToRead = 1;
+	state = I2cState::reading;
+	hardware->I2CM.INTENSET.reg = SERCOM_I2CM_INTFLAG_MB | SERCOM_I2CM_INTFLAG_SB;
 }
 
 bool SharedI2CMaster::InternalTransfer(uint16_t address, const uint8_t *txBuffer, uint8_t *rxBuffer, size_t numToWrite, size_t numToRead) noexcept
@@ -208,10 +285,7 @@ bool SharedI2CMaster::InternalTransfer(uint16_t address, const uint8_t *txBuffer
 		}
 		else
 		{
-			state = I2cState::reading;
-			hardware->I2CM.ADDR.reg = currentAddress | 0x0001;
-			while (hardware->I2CM.SYNCBUSY.bit.SYSOP) { }
-			hardware->I2CM.INTENSET.reg = SERCOM_I2CM_INTFLAG_MB | SERCOM_I2CM_INTFLAG_SB;
+			StartReading(currentAddress | 0x0001);
 		}
 		taskWaiting = TaskBase::GetCallerTaskHandle();
 	}
@@ -220,6 +294,12 @@ bool SharedI2CMaster::InternalTransfer(uint16_t address, const uint8_t *txBuffer
 	if (state == I2cState::idle)
 	{
 		return true;
+	}
+
+	// We timed out or had an error. A receive DMA left armed would write into the buffer of the next transfer, so always stop it
+	if (rxDmaChannel != NoDmaChannel)
+	{
+		DmacManager::DisableChannel(rxDmaChannel);
 	}
 	state = I2cState::idle;
 	return false;
@@ -279,10 +359,7 @@ inline void SharedI2CMaster::Interrupt() noexcept
 			}
 			else
 			{
-				hardware->I2CM.ADDR.reg = (currentAddress >= 0x100) ? (currentAddress >> 8) | 0b1111001 : currentAddress | 0x0001;
-				state = I2cState::reading;
-				while (hardware->I2CM.SYNCBUSY.bit.SYSOP) { }
-				hardware->I2CM.INTENSET.reg = SERCOM_I2CM_INTFLAG_MB | SERCOM_I2CM_INTFLAG_SB;
+				StartReading((currentAddress >= 0x100) ? (currentAddress >> 8) | 0b1111001 : currentAddress | 0x0001);
 			}
 		}
 		else
@@ -294,10 +371,7 @@ inline void SharedI2CMaster::Interrupt() noexcept
 	case I2cState::sendingTenBitAddressForRead:
 		if (flags == SERCOM_I2CM_INTFLAG_MB)
 		{
-			hardware->I2CM.ADDR.reg = (currentAddress >> 8) | 0b1111001;
-			state = I2cState::reading;
-			while (hardware->I2CM.SYNCBUSY.bit.SYSOP) { }
-			hardware->I2CM.INTENSET.reg = SERCOM_I2CM_INTFLAG_MB | SERCOM_I2CM_INTFLAG_SB;
+			StartReading((currentAddress >> 8) | 0b1111001);
 		}
 		else
 		{
@@ -329,6 +403,12 @@ inline void SharedI2CMaster::Interrupt() noexcept
 		{
 			ProtocolError();
 		}
+		break;
+
+	case I2cState::readingWithDma:
+		// The DMA services the received data, so the only interrupts we asked for here mean the transfer has failed
+		DmacManager::DisableChannel(rxDmaChannel);
+		ProtocolError();
 		break;
 	}
 }

@@ -9,7 +9,6 @@
 #define SRC_HARDWARE_SPI_SPIPARAMETERS_H_
 
 #include <CoreIO.h>
-#include <CoreTypes.h>
 #if STM32BTC 
 # include <SPI.h>
 #endif
@@ -37,6 +36,17 @@ struct SpiParameters
 	GpioPinFunction pinFunction;
 #elif STM32BTC
 	SSPChannel instanceNumber;
+#elif STM32
+	uint8_t instanceNumber;
+	Pin mosiPin;
+	Pin misoPin;
+	Pin sclkPin;
+	GpioPinFunction pinFunction;
+	NvicPriority irqPriority;
+	DmaChannel dmaChanTx;
+	DmaChannel dmaChanRx;
+	DmaPriority dmaPrioTx;
+	DmaPriority dmaPrioRx;
 #elif RPXXXX
 	uint8_t instanceNumber;
 	Pin mosiPin;

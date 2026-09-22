@@ -13,24 +13,21 @@
 #include "AnalogIn.h"
 #include "AnalogOut.h"
 
-#if SAME5x || SAMC21
-# include <SAME5x_C21/Serial.h>
-#elif SAME70 || SAM4E || SAM4S
-# include <SAM4S_4E_E70/Serial.h>
-#endif
-
 #ifdef RTOS
 # include <FreeRTOS.h>
 # include <task.h>
 #endif
 
 #if SAME5x
+# include <SAME5x_C21/Serial.h>
 # include <hri_wdt_e54.h>
 # include <hal_gpio.h>
 #elif SAMC21
+# include <SAME5x_C21/Serial.h>
 # include <hri_wdt_c21.h>
 # include <hal_gpio.h>
 #elif SAM4E || SAM4S || SAME70
+# include <SAM4S_4E_E70/Serial.h>
 # include <pmc/pmc.h>
 # include <pio/pio.h>
 # include <rstc/rstc.h>
@@ -40,6 +37,19 @@
 #include <HybridPWM.h>
 #endif
 static IWDG_HandleTypeDef wdHandle;
+#elif STM32H5
+# include <STM32/Serial.h>
+# include <stm32h5xx_hal_conf.h>
+# include <stm32h5xx_hal_iwdg.h>
+# include <stm32h5xx_ll_iwdg.h>
+# include <stm32h5xx_ll_rng.h>
+# include <stm32h5xx_hal_rcc.h>
+#elif STM32H7
+# include <STM32/Serial.h>
+# include <stm32h7xx_hal_conf.h>
+# include <stm32h7xx_hal_iwdg.h>
+# include <stm32h7xx_ll_iwdg.h>
+# include <stm32h7xx_ll_rng.h>
 #elif RPXXXX
 # include <hardware/watchdog.h>
 # include <hardware/adc.h>
@@ -117,6 +127,8 @@ void DisablePullup(Pin pin) noexcept
 }
 
 #else
+#if !STM32				// for STM32 MCUs this function is implemented differently and inline in Core.h
+
 // Delay for a specified number of CPU clock cycles from the starting time. Return the time at which we actually stopped waiting.
 extern "C"
 #if SAMC21 || RPXXXX
@@ -138,6 +150,21 @@ uint32_t DelayCycles(uint32_t start, uint32_t cycles) noexcept
 		last = now;
 	}
 }
+
+#endif
+
+#if STM32
+
+enum class StmPinMode : uint32_t { input, output, alternate, analog };
+
+// Set the mode of a pin. pinNumber must be in range 0..15.
+inline void StmSetPinMode(GPIO_TypeDef *port, unsigned int pinNumber, StmPinMode mode) noexcept
+{
+	const uint32_t shift2 = pinNumber << 1;
+	port->MODER = (port->MODER & ~(0x03 << shift2)) | ((uint32_t)mode << shift2);
+}
+
+#endif
 
 /**
  * @brief Set the function of an I/O pin
@@ -169,7 +196,7 @@ void SetPinFunction(Pin p, GpioPinFunction f) noexcept
 		PORT->Group[port].PINCFG[pin].bit.PMUXEN = 1;
 #elif SAME70 || SAM4E || SAM4S
 		Pio * const p_pio = GpioPort(p);
-		const uint32_t mask = (uint32_t)1 << (p & 0x1F);
+		const uint32_t mask = GpioMask(p);
 		p_pio->PIO_IDR = mask;									// disable interrupts on the pin
 		uint32_t sr0 = p_pio->PIO_ABCDSR[0];
 		uint32_t sr1 = p_pio->PIO_ABCDSR[1];
@@ -194,6 +221,14 @@ void SetPinFunction(Pin p, GpioPinFunction f) noexcept
 		p_pio->PIO_PDR = mask;									// remove the pins from under the control of PIO
 #elif RPXXXX
 		gpio_set_function(p, (gpio_function_t)f);
+#elif STM32
+		GPIO_TypeDef * const p_pio = GpioPort(p);
+		const uint8_t pin  = GpioPinNumber(p);
+		// Set the alternate function number
+		const uint32_t shift4 = (pin & 7u) << 2;
+		p_pio->AFR[pin >> 3] = (p_pio->AFR[pin >> 3] & ~(0x0f << shift4)) | ((uint32_t)f << shift4);
+		// Set the pin to use the alternate function
+		StmSetPinMode(p_pio, pin, StmPinMode::alternate);
 #else
 # error Unsupported processor
 #endif
@@ -217,6 +252,8 @@ void ClearPinFunction(Pin p) noexcept
 		p_pio->PIO_PER = mask;									// put the pins under the control of PIO
 #elif RPXXXX
 		gpio_init(p);
+#elif STM32
+		StmSetPinMode(GpioPort(p), GpioPinNumber(p), StmPinMode::input);
 #else
 # error Unsupported processor
 #endif
@@ -224,18 +261,22 @@ void ClearPinFunction(Pin p) noexcept
 }
 
 // Enable the pullup resistor
-void EnablePullup(Pin pin) noexcept
+void EnablePullup(Pin p) noexcept
 {
-	if (pin < NumTotalPins)
+	if (p < NumTotalPins)
 	{
 #if SAME5x || SAMC21
-		PORT->Group[GpioPortNumber(pin)].OUTSET.reg = GpioMask(pin);
-		PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].bit.PULLEN = 1;
+		PORT->Group[GpioPortNumber(p)].OUTSET.reg = GpioMask(p);
+		PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].bit.PULLEN = 1;
 #elif SAM4E || SAM4S || SAME70
-		GpioPort(pin)->PIO_PPDDR = GpioMask(pin);						// turn off pulldown
-		GpioPort(pin)->PIO_PUER = GpioMask(pin);						// turn on pullup
+		GpioPort(p)->PIO_PPDDR = GpioMask(p);						// turn off pulldown
+		GpioPort(p)->PIO_PUER = GpioMask(p);						// turn on pullup
 #elif RPXXXX
-		gpio_pull_up(pin);
+		gpio_pull_up(p);
+#elif STM32
+		GPIO_TypeDef * const p_pio = GpioPort(p);
+		const unsigned int shift2 = GpioPinNumber(p) << 1;
+		p_pio->PUPDR = (p_pio->PUPDR & ~(0x03 << shift2)) | (0x01 << shift2);
 #else
 # error Unsupported processor
 #endif
@@ -243,17 +284,21 @@ void EnablePullup(Pin pin) noexcept
 }
 
 // Disable the pullup resistor
-void DisablePullup(Pin pin) noexcept
+void DisablePullup(Pin p) noexcept
 {
-	if (pin < NumTotalPins)
+	if (p < NumTotalPins)
 	{
 #if SAME5x || SAMC21
-		PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].bit.PULLEN = 0;
+		PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].bit.PULLEN = 0;
 #elif SAM4E || SAM4S || SAME70
-		GpioPort(pin)->PIO_PUDR = GpioMask(pin);						// turn off pullup
-		GpioPort(pin)->PIO_PPDDR = GpioMask(pin);						// turn off pulldown
+		GpioPort(p)->PIO_PUDR = GpioMask(p);						// turn off pullup
+		GpioPort(p)->PIO_PPDDR = GpioMask(p);						// turn off pulldown
 #elif RPXXXX
-		gpio_disable_pulls(pin);
+		gpio_disable_pulls(p);
+#elif STM32
+		GPIO_TypeDef * const p_pio = GpioPort(p);
+		const unsigned int shift2 = GpioPinNumber(p) << 1;
+		p_pio->PUPDR = (p_pio->PUPDR & ~(0x03 << shift2));
 #else
 # error Unsupported processor
 #endif
@@ -283,6 +328,10 @@ void SetDriveStrength(Pin p, unsigned int strength) noexcept
 		{
 			PORT->Group[GpioPortNumber(p)].PINCFG[GpioPinNumber(p)].reg &= ~PORT_PINCFG_DRVSTR;
 		}
+#elif STM32
+		GPIO_TypeDef * const p_pio = GpioPort(p);
+		const unsigned int shift2 = GpioPinNumber(p) << 1;
+		p_pio->OSPEEDR = (p_pio->OSPEEDR & ~((strength & 0x03) << shift2));
 #elif SAM4E || SAM4S
 		// These processors don't support setting the drive strength
 #elif RPXXXX
@@ -318,8 +367,11 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 #if SAM4E || SAM4S || SAME70
 		Pio *pio = GpioPort(pin);
 #endif
-#if !RPXXXX
+#if SAM4E || SAM4S || SAME70 || SAME5x || SAMC21
 		const uint32_t mask = GpioMask(pin);
+#endif
+#if STM32
+		GPIO_TypeDef * const p_pio = GpioPort(pin);
 #endif
 		switch (mode)
 		{
@@ -329,16 +381,21 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			pio->PIO_SCDR = DebounceDivisorReg;
 			pio->PIO_PPDDR = mask;									// turn off pulldown
 			pio_set_input(pio, mask, (debounce) ? PIO_DEBOUNCE : PIO_DEGLITCH);
+#elif STM32
+			DisablePullup(pin);
+			StmSetPinMode(p_pio, GpioPinNumber(pin), StmPinMode::input);
 #elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_disable_pulls(pin);
 			gpio_set_input_enabled(pin, true);
 			gpio_set_dir(pin, false);
-#else
+#elif SAME5x || SAMC21
 			ClearPinFunction(pin);
 			// The direction must be set before the pullup, otherwise setting the pullup doesn't work
 			PORT->Group[GpioPortNumber(pin)].DIRCLR.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].reg = PORT_PINCFG_INEN;
+#else
+# error Unsupported processor
 #endif
 			break;
 
@@ -348,17 +405,22 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			pio->PIO_SCDR = DebounceDivisorReg;
 			pio->PIO_PPDDR = mask;									// turn off pulldown
 			pio_set_input(pio, mask, PIO_PULLUP | ((debounce) ? PIO_DEBOUNCE : PIO_DEGLITCH));
+#elif STM32
+			EnablePullup(pin);
+			StmSetPinMode(p_pio, GpioPinNumber(pin), StmPinMode::input);
 #elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_pull_up(pin);
 			gpio_set_input_enabled(pin, true);
 			gpio_set_dir(pin, false);
-#else
+#elif SAME5x || SAMC21
 			ClearPinFunction(pin);
 			// The direction must be set before the pullup, otherwise setting the pullup doesn't work
 			PORT->Group[GpioPortNumber(pin)].DIRCLR.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].OUTSET.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].reg = PORT_PINCFG_PULLEN | PORT_PINCFG_INEN;
+#else
+# error Unsupported processor
 #endif
 			break;
 
@@ -374,12 +436,20 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			gpio_pull_down(pin);
 			gpio_set_input_enabled(pin, true);
 			gpio_set_dir(pin, false);
-#else
+#elif STM32
+			{
+				const unsigned int shift2 = GpioPinNumber(pin) << 1;
+				p_pio->PUPDR = (p_pio->PUPDR & ~(0x03 << shift2)) | (0x02 << shift2);	// enable pulldown
+				StmSetPinMode(p_pio, GpioPinNumber(pin), StmPinMode::input);
+			}
+#elif SAME5x || SAMC21
 			ClearPinFunction(pin);
 			// The direction must be set before the pulldown, otherwise setting the pulldown doesn't work
 			PORT->Group[GpioPortNumber(pin)].DIRCLR.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].OUTCLR.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].reg = PORT_PINCFG_PULLEN | PORT_PINCFG_INEN;
+#else
+# error Unsupported processor
 #endif
 			break;
 
@@ -391,16 +461,21 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			{
 				pmc_disable_periph_clk(PioIds[GpioPortNumber(pin)]);
 			}
+#elif STM32
+            fastDigitalWriteLow(pin);
+            StmSetPinMode(p_pio, GpioPinNumber(pin), StmPinMode::output);
 #elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_disable_pulls(pin);
 			gpio_put(pin, false);
 			gpio_set_dir(pin, true);
-#else
+#elif SAME5x || SAMC21
 			ClearPinFunction(pin);
 			PORT->Group[GpioPortNumber(pin)].OUTCLR.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].DIRSET.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].reg = PORT_PINCFG_INEN;
+#else
+# error Unsupported processor
 #endif
 			break;
 
@@ -412,16 +487,21 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			{
 				pmc_disable_periph_clk(PioIds[GpioPortNumber(pin)]);
 			}
+#elif STM32
+            fastDigitalWriteHigh(pin);
+            StmSetPinMode(p_pio, GpioPinNumber(pin), StmPinMode::output);
 #elif RPXXXX
 			ClearPinFunction(pin);
 			gpio_disable_pulls(pin);
 			gpio_put(pin, true);
 			gpio_set_dir(pin, true);
-#else
+#elif SAME5x || SAMC21
 			ClearPinFunction(pin);
 			PORT->Group[GpioPortNumber(pin)].OUTSET.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].DIRSET.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].reg = PORT_PINCFG_INEN;
+#else
+# error Unsupported processor
 #endif
 			break;
 
@@ -434,10 +514,14 @@ void SetPinMode(Pin pin, enum PinMode mode, bool debounce) noexcept
 			// on any PIO that is being used solely for outputs and ADC inputs. But for now we don't do that.
 #elif RPXXXX
 			adc_gpio_init(pin);
-#else
+#elif SAME5x || SAMC21
 			PORT->Group[GpioPortNumber(pin)].DIRCLR.reg = mask;
 			PORT->Group[GpioPortNumber(pin)].PINCFG[GpioPinNumber(pin)].reg = 0;
 			SetPinFunction(pin, GpioPinFunction::B);						// ADC is always on peripheral B for the SAMC21 and SAME5x
+#elif STM32
+            StmSetPinMode(p_pio, GpioPinNumber(pin), StmPinMode::analog);
+#else
+# error Unsupported processor
 #endif
 			break;
 
@@ -475,6 +559,43 @@ extern "C" void digitalWrite(Pin pin, bool high) noexcept
 		}
 	}
 }
+
+#if !STM32BTC && STM32
+
+// List of hardware timers
+TIM_TypeDef *const _ecv_null Timers[] =
+{
+	TIM1, TIM2, TIM3, TIM4, TIM5, TIM6, TIM7, TIM8,
+	nullptr, nullptr, nullptr,										// there are no timer 9, 10 or 11
+	TIM12,
+#if STM32H7
+	TIM13, TIM14,
+#else
+	nullptr, nullptr,												// no timer 13 or 14 on STM32H523
+#endif
+	TIM15,
+#if STM32H7
+	TIM16, TIM17,
+# if defined(STM32H723xx)
+	nullptr, nullptr, nullptr, nullptr, nullptr,					// no timers 18-22
+	TIM23, TIM24,
+# endif
+#endif
+};
+
+// List of low power hardware timers
+LPTIM_TypeDef *const _ecv_null LpTimers[] =
+{
+	LPTIM1, LPTIM2,
+#if STM32H7
+	LPTIM3, LPTIM4, LPTIM5
+#endif
+};
+
+TIM_TypeDef *const GetHardwareTimer(unsigned int timerNumber) noexcept { return Timers[timerNumber - 1]; }
+LPTIM_TypeDef *const GetLowPowerHardwareTimer(unsigned int lpTimerNumber) noexcept { return LpTimers[lpTimerNumber - FirstLowPowerTimerNumber]; }
+
+#endif
 
 // Tick handler. Ideally we would declare this as atomic but that adds a lot of overhead when fetching or incrementing it.
 static volatile uint64_t g_ms_ticks = 0;		// Count of 1ms time ticks
@@ -696,9 +817,9 @@ void memseti32(int32_t *_ecv_array dst, int32_t val, size_t numWords) noexcept
 	}
 }
 
-#if SAME5x || SAME70
+#if SAME5x || SAME70 || (STM32 && !STMBTC)
 
-// Random number generator
+//True random number generator
 static void RandomInit()
 {
 #if SAME5x
@@ -708,6 +829,12 @@ static void RandomInit()
 	pmc_enable_periph_clk(ID_TRNG);
 	TRNG->TRNG_IDR = TRNG_IDR_DATRDY;							// Disable all interrupts
 	TRNG->TRNG_CR = TRNG_CR_KEY(0x524e47) | TRNG_CR_ENABLE;		// Enable TRNG with security key (required)
+#elif STM32H5
+	RNG->CR |= RNG_CR_CONDRST;
+	RNG->CR &= ~RNG_CR_CONDRST;
+	RNG->CR |= RNG_CR_RNGEN;
+#elif STM32H7
+	RNG->CR |= RNG_CR_RNGEN;
 #endif
 }
 
@@ -724,8 +851,7 @@ void CoreInit() noexcept
 #if !RPXXXX && !STM32BTC
 	Serial::Init();
 #endif
-
-#if SAME5x || SAME70
+#if SAME5x || SAME70 || (STM32 && !STMBTC)
 	RandomInit();
 #endif
 
@@ -757,6 +883,17 @@ void WatchdogInit() noexcept
     HAL_IWDG_Init(&wdHandle);
 #elif RPXXXX
 	watchdog_enable(750, true);									// we reset the timer to run at 750kHz instead of 1MHz, so 1 second is 750 "milliseconds"
+#elif STM32
+	IWDG_HandleTypeDef wdHandle;
+# if STM32H7
+    wdHandle.Instance = IWDG1;
+# else
+    wdHandle.Instance = IWDG;
+# endif
+	wdHandle.Init.Window = IWDG_WINDOW_DISABLE;
+	wdHandle.Init.Reload = IWDG_RLR_RL;
+    wdHandle.Init.Prescaler = IWDG_PRESCALER_16;
+    HAL_IWDG_Init(&wdHandle);
 #else
 # error Unsupported processor
 #endif
@@ -774,6 +911,10 @@ void WatchdogReset() noexcept
 	WDT->WDT_CR = WDT_CR_KEY_PASSWD | WDT_CR_WDRSTT;
 #elif STM32BTC
     HAL_IWDG_Refresh(&wdHandle);
+#elif STM32H5
+	IWDG->KR = LL_IWDG_KEY_RELOAD;
+#elif STM32H7
+	IWDG1->KR = LL_IWDG_KEY_RELOAD;
 #elif RPXXXX
 	watchdog_update();
 #else
@@ -828,7 +969,7 @@ void ConfigureGclk(unsigned int index, GclkSource source, uint16_t divisor, bool
 
 #endif
 
-#if !RPXXXX
+#if !RPXXXX && !STM32
 
 void EnableTcClock(unsigned int tcNumber, unsigned int gclkNum) noexcept
 {
@@ -887,6 +1028,112 @@ void EnableTcClock(unsigned int tcNumber, unsigned int gclkNum) noexcept
 #endif
 }
 
+#elif STM32
+
+// Initialise a timer clock
+void EnableTimerClock(unsigned int timerNumber) noexcept
+{
+	switch (timerNumber)
+	{
+#if defined(TIM1_BASE)
+	case 1:		__HAL_RCC_TIM1_CLK_ENABLE(); break;
+#endif
+#if defined(TIM2_BASE)
+	case 2:		__HAL_RCC_TIM2_CLK_ENABLE(); break;
+#endif
+#if defined(TIM3_BASE)
+	case 3:		__HAL_RCC_TIM3_CLK_ENABLE(); break;
+#endif
+#if defined(TIM4_BASE)
+	case 4:		__HAL_RCC_TIM4_CLK_ENABLE(); break;
+#endif
+#if defined(TIM5_BASE)
+	case 5:		__HAL_RCC_TIM5_CLK_ENABLE(); break;
+#endif
+#if defined(TIM6_BASE)
+	case 6:		__HAL_RCC_TIM6_CLK_ENABLE(); break;
+#endif
+#if defined(TIM7_BASE)
+	case 7:		__HAL_RCC_TIM7_CLK_ENABLE(); break;
+#endif
+#if defined(TIM8_BASE)
+	case 8:		__HAL_RCC_TIM8_CLK_ENABLE(); break;
+#endif
+#if defined(TIM9_BASE)
+	case 9:		__HAL_RCC_TIM9_CLK_ENABLE(); break;
+#endif
+#if defined(TIM10_BASE)
+	case 10:	 __HAL_RCC_TIM10_CLK_ENABLE(); break;
+#endif
+#if defined(TIM11_BASE)
+	case 11:	__HAL_RCC_TIM11_CLK_ENABLE(); break;
+#endif
+#if defined(TIM12_BASE)
+	case 12:	__HAL_RCC_TIM12_CLK_ENABLE(); break;
+#endif
+#if defined(TIM13_BASE)
+	case 13:	__HAL_RCC_TIM13_CLK_ENABLE(); break;
+#endif
+#if defined(TIM14_BASE)
+	case 14:	__HAL_RCC_TIM14_CLK_ENABLE(); break;
+#endif
+#if defined(TIM15_BASE)
+	case 15:	__HAL_RCC_TIM15_CLK_ENABLE(); break;
+#endif
+#if defined(TIM16_BASE)
+	case 16:	__HAL_RCC_TIM16_CLK_ENABLE(); break;
+#endif
+#if defined(TIM17_BASE)
+	case 17:	__HAL_RCC_TIM17_CLK_ENABLE(); break;
+#endif
+#if defined(TIM18_BASE)
+	case 18:	__HAL_RCC_TIM18_CLK_ENABLE(); break;
+#endif
+#if defined(TIM19_BASE)
+	case 19:	__HAL_RCC_TIM19_CLK_ENABLE(); break;
+#endif
+#if defined(TIM20_BASE)
+	case 20:	__HAL_RCC_TIM20_CLK_ENABLE(); break;
+#endif
+#if defined(TIM21_BASE)
+	case 21:	__HAL_RCC_TIM21_CLK_ENABLE(); break;
+#endif
+#if defined(TIM22_BASE)
+	case 22:	 __HAL_RCC_TIM22_CLK_ENABLE(); break;
+#endif
+#if defined(LPTIM1_BASE)
+	case FirstLowPowerTimerNumber:		__HAL_RCC_LPTIM1_CLK_ENABLE(); break;			// low power timer 1
+#endif
+#if defined(LPTIM2_BASE)
+	case FirstLowPowerTimerNumber + 1:	__HAL_RCC_LPTIM2_CLK_ENABLE(); break;			// low power timer 2
+#endif
+#if defined(LPTIM3_BASE)
+	case FirstLowPowerTimerNumber + 2:	__HAL_RCC_LPTIM3_CLK_ENABLE(); break;			// low power timer 3
+#endif
+#if defined(LPTIM4_BASE)
+	case FirstLowPowerTimerNumber + 3:	__HAL_RCC_LPTIM4_CLK_ENABLE(); break;			// low power timer 4
+#endif
+#if defined(LPTIM5_BASE)
+	case FirstLowPowerTimerNumber + 4:	__HAL_RCC_LPTIM5_CLK_ENABLE(); break;			// low power timer 5
+#endif
+	}
+}
+
+// Initialise a SPI clock
+void EnableSpiClock(unsigned int spiInstanceNumber) noexcept
+{
+	switch (spiInstanceNumber)
+	{
+	case 1:		__HAL_RCC_SPI1_CLK_ENABLE(); break;
+	case 2:		__HAL_RCC_SPI2_CLK_ENABLE(); break;
+	case 3:		__HAL_RCC_SPI3_CLK_ENABLE(); break;
+	case 4:		__HAL_RCC_SPI4_CLK_ENABLE(); break;
+#if defined(SPI5_BASE)
+	case 5:		__HAL_RCC_SPI5_CLK_ENABLE(); break;
+#endif
+	}
+}
+
 #endif
 
 #if SAME5x || SAMC21
@@ -933,7 +1180,7 @@ AnalogChannelNumber PinToAdcChannel(Pin p) noexcept
 
 #else
 // Get the analog input channel that a pin uses
-AnalogChannelNumber PinToAdcChannel(Pin p) noexcept
+AdcInput PinToAdcChannel(Pin p) noexcept
 {
 	const PinDescriptionBase * const pinDesc = AppGetPinDescription(p);
 	return (pinDesc == nullptr) ? AdcInput::none : pinDesc->adc;
@@ -963,6 +1210,12 @@ extern "C" uint32_t random32() noexcept
 
 	while (!(TRNG->TRNG_ISR & TRNG_ISR_DATRDY)) {}
 	return TRNG->TRNG_ODATA;
+
+#elif STM32
+
+	uint32_t val;
+	while (!(RNG->SR & RNG_SR_DRDY) || (val = RNG->DR) == 0) { }
+	return val;
 
 #else		// processor doesn't have a true random number generator
 

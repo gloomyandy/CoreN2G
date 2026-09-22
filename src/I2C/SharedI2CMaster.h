@@ -11,20 +11,22 @@
 #include <CoreIO.h>
 #include "I2cParameters.h"
 
-#ifdef RTOS					// we dn't support I2C in non-RTOS builds
+#ifdef RTOS					// we don't support I2C in non-RTOS builds
 
 #include <RTOSIface/RTOSIface.h>
 #if RPXXXX
 # include "hardware/i2c.h"
+#elif SAME5x || SAMC21
+# include <DmacManager.h>
 #endif
 
 struct I2cErrors
 {
-	unsigned int busErrors, naks, contentions, otherErrors;
+	unsigned int busErrors, naks, contentions, otherErrors, recoveries;
 
 	void Clear() noexcept
 	{
-		busErrors = naks = contentions = otherErrors = 0;
+		busErrors = naks = contentions = otherErrors = recoveries = 0;
 	}
 };
 
@@ -46,22 +48,43 @@ public:
 		errors.Clear();
 	}
 
+#if SAME70
+	void Interrupt() noexcept;
+#endif
+
 private:
 	enum class I2cState : uint8_t
 	{
-		idle = 0, writing, sendingTenBitAddressForRead, reading, protocolError
+		idle = 0, writing, sendingTenBitAddressForRead, reading, readingWithDma, protocolError
 	};
 
 	void Enable() const noexcept;
 	void Disable() const noexcept;
+	void RecoverBus() noexcept;
 	bool InternalTransfer(uint16_t address, const uint8_t *_ecv_array txBuffer, uint8_t *_ecv_array rxBuffer, size_t numToWrite, size_t numToRead) noexcept;
-	void ProtocolError()  noexcept;
+
+#if !RPXXXX
+	const Pin sclPin, sdaPin;
+	const GpioPinFunction pinFunction;
+	const DmaChannel rxDmaChannel;
+	const DmaPriority rxDmaPriority;
+#endif
 
 #if SAME5x || SAMC21
-	static void CommonInterrupt(void *param) noexcept;
-	void Interrupt() noexcept;
+	Sercom *const hardware;
 
-	Sercom * const hardware;
+	static void CommonInterrupt(void *param) noexcept;
+	static void RxDmaCompleteCallback(CallbackParameter cp, DmaCallbackReason reason) noexcept;
+	void Interrupt() noexcept;
+	void StartReading(uint32_t addressToSend) noexcept;
+	void RxDmaComplete(DmaCallbackReason reason) noexcept;
+	void ProtocolError()  noexcept;
+#elif SAME70
+	Twihs *const hardware;
+	bool WaitForStatus(uint32_t statusBit, unsigned int& timeoutErrorCounter) noexcept;
+	bool WaitTransferComplete() noexcept;
+	bool WaitByteSent() noexcept;
+	bool WaitByteReceived() noexcept;
 #elif RPXXXX
 	i2c_inst_t *hardware;
 #endif

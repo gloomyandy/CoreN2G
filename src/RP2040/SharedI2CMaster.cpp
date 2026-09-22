@@ -135,11 +135,9 @@ bool SharedI2CMaster::InternalTransfer(uint16_t address, const uint8_t *txBuffer
 	return true;
 }
 
-void SharedI2CMaster::ProtocolError() noexcept
+void SharedI2CMaster::RecoverBus() noexcept
 {
-
 }
-
 #endif
 
 // End

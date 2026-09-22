@@ -64,14 +64,13 @@ void UniqueIdBase::SetFromCurrentBoard() noexcept
 	{
 		SetChecksumWord();
 	}
-#elif STM32BTC
+#elif STM32BTC || STM32
 	for (size_t i = 0; i < 3; ++i)
 	{
 		data[i] = ((uint32_t *)UID_BASE)[i];
 	}
 	data[3] = data[0] ^ data[2] ^ ~data[1];
 	SetChecksumWord();
-
 #elif RPXXXX
 	pico_unique_board_id_t uniqueId;
 	pico_get_unique_board_id(&uniqueId);
