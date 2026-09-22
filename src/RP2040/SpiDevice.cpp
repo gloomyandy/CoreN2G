@@ -28,7 +28,7 @@ void SpiDevice::SetClockFrequencyAndMode(uint32_t freq, SpiMode mode) const noex
 #if RP2350
 bool __time_critical_func(SpiDevice::TransceivePacket)(const uint8_t* tx_data, uint8_t* rx_data, size_t len, uint32_t timeout) noexcept
 #else
-bool SpiDevice::TransceivePacket(const uint8_t* tx_data, uint8_t* rx_data, size_t len) noexcept
+bool SpiDevice::TransceivePacket(const uint8_t* tx_data, uint8_t* rx_data, size_t len, uint32_t timeout) noexcept
 #endif
 {
 	// TODO pass on timeout value
