@@ -109,6 +109,7 @@
 #  define SAM4S				0
 #  define SAME5x			0
 #  define SAME70			0
+#  define STM32H5			0
 # else
 #  error "Unsupported STM32 Configuration"
 # endif

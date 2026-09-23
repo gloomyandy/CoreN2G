@@ -1,5 +1,9 @@
 #ifndef __STM32H7xx_HAL_CONF_H
 #define __STM32H7xx_HAL_CONF_H
+// Having other mcu types defined (even as 0) causes compilation errors, so clear them
+#if defined(STM32H5)
+#undef STM32H5
+#endif
 
 #include "variant.h"
 

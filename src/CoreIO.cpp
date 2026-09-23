@@ -1222,7 +1222,7 @@ extern "C" uint32_t random32() noexcept
 	HAL_RNG_GenerateRandomNumber(&rngHandle, &value);
 	return value;
 
-#elif STM32 && !STM32BTC
+#elif STM32
 
 	uint32_t val;
 	while (!(RNG->SR & RNG_SR_DRDY) || (val = RNG->DR) == 0) { }

@@ -11,7 +11,7 @@
 # include <RTOSIface/RTOSIface.h>
 #endif
 
-#if SAM4E || SAME70 || SAME5x || STM32
+#if SAM4E || SAME70 || SAME5x || STM32BTC || STM32
 
 #if SAME70 || STM32H7
 # include <core_cm7.h>
@@ -23,7 +23,7 @@
 
 extern uint8_t _nocache_ram_start;
 extern uint8_t _nocache_ram_end;
-#if STM32H7
+#if STM32BTC && STM32H7
 extern uint8_t _nocache2_ram_start;
 extern uint8_t _nocache2_ram_end;
 #endif

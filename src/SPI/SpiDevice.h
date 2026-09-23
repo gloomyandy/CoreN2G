@@ -13,7 +13,7 @@
 #include <SPI/SpiMode.h>
 #include <SPI/SpiParameters.h>
 
-#if SAME5x || SAMC21 || STM32
+#if SAME5x || SAMC21 || (!STM32BTC && STM32)
 # include <DmacManager.h>
 #endif
 
