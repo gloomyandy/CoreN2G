@@ -311,7 +311,7 @@ void HardwareSPI::SPI_IRQHandler(SPI_HandleTypeDef *hspi) noexcept
     //hspi->TxXferCount--;
     // very ugly fix for c++20 warning
     (*const_cast<uint16_t*>(&(hspi->TxXferCount)))--;
-}
+  }
   if (hspi->RxXferCount == 0)
   {
     // finished receiving data, transfer now complete
