@@ -12,7 +12,8 @@ SAMC21_CAN_RTOS_CFLAGS := -c -std=gnu99 \
 	-ffunction-sections -fdata-sections -nostdlib \
 	-Wall -Wundef -Wdouble-promotion -Wno-error=return-type \
 	-fsingle-precision-constant \
-	-O3
+	-O3 \
+	$(DEBUG_FLAGS)
 
 # Compiler flags - C++
 SAMC21_CAN_RTOS_CXXFLAGS := -c -std=c++20 \
@@ -23,7 +24,8 @@ SAMC21_CAN_RTOS_CXXFLAGS := -c -std=c++20 \
 	-Wall -Wundef -Wdouble-promotion -Werror=return-type -Wsuggest-override \
 	-Werror -Wnoexcept -Wshadow -Wsign-promo \
 	-fsingle-precision-constant \
-	-O3
+	-O3 \
+	$(DEBUG_FLAGS)
 
 # Defines - C only
 SAMC21_CAN_RTOS_C_DEFS := -D__SAMC21G18A__ -Dnoexcept= -DSUPPORT_CAN=1 -DRTOS
@@ -47,30 +49,21 @@ SAMC21_CAN_RTOS_INCLUDES := \
 	-I../FreeRTOS/src/portable/GCC/ARM_CM0
 
 # Source files - C
-SAMC21_CAN_RTOS_CSRC := $(shell find $(SAMC21_CAN_RTOS_SRC_DIR) \
-	-type f -name "*.c" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/RP2040/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/SAM4S_4E_E70/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/SAME5x_C21/SAME5x/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/SAME5x/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/SAME70/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/STM32/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/STMCubeMX/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/atmel/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/arm/*")
+SAMC21_CAN_RTOS_EXCLUDE_DIRS := \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/RP2040 \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/SAM4S_4E_E70 \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/SAME5x_C21/SAME5x \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/SAME5x \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/SAME70 \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/STM32 \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/STMCubeMX \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/atmel \
+	$(SAMC21_CAN_RTOS_SRC_DIR)/arm
+
+SAMC21_CAN_RTOS_CSRC := $(filter-out $(addsuffix /%,$(SAMC21_CAN_RTOS_EXCLUDE_DIRS)),$(call rwildcard,$(SAMC21_CAN_RTOS_SRC_DIR),*.c))
 
 # Source files - C++
-SAMC21_CAN_RTOS_CPPSRC := $(shell find $(SAMC21_CAN_RTOS_SRC_DIR) \
-	-type f -name "*.cpp" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/RP2040/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/SAM4S_4E_E70/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/SAME5x_C21/SAME5x/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/SAME5x/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/SAME70/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/STM32/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/STMCubeMX/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/atmel/*" \
-	! -path "$(SAMC21_CAN_RTOS_SRC_DIR)/arm/*")
+SAMC21_CAN_RTOS_CPPSRC := $(filter-out $(addsuffix /%,$(SAMC21_CAN_RTOS_EXCLUDE_DIRS)),$(call rwildcard,$(SAMC21_CAN_RTOS_SRC_DIR),*.cpp))
 
 # Object files
 SAMC21_CAN_RTOS_COBJ := $(patsubst $(SAMC21_CAN_RTOS_SRC_DIR)/%.c,$(SAMC21_CAN_RTOS_BUILD_DIR)/%.o,$(SAMC21_CAN_RTOS_CSRC))

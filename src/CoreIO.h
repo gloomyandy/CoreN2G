@@ -21,7 +21,7 @@
 // Exported memory control variables. These are defined in file syscalls.h which must be included by exactly one client file.
 extern char *_ecv_array heapTop;
 extern const char *_ecv_array heapLimit;
-extern const char *_ecv_array sysStackLimit;
+extern const uint32_t sysStackLimit;
 
 #if STM32
 constexpr unsigned int PinBits = 4;			// STM MCUs have 16-bit ports
@@ -922,7 +922,11 @@ inline uint32_t GetTimerClockFrequency(unsigned int timerNumber) noexcept { retu
  */
 void EnableTimerClock(unsigned int timerNumber) noexcept;
 
-inline uint32_t GetSpiClockFrequency(unsigned int spiNumber) noexcept { return 48'000'000; }			// all SPI devices currently use a 48MHz clock
+inline uint32_t GetSpiClockFrequency(unsigned int spiNumber) noexcept
+{
+	return 48'000'000;								// SPI devices 1 to 3 currently use a 48MHz clock
+	//TODO if we use SPI4 then we must set up its clock and return the correct frequency here.
+}
 
 void EnableSpiClock(unsigned int spiInstanceNumber) noexcept;
 

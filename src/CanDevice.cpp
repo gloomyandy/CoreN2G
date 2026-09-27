@@ -176,7 +176,7 @@ struct CanDevice::TxEvent
 // The STM32H5 uses a similar Bosch device as the Microchip MCUs with the following differences:
 // - Some of the register offsets are different
 // - There is no MRCFG (message RAM configuration) register because it has 10Kb of dedicated RAM (shared between all CAN peripherals)
-// - Register GFC is renamed RXGFC on the STM32H5
+// - Register GFC is renamed RXGFC on the STM32H5 and it has additional fields to specify how many filters are in use
 // - There are no SIDFC, XIDFC, NDAT1, NAT2, RXF0C, RXBC, RXF1C, RXESC, TXESC, TXEFC registers on the STM32H5
 // - The TXBC register contains only one bit, TFQM
 // - The IR register has no RF0W, RF1W, TWFW, DRX, BEC, or BEU bits
@@ -200,8 +200,8 @@ struct CanDevice::TxEvent
 
 # define CAN0_IRQn					FDCAN1_IT0_IRQn
 # define CAN1_IRQn					FDCAN2_IT0_IRQn
-# define CAN0_Handler				FDCAN1_IT0_Handler
-# define CAN1_Handler				FDCAN2_IT0_Handler
+# define CAN0_Handler				FDCAN1_IT0_IRQHandler
+# define CAN1_Handler				FDCAN2_IT0_IRQHandler
 
 #endif
 
@@ -246,7 +246,7 @@ void CanDevice::CanStats::Clear() noexcept
 	// STM32H5 supports exactly 3 buffers in each FIFO and no dedicated transmit or receive buffers
 	if (   p_config.numRxBuffers != 0 || p_config.numTxBuffers != 0 || p_config.rxFifo0Size != 3
 		|| p_config.rxFifo1Size != 3 || p_config.txFifoSize != 3 || p_config.txEventFifoSize != 3
-		|| p_config.numShortFilterElements != 28 || p_config.numExtendedFilterElements != 8
+		|| p_config.numShortFilterElements > 28 || p_config.numExtendedFilterElements > 8
 	   )
 	{
 		return nullptr;
@@ -260,6 +260,15 @@ void CanDevice::CanStats::Clear() noexcept
 	dev.config = &p_config;
 	dev.txCallback = p_txCallback;
 	devicesByPort[p_whichPort] = &dev;
+
+#if STM32H5
+	// We must enable APB clock before we can clear the FDCAN memory
+	//TODO only do the following for the first FDCAN that we initialise
+	RCC->APB1HENR |= RCC_APB1HENR_FDCANEN;
+	(void)RCC->APB1HENR;												// delay after an RCC peripheral clock enabling
+//	RCC->APB1HRSTR  |=  (RCC_APB1HRSTR_FDCANRST); // reset FDCAN
+//	RCC->APB1HRSTR  &= ~(RCC_APB1HRSTR_FDCANRST); // un-reset FDCAN
+#endif
 
 	// Set up pointers to the individual parts of the buffer memory
 	memset(memStart, 0, p_config.GetMemorySize() * sizeof(uint32_t));	// clear out filters, transmit pending flags etc.
@@ -326,12 +335,12 @@ void CanDevice::CanStats::Clear() noexcept
 		pmc_enable_periph_clk(ID_MCAN1);
 	}
 #elif STM32
-	// Enable APB clock
-	RCC->APB1HENR |= RCC_APB1HENR_FDCANEN;
-	(void)RCC->APB1HENR;												// delay after an RCC peripheral clock enabling
+	// We enabled the APB clock earlier
 	// Enable 48MHz CAN clock
 # if STM32H5
+	//TODO only do the following for the first FDCAN that we initialise
 	MODIFY_REG(RCC->CCIPR5, RCC_CCIPR5_FDCANSEL, LL_RCC_FDCAN_CLKSOURCE_PLL1Q);
+	FDCAN_CONFIG_NS->CKDIV = 0;
 # elif STM32H7
 	//TODO
 # else
@@ -411,11 +420,16 @@ void CanDevice::DoHardwareInit() noexcept
 		  CAN_(GFC_ANFS_REJECT)
 		| CAN_(GFC_ANFE_REJECT)
 		| CAN_(GFC_RRFS)
-		| CAN_(GFC_RRFE);
+		| CAN_(GFC_RRFE)
+#if STM32H5
+		| CAN_Val(RXGFC_LSS, config->numShortFilterElements)
+		| CAN_Val(RXGFC_LSE, config->numExtendedFilterElements)
+#endif
+		;
 #if !STM32H5
 	hw->REG(SIDFC) = CAN_Val(SIDFC_LSS, config->numShortFilterElements)		// number of short filter elements
 					| Bits2to15(rxStdFilter);								// short filter start address - don't use CAN_(SIDFC_FLSSA) here, it is defined strangely on the SAME70
-	hw->REG(XIDFC) = CAN_Val(XIDFC_LSE, config->numExtendedFilterElements)		// number of extended filter elements
+	hw->REG(XIDFC) = CAN_Val(XIDFC_LSE, config->numExtendedFilterElements)	// number of extended filter elements
 					| Bits2to15(rxExtFilter);								// extended filter start address - don't use CAN_(SIDFC_FLESA) here, it is defined strangely on the SAME70
 #endif
 	hw->REG(XIDAM) = 0x1FFFFFFF;
@@ -578,9 +592,12 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 	}
 	else
 	{
+#if STM32H5
+		bufferFree = false;
+#else
 		const unsigned int bufferIndex = (unsigned int)whichBuffer - (unsigned int)TxBufferNumber::buffer0;
 		const uint32_t trigMask = (uint32_t)1 << bufferIndex;
-#ifdef RTOS
+# ifdef RTOS
 		bufferFree = (hw->REG(TXBRP) & trigMask) == 0;
 		if (!bufferFree && timeout != 0)
 		{
@@ -608,11 +625,12 @@ bool CanDevice::IsSpaceAvailable(TxBufferNumber whichBuffer, uint32_t timeout) n
 				hw->REG(TXBTIE) &= ~trigMask;
 			}
 		}
-#else
+# else
 		do
 		{
 			bufferFree = (hw->REG(TXBRP) & trigMask) == 0;
 		} while (!bufferFree && millis() - start < timeout);
+# endif
 #endif
 	}
 	return bufferFree;
@@ -712,12 +730,20 @@ void CanDevice::CopyMessageForTransmit(CanMessageBuffer *buffer, volatile CanTxB
 uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, CanMessageBuffer *buffer) noexcept
 {
 	uint32_t cancelledId = 0;
+#if STM32H5
+	if (whichBuffer == TxBufferNumber::fifo)
+#else
 	if ((uint32_t)whichBuffer < (uint32_t)TxBufferNumber::buffer0 + config->numTxBuffers)
+#endif
 	{
 		const bool bufferFree = IsSpaceAvailable(whichBuffer, timeout);
+#if STM32H5
+		const uint32_t bufferIndex = READBITS(hw, TXFQS, TFQPI);			// we have only the fifo
+#else
 		const uint32_t bufferIndex = (whichBuffer == TxBufferNumber::fifo)
 										? READBITS(hw, TXFQS, TFQPI)
 											: (uint32_t)whichBuffer - (uint32_t)TxBufferNumber::buffer0;
+#endif
 		const uint32_t trigMask = (uint32_t)1 << bufferIndex;
 		if (!bufferFree)
 		{
@@ -729,7 +755,13 @@ uint32_t CanDevice::SendMessage(TxBufferNumber whichBuffer, uint32_t timeout, Ca
 			{
 				delay(1);
 			}
-			while ((hw->REG(TXBRP) & trigMask) != 0 || (whichBuffer == TxBufferNumber::fifo && READBITS(hw, TXFQS, TFQF)));
+			while ((hw->REG(TXBRP) & trigMask) != 0
+#if STM32H5
+					|| READBITS(hw, TXFQS, TFQF)
+#else
+					|| (whichBuffer == TxBufferNumber::fifo && READBITS(hw, TXFQS, TFQF))
+#endif
+				  );
 		}
 
 		CopyMessageForTransmit(buffer, GetTxBuffer(bufferIndex));
@@ -990,12 +1022,14 @@ void CanDevice::SetShortFilterElement(unsigned int index, RxBufferNumber whichBu
 			s0.bit.SFID2 = mask;
 			break;
 		default:
+#if !STM32H5
 			if ((uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0 < config->numRxBuffers)
 			{
 				s0.bit.SFEC = 0x07;						// store in buffer
 				s0.bit.SFID2 = (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0;
 			}
 			else
+#endif
 			{
 				s0.bit.SFEC = 0x00;						// discard message
 				s0.bit.SFID2 = mask;
@@ -1041,12 +1075,14 @@ void CanDevice::SetExtendedFilterElement(unsigned int index, RxBufferNumber whic
 			f1.bit.EFID2 = mask;
 			break;
 		default:
+#if !STM32H5
 			if ((uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0 < config->numRxBuffers)
 			{
 				f0.bit.EFEC = 0x07;
 				f1.bit.EFID2 = (uint32_t)whichBuffer - (uint32_t)RxBufferNumber::buffer0;
 			}
 			else
+#endif
 			{
 				f0.bit.EFEC = 0x00;						// discard message
 				f1.bit.EFID2 = mask;
@@ -1317,12 +1353,12 @@ void CanDevice::Interrupt() noexcept
 
 // Interrupt handlers
 
-void CAN0_Handler() noexcept
+extern "C" void CAN0_Handler() noexcept
 {
 	devicesByPort[0]->Interrupt();
 }
 
-void CAN1_Handler() noexcept
+extern "C" void CAN1_Handler() noexcept
 {
 	devicesByPort[1]->Interrupt();
 }

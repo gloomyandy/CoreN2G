@@ -12,7 +12,8 @@ SAMC21_CAN_CFLAGS := -c -std=gnu99 \
 	-ffunction-sections -fdata-sections -nostdlib \
 	-Wall -Wundef -Wdouble-promotion -Wno-error=return-type \
 	-fsingle-precision-constant \
-	-Os
+	-Os \
+	$(DEBUG_FLAGS)
 
 # Compiler flags - C++
 SAMC21_CAN_CXXFLAGS := -c -std=c++20 \
@@ -23,7 +24,8 @@ SAMC21_CAN_CXXFLAGS := -c -std=c++20 \
 	-Wall -Wundef -Wdouble-promotion -Werror=return-type -Wsuggest-override \
 	-Werror -Wnoexcept -Wshadow -Wsign-promo \
 	-fsingle-precision-constant \
-	-Os
+	-Os \
+	$(DEBUG_FLAGS)
 
 # Defines - C only
 SAMC21_CAN_C_DEFS := -D__SAMC21G18A__ -Dnoexcept= -DSUPPORT_CAN=1
@@ -45,23 +47,18 @@ SAMC21_CAN_INCLUDES := \
 	-I../CANlib/src
 
 # Source files - exclude: RP2040, SAM4S_4E_E70, SAME5x_C21/SAME5x, atmel, arm
-SAMC21_CAN_CSRC := $(shell find $(SAMC21_CAN_SRC_DIR) -name '*.c' \
-	! -path '*/RP2040/*' \
-	! -path '*/SAM4S_4E_E70/*' \
-	! -path '*/SAME5x_C21/SAME5x/*' \
-	! -path '*/STM32/*' \
-	! -path '*/STMCubeMX/*' \
-	! -path '*/atmel/*' \
-	! -path '*/arm/*')
+SAMC21_CAN_EXCLUDE_DIRS := \
+	$(SAMC21_CAN_SRC_DIR)/RP2040 \
+	$(SAMC21_CAN_SRC_DIR)/SAM4S_4E_E70 \
+	$(SAMC21_CAN_SRC_DIR)/SAME5x_C21/SAME5x \
+	$(SAMC21_CAN_SRC_DIR)/STM32 \
+	$(SAMC21_CAN_SRC_DIR)/STMCubeMX \
+	$(SAMC21_CAN_SRC_DIR)/atmel \
+	$(SAMC21_CAN_SRC_DIR)/arm
 
-SAMC21_CAN_CPPSRC := $(shell find $(SAMC21_CAN_SRC_DIR) -name '*.cpp' \
-	! -path '*/RP2040/*' \
-	! -path '*/SAM4S_4E_E70/*' \
-	! -path '*/SAME5x_C21/SAME5x/*' \
-	! -path '*/STM32/*' \
-	! -path '*/STMCubeMX/*' \
-	! -path '*/atmel/*' \
-	! -path '*/arm/*')
+SAMC21_CAN_CSRC := $(filter-out $(addsuffix /%,$(SAMC21_CAN_EXCLUDE_DIRS)),$(call rwildcard,$(SAMC21_CAN_SRC_DIR),*.c))
+
+SAMC21_CAN_CPPSRC := $(filter-out $(addsuffix /%,$(SAMC21_CAN_EXCLUDE_DIRS)),$(call rwildcard,$(SAMC21_CAN_SRC_DIR),*.cpp))
 
 # Object files
 SAMC21_CAN_C_OBJS := $(SAMC21_CAN_CSRC:%.c=$(SAMC21_CAN_BUILD_DIR)/%.o)

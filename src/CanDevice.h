@@ -61,7 +61,7 @@ public:
 	enum class RxBufferNumber : uint32_t
 	{
 		fifo0 = 0, fifo1,
-#if !RPXXXX
+#if !RPXXXX && !STM32H5
 		buffer0, buffer1, buffer2, buffer3,
 #endif
 		none = 0xFFFF
@@ -72,7 +72,7 @@ public:
 		fifo = 0,
 #if RPXXXX
 		fifo1 = 1									// high priority fifo
-#else
+#elif !STM32H5
 		buffer0, buffer1, buffer2, buffer3, buffer4, buffer5,
 #endif
 	};
@@ -80,7 +80,7 @@ public:
 	// Struct used to pass configuration constants, with default values
 	struct Config
 	{
-		unsigned int dataSize = 64;											// must be one of: 8, 12, 16, 20, 24, 32, 48, 64
+		unsigned int dataSize = 64;						// must be one of: 8, 12, 16, 20, 24, 32, 48, 64
 #if RPXXXX
 		unsigned int numTxBuffers = 0;
 		unsigned int txFifo0Size = 4;
@@ -125,7 +125,7 @@ public:
 				&& numRxBuffers == 0 && numTxBuffers == 0
 				&& rxFifo0Size == 3 && rxFifo1Size == 3
 				&& txFifoSize == 3 && txEventFifoSize == 3
-				&& numShortFilterElements == 28 && numExtendedFilterElements == 8;
+				&& numShortFilterElements <= 28 && numExtendedFilterElements <= 8;
 #elif RPXXXX
 				&& numTxBuffers == 0										// our RP2040 code doesn't support dedicated Tx buffers
 				&& txEventFifoSize == 0										// our RP2040 code doesn't support the transmit event FIFO
@@ -141,16 +141,24 @@ public:
 		}
 
 		// Return the number of words of memory occupied by the 11-bit filters
-		// We round this up to the next multiple of 8 bytes to reduce the chance of the Tx and Rx buffers crossing cache lines
 		constexpr size_t GetStandardFiltersMemSize() const noexcept
 		{
+#if STM32H5
+			return 28 * StandardFilterElementSize;							// STM32H5 reserves memory for 28 standard filter elements
+#else
+			// We round this up to the next multiple of 8 bytes to reduce the chance of the Tx and Rx buffers crossing cache lines
 			return ((numShortFilterElements * StandardFilterElementSize) + 1u) & (~1u);
+#endif
 		}
 
 		// Return the number of words of memory occupied by the 29-bit filters
 		constexpr size_t GetExtendedFiltersMemSize() const noexcept
 		{
+#if STM32H5
+			return 8 * ExtendedFilterElementSize;							// STM32H5 reserves memory for 8 extended filter elements
+#else
 			return numExtendedFilterElements * ExtendedFilterElementSize;
+#endif
 		}
 
 		// Return the number of words of memory occupied by each transmit buffer
@@ -361,7 +369,7 @@ private:
 
 	CanStats stats;												//!< Statistics gathered
 
-#if !RPXXXX// we don't emulate the transmit event fifo on the RP2040
+#if !RPXXXX	// we don't emulate the transmit event fifo on the RP2040
 	TxEventCallbackFunction txCallback;							// function that gets called by the ISR when a transmit event for a message with a nonzero marker occurs
 #endif
 

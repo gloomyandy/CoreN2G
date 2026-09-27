@@ -12,7 +12,8 @@ SAME5x_CAN_RTOS_CFLAGS := -c -std=gnu99 \
 	-ffunction-sections -fdata-sections -nostdlib \
 	-Wall -Wundef -Wdouble-promotion -Werror=return-type -Werror=implicit \
 	-fsingle-precision-constant \
-	-O3
+	-O3 \
+	$(DEBUG_FLAGS)
 
 # Compiler flags - C++
 SAME5x_CAN_RTOS_CXXFLAGS := -c -std=c++20 \
@@ -24,7 +25,8 @@ SAME5x_CAN_RTOS_CXXFLAGS := -c -std=c++20 \
 	-Werror -Wnoexcept -Wshadow -Wsign-promo \
 	-fsingle-precision-constant \
 	-fstack-usage \
-	-O3
+	-O3 \
+	$(DEBUG_FLAGS)
 
 # Defines - C only
 SAME5x_CAN_RTOS_C_DEFS := -D__SAME54P20A__ -Dnoexcept= -DSUPPORT_CAN=1 -DSUPPORT_SDHC=0 -DSUPPORT_USB=0 -DRTOS
@@ -50,25 +52,19 @@ SAME5x_CAN_RTOS_INCLUDES := \
 	-I../FreeRTOS/src/portable/GCC/ARM_CM4F
 
 # Source files
-SAME5x_CAN_RTOS_CSRC := $(shell find $(SAME5x_CAN_RTOS_SRC_DIR) -name '*.c' \
-	! -path '*/RP2040/*' \
-	! -path '*/SAM4S_4E_E70/*' \
-	! -path '*/SAME5x_C21/SAMC21/*' \
-	! -path '*/SAME5x_C21/SAME5x/usb/*' \
-	! -path '*/STM32/*' \
-	! -path '*/STMCubeMX/*' \
-	! -path '*/atmel/*' \
-	! -path '*/arm/*')
+SAME5x_CAN_RTOS_EXCLUDE_DIRS := \
+	$(SAME5x_CAN_RTOS_SRC_DIR)/RP2040 \
+	$(SAME5x_CAN_RTOS_SRC_DIR)/SAM4S_4E_E70 \
+	$(SAME5x_CAN_RTOS_SRC_DIR)/SAME5x_C21/SAMC21 \
+	$(SAME5x_CAN_RTOS_SRC_DIR)/SAME5x_C21/SAME5x/usb \
+	$(SAME5x_CAN_RTOS_SRC_DIR)/STM32 \
+	$(SAME5x_CAN_RTOS_SRC_DIR)/STMCubeMX \
+	$(SAME5x_CAN_RTOS_SRC_DIR)/atmel \
+	$(SAME5x_CAN_RTOS_SRC_DIR)/arm
 
-SAME5x_CAN_RTOS_CPPSRC := $(shell find $(SAME5x_CAN_RTOS_SRC_DIR) -name '*.cpp' \
-	! -path '*/RP2040/*' \
-	! -path '*/SAM4S_4E_E70/*' \
-	! -path '*/SAME5x_C21/SAMC21/*' \
-	! -path '*/SAME5x_C21/SAME5x/usb/*' \
-	! -path '*/STM32/*' \
-	! -path '*/STMCubeMX/*' \
-	! -path '*/atmel/*' \
-	! -path '*/arm/*')
+SAME5x_CAN_RTOS_CSRC := $(filter-out $(addsuffix /%,$(SAME5x_CAN_RTOS_EXCLUDE_DIRS)),$(call rwildcard,$(SAME5x_CAN_RTOS_SRC_DIR),*.c))
+
+SAME5x_CAN_RTOS_CPPSRC := $(filter-out $(addsuffix /%,$(SAME5x_CAN_RTOS_EXCLUDE_DIRS)),$(call rwildcard,$(SAME5x_CAN_RTOS_SRC_DIR),*.cpp))
 
 # Object files
 SAME5x_CAN_RTOS_COBJ := $(patsubst $(SAME5x_CAN_RTOS_SRC_DIR)/%.c,$(SAME5x_CAN_RTOS_BUILD_DIR)/%.o,$(SAME5x_CAN_RTOS_CSRC))

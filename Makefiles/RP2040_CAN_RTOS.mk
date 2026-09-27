@@ -12,7 +12,8 @@ RP2040_CAN_RTOS_CFLAGS := -c -std=gnu99 \
 	-ffunction-sections -fdata-sections -nostdlib \
 	-Wall -Wundef -Wdouble-promotion -Wno-error=return-type \
 	-fsingle-precision-constant \
-	-O3
+	-O3 \
+	$(DEBUG_FLAGS)
 
 # Compiler flags - C++
 RP2040_CAN_RTOS_CXXFLAGS := -c -std=c++20 \
@@ -23,7 +24,8 @@ RP2040_CAN_RTOS_CXXFLAGS := -c -std=c++20 \
 	-Wall -Wundef -Wdouble-promotion -Werror=return-type -Wsuggest-override \
 	-Werror -Wnoexcept -Wshadow -Wsign-promo \
 	-fsingle-precision-constant \
-	-O3
+	-O3 \
+	$(DEBUG_FLAGS)
 
 # Defines - C only
 RP2040_CAN_RTOS_C_DEFS := -D__RP2040__ -Dnoexcept= -DSUPPORT_CAN=1 -DSUPPORT_USB=1 -DRTOS
@@ -64,28 +66,20 @@ RP2040_CAN_RTOS_INCLUDES := \
 	-I../FreeRTOS/src/portable/GCC/ARM_CM0
 
 # Source files - C
-RP2040_CAN_RTOS_CSRC := $(shell find $(RP2040_CAN_RTOS_SRC_DIR) \
-	-type f -name "*.c" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/RP2040/pico-sdk/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/SAME5x_C21/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/SAM4S_4E_E70/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/SAME70/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/STM32/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/STMCubeMX/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/atmel/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/arm/*")
+RP2040_CAN_RTOS_EXCLUDE_DIRS := \
+	$(RP2040_CAN_RTOS_SRC_DIR)/RP2040/pico-sdk \
+	$(RP2040_CAN_RTOS_SRC_DIR)/SAME5x_C21 \
+	$(RP2040_CAN_RTOS_SRC_DIR)/SAM4S_4E_E70 \
+	$(RP2040_CAN_RTOS_SRC_DIR)/SAME70 \
+	$(RP2040_CAN_RTOS_SRC_DIR)/STM32 \
+	$(RP2040_CAN_RTOS_SRC_DIR)/STMCubeMX \
+	$(RP2040_CAN_RTOS_SRC_DIR)/atmel \
+	$(RP2040_CAN_RTOS_SRC_DIR)/arm
+
+RP2040_CAN_RTOS_CSRC := $(filter-out $(addsuffix /%,$(RP2040_CAN_RTOS_EXCLUDE_DIRS)),$(call rwildcard,$(RP2040_CAN_RTOS_SRC_DIR),*.c))
 
 # Source files - C++
-RP2040_CAN_RTOS_CPPSRC := $(shell find $(RP2040_CAN_RTOS_SRC_DIR) \
-	-type f -name "*.cpp" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/RP2040/pico-sdk/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/SAME5x_C21/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/SAM4S_4E_E70/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/SAME70/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/STM32/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/STMCubeMX/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/atmel/*" \
-	! -path "$(RP2040_CAN_RTOS_SRC_DIR)/arm/*")
+RP2040_CAN_RTOS_CPPSRC := $(filter-out $(addsuffix /%,$(RP2040_CAN_RTOS_EXCLUDE_DIRS)),$(call rwildcard,$(RP2040_CAN_RTOS_SRC_DIR),*.cpp))
 
 # Object files
 RP2040_CAN_RTOS_COBJ := $(patsubst $(RP2040_CAN_RTOS_SRC_DIR)/%.c,$(RP2040_CAN_RTOS_BUILD_DIR)/%.o,$(RP2040_CAN_RTOS_CSRC))

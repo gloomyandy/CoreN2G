@@ -8,23 +8,18 @@ SAME5X_TARGET := $(SAME5X_BUILD_DIR)/libCoreN2G.a
 SAME5X_SRC_DIR := src
 
 # Find all source files (Eclipse excludes: src/RP2040|src/SAM4S_4E_E70|src/SAME5x_C21/SAMC21|src/atmel|src/arm)
-SAME5X_CPP_SRCS := $(shell find $(SAME5X_SRC_DIR) -name '*.cpp' \
-	! -path '*/RP2040/*' \
-	! -path '*/SAM4S_4E_E70/*' \
-	! -path '*/SAME5x_C21/SAMC21/*' \
-	! -path '*/STM32/*' \
-	! -path '*/STMCubeMX/*' \
-	! -path '*/atmel/*' \
-	! -path '*/arm/*')
+SAME5X_EXCLUDE_DIRS := \
+	$(SAME5X_SRC_DIR)/RP2040 \
+	$(SAME5X_SRC_DIR)/SAM4S_4E_E70 \
+	$(SAME5X_SRC_DIR)/SAME5x_C21/SAMC21 \
+	$(SAME5X_SRC_DIR)/STM32 \
+	$(SAME5X_SRC_DIR)/STMCubeMX \
+	$(SAME5X_SRC_DIR)/atmel \
+	$(SAME5X_SRC_DIR)/arm
 
-SAME5X_C_SRCS := $(shell find $(SAME5X_SRC_DIR) -name '*.c' \
-	! -path '*/RP2040/*' \
-	! -path '*/SAM4S_4E_E70/*' \
-	! -path '*/SAME5x_C21/SAMC21/*' \
-	! -path '*/STM32/*' \
-	! -path '*/STMCubeMX/*' \
-	! -path '*/atmel/*' \
-	! -path '*/arm/*')
+SAME5X_CPP_SRCS := $(filter-out $(addsuffix /%,$(SAME5X_EXCLUDE_DIRS)),$(call rwildcard,$(SAME5X_SRC_DIR),*.cpp))
+
+SAME5X_C_SRCS := $(filter-out $(addsuffix /%,$(SAME5X_EXCLUDE_DIRS)),$(call rwildcard,$(SAME5X_SRC_DIR),*.c))
 
 # Include paths (matching Eclipse .cproject order)
 SAME5X_INCLUDES := \
@@ -77,7 +72,9 @@ SAME5X_CFLAGS := -c -std=gnu99 \
 	-fdump-rtl-expand \
 	-Wall \
 	$(SAME5X_INCLUDES) \
-	$(SAME5X_C_DEFINES)
+	$(SAME5X_C_DEFINES) \
+	-O3 \
+	$(DEBUG_FLAGS)
 
 # Compiler flags - C++
 SAME5X_CXXFLAGS := -c -std=c++20 \
@@ -103,16 +100,9 @@ SAME5X_CXXFLAGS := -c -std=c++20 \
 	-fdump-rtl-expand \
 	-Wall \
 	$(SAME5X_INCLUDES) \
-	$(SAME5X_DEFINES)
-
-# Add debug flags if DEBUG=1
-ifeq ($(DEBUG),1)
-SAME5X_CFLAGS += -O0 -g3
-SAME5X_CXXFLAGS += -O0 -g3
-else
-SAME5X_CFLAGS += -O3
-SAME5X_CXXFLAGS += -O3
-endif
+	-O3 \
+	$(SAME5X_DEFINES) \
+	$(DEBUG_FLAGS)
 
 # Object files
 SAME5X_CPP_OBJS := $(SAME5X_CPP_SRCS:%.cpp=$(SAME5X_BUILD_DIR)/%.o)

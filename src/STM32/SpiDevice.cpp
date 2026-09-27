@@ -49,8 +49,9 @@ SpiDevice::SpiDevice(const SpiParameters& params) noexcept
 	// Enable the interrupt in the NVIC
 	Serial::SetSpiVector(instanceNumber, CommonInterrupt, this);
 	NVIC_SetPriority(SpiInterruptNumbers[instanceNumber - 1], params.irqPriority);
+#if 0	// interrupt not used yet
 	NVIC_EnableIRQ(SpiInterruptNumbers[instanceNumber - 1]);
-
+#endif
 	// Leave the SPI disabled until after we have set its comms parameters
 }
 
@@ -132,10 +133,14 @@ void SpiDevice::SetClockFrequencyAndMode(uint32_t freq, SpiMode mode, bool nineB
 	{
 		cfg1 |= (prescaleFactor - 1) << SPI_CFG1_MBR_Pos;
 	}
-	hardware->CFG1 = cfg1;			//TODO need to add DMA bits of using DMA
+	hardware->CFG1 = cfg1;								//TODO need to add DMA bits if using DMA
 
-	uint32_t cfg2 = SPI_CFG2_AFCNTR | SPI_CFG2_MASTER;
+	// Before the SPI peripheral will allow us to set CFG2_MASTER we have to set the internal NSS input to not active
+	uint32_t cfg2 = SPI_CFG2_AFCNTR | SPI_CFG2_SSM;		// set software management of NSS
+	hardware->CFG2 = cfg2;
 
+	hardware->CR1 |= SPI_CR1_SSI;						// set software-controlled NSS high
+	cfg2 |= SPI_CFG2_MASTER;							// now we can select master mode
 	if (((uint8_t)mode & 2) != 0)
 	{
 		cfg2 |= SPI_CFG2_CPOL;
@@ -148,10 +153,11 @@ void SpiDevice::SetClockFrequencyAndMode(uint32_t freq, SpiMode mode, bool nineB
 	Enable();
 }
 
-// Send and receive data returning true if successful
+// Send and receive data returning true if successful. Caller must handle the CS signal. If tx_data is null, we send 0xFF. If rx_data is null, we don't read the received data.
 bool SpiDevice::TransceivePacket(const uint8_t *_ecv_array null tx_data, uint8_t *_ecv_array null rx_data, size_t len, uint32_t dmaTimeout) noexcept
 {
-	// Clear any existing data
+	// Clear any existing received data
+	// TODO: allow for the FIFO, when we enable it
 	(void)hardware->RXDR;
 
 # if defined(RTOS)
@@ -203,6 +209,8 @@ bool SpiDevice::TransceivePacket(const uint8_t *_ecv_array null tx_data, uint8_t
 		return ok;
 	}
 # endif
+	hardware->CR1 |= SPI_CR1_CSTART;
+
 	// For now we use polling mode
 	for (uint32_t i = 0; i < len; ++i)
 	{
@@ -213,7 +221,7 @@ bool SpiDevice::TransceivePacket(const uint8_t *_ecv_array null tx_data, uint8_t
 		}
 
 		// Write to transmit register
-		hardware->TXDR = dOut;
+		*(volatile uint8_t*)&hardware->TXDR = dOut;						// the STM32 SPI TXDR register behaviour depends on whether you address it as an 8, 16 or 32-bit port
 
 		// Some devices are transmit-only e.g. 12864 display, so don't wait for received data if we don't need to
 		if (rx_data != nullptr)
@@ -225,7 +233,7 @@ bool SpiDevice::TransceivePacket(const uint8_t *_ecv_array null tx_data, uint8_t
 			}
 
 			// Get data from receive register
-			const uint8_t dIn = (uint8_t)hardware->RXDR;
+			const uint8_t dIn = *(volatile uint8_t*)&hardware->RXDR;	// the STM32 SPI register RXDR behaviour depends on whether you address it as an 8, 16 or 32-bit port
 			*rx_data++ = dIn;
 		}
 	}
