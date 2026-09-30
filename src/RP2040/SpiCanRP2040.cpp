@@ -70,7 +70,7 @@ void CanDevice::CanStats::Clear() noexcept
 }
 
 // Initialise a CAN device and return a pointer to it
-/*static*/ CanDevice* CanDevice::Init(unsigned int p_whichCan, unsigned int p_whichPort, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
+/*static*/ CanDevice* CanDevice::Init(const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
 {
 	int8_t status;
 	devices[0].runState = RunState::uninitialised;
