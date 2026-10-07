@@ -20,8 +20,9 @@
 
 // Exported memory control variables. These are defined in file syscalls.h which must be included by exactly one client file.
 extern char *_ecv_array heapTop;
+extern const char *_ecv_array sysStackLimit;
+extern const char *_ecv_array sysStackTop;
 extern const char *_ecv_array heapLimit;
-extern const uint32_t sysStackLimit;
 
 #if STM32
 constexpr unsigned int PinBits = 4;			// STM MCUs have 16-bit ports
@@ -555,7 +556,7 @@ inline void fastDigitalWriteHigh(uint32_t pin) noexcept
 #elif RPXXXX
 	gpio_set_mask(GpioMask(pin));
 #elif STM32
-	GpioPort(pin)->BSRR = GpioPinNumber(pin);
+	GpioPort(pin)->BSRR = GpioMask(pin);
 #else
 # error Unsupported processor
 #endif
@@ -575,7 +576,7 @@ inline void fastDigitalWriteLow(uint32_t pin) noexcept
 #elif RPXXXX
 	gpio_clr_mask(GpioMask(pin));
 #elif STM32
-	GpioPort(pin)->BSRR = GpioPinNumber(pin) << 16;
+	GpioPort(pin)->BSRR = GpioMask(pin) << 16;
 #else
 # error Unsupported processor
 #endif
@@ -595,7 +596,7 @@ inline bool fastDigitalRead(uint32_t pin) noexcept
 #elif RPXXXX
 	return gpio_get(pin);			//TODO can we optimise this?
 #elif STM32
-	return (GpioPort(pin)->IDR & GpioPinNumber(pin)) != 0;
+	return (GpioPort(pin)->IDR & GpioMask(pin)) != 0;
 #else
 # error Unsupported processor
 #endif
