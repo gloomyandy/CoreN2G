@@ -37,7 +37,7 @@ const char *_ecv_array sysStackTop = _estack;
 #else
 
 #ifndef SystemStackSize
-# define SystemStackSize	(1024)						// stack size in dwords
+# define SystemStackSize	(256)						// stack size in dwords
 #endif
 
 const char *_ecv_array heapLimit = _sstack;
