@@ -10,7 +10,9 @@ AsyncSerial::AsyncSerial(const UartParameters& params) noexcept
     memset(&this->handle, 0, sizeof(this->handle));
     uart = nullptr;
     prio = 0;
+#ifdef RTOS
     txWaitingTask = nullptr;
+#endif
     txEnabled = false;
     onTransmissionEndedFn = nullptr;
 }

@@ -14,6 +14,7 @@ enum {
 // callbacks provided by board specific code
 int_fast8_t usb_read_bulk_out(void *data, uint_fast8_t max_len);
 void usb_enable_bulk_out();
+void usb_disable_bulk_out();
 int_fast8_t usb_send_bulk_in(void *data, uint_fast8_t len);
 void usb_enable_bulk_in();
 int_fast8_t usb_read_ep0(void *data, uint_fast8_t max_len);

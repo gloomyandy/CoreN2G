@@ -178,6 +178,16 @@ void
 usb_enable_bulk_out()
 {
     enable_rx_endpoint(USB_CDC_EP_BULK_OUT);
+    OTGD->DAINTMSK |= USB_OTG_GINTSTS_RXFLVL;
+}
+
+void
+usb_disable_bulk_out()
+{
+    USB_OTG_OUTEndpointTypeDef *epo = EPOUT(USB_CDC_EP_BULK_OUT);
+    uint32_t ctl = epo->DOEPCTL;
+        epo->DOEPCTL = ctl | USB_OTG_DOEPCTL_SNAK;
+    OTGD->DAINTMSK &= ~USB_OTG_GINTSTS_RXFLVL;
 }
 
 int_fast8_t

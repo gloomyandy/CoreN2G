@@ -140,10 +140,13 @@ usb_notify_bulk_out(void)
             // If we have received data we must be connected!
         line_control_state = 1;
         wpos += ret;
+        break;
     }
     receive_wpos = wpos;
-    if (wpos + USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf))
+    if (wpos + 2*USB_CDC_EP_BULK_OUT_SIZE <= sizeof(receive_buf))
         usb_enable_bulk_out();
+    else
+        usb_disable_bulk_out();
 }
 
 
