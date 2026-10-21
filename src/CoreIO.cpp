@@ -40,6 +40,7 @@ static IWDG_HandleTypeDef wdHandle;
 static RNG_HandleTypeDef rngHandle;
 #elif STM32H5
 # include <STM32/Serial.h>
+# include <stm32h5xx_hal.h>
 # include <stm32h5xx_hal_conf.h>
 # include <stm32h5xx_hal_iwdg.h>
 # include <stm32h5xx_ll_iwdg.h>
@@ -47,6 +48,7 @@ static RNG_HandleTypeDef rngHandle;
 # include <stm32h5xx_hal_rcc.h>
 #elif STM32H7
 # include <STM32/Serial.h>
+# include <stm32h7xx_hal.h>
 # include <stm32h7xx_hal_conf.h>
 # include <stm32h7xx_hal_iwdg.h>
 # include <stm32h7xx_ll_iwdg.h>
@@ -633,6 +635,9 @@ void CoreSysTick() noexcept
 #endif
 	// This is called by the tick ISR. We don't call millis64() from any higher priority ISR
 	++*const_cast<uint64_t*>(&g_ms_ticks);
+#if STM32
+	HAL_IncTick();							// the HAL's timeouts never expire without this
+#endif
 }
 
 // Members of class MicrosecondsTimer

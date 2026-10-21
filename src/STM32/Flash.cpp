@@ -5,9 +5,11 @@
 #if STM32H5
 # include <stm32h5xx_hal_flash.h>
 # include <stm32h5xx_hal_flash_ex.h>
+const uint32_t SectorSize = 0x00002000;		// 8kb
 #elif STM32H7
 # include <stm32h7xx_hal_flash.h>
 # include <stm32h7xx_hal_flash_ex.h>
+const uint32_t SectorSize = 0x00020000;		// 128kb
 #endif
 
 // Flash write/erase
@@ -18,7 +20,8 @@
 // This protection also means that the H7 does not seem to like writing to flash
 // lines that have already been written to. Because of the alignment of the
 // postmortum data this means that we need to use a new 512byte block for each write.
-extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
+
+//extern "C" void debugPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 #if STM32H7
 // We write in 256 bit (32 byte) alignment!
@@ -56,7 +59,7 @@ static void FlashClearError()
 bool Flash::Init() noexcept { return true; }
 void Flash::Deinit() noexcept { }
 
-bool Flash::FlashIsErased(const uint32_t addr, const size_t len) noexcept
+bool Flash::IsErased(uint32_t addr, size_t len) noexcept
 {
 #if STM32H7 || STM32H5
 	// On the STM32H7 if the flash has not been correctly erased then simply reading
@@ -96,50 +99,71 @@ bool Flash::FlashIsErased(const uint32_t addr, const size_t len) noexcept
 	return blank;
 }
 
-uint32_t Flash::FlashGetSector(const uint32_t addr) noexcept
+uint32_t Flash::GetSector(uint32_t addr) noexcept
 {
 	if (!IS_FLASH_PROGRAM_ADDRESS(addr))
 	{
-		debugPrintf("Bad flash address %x\n", (unsigned)addr);
+//		debugPrintf("Bad flash address %x\n", (unsigned)addr);
 		return IAP_BAD_SECTOR;
 	}
 
 	// Flash memory sector size on STM3H5 is 8kb
 	// On the H7 all sectors are 128Kb
-	uint32_t offset = addr - FLASH_BASE;
-#if STM32H7
-	return offset/0x20000;
-#elif STM32H5
-	return offset/0x02000;
+	const uint32_t offset = addr - FLASH_BASE;
+#if STM32H7 || STM32H5
+	return offset/SectorSize;
 #else
 # error Unsupported processor
 #endif
 }
 
-size_t Flash::FlashGetSectorLength(const uint32_t addr) noexcept
+uint32_t Flash::GetSectorLength() noexcept
 {
-	uint32_t sector = FlashGetSector(addr);
-	if (sector == IAP_BAD_SECTOR)
-	{
-		return 0;
-	}
-#if STM32H7
-	return 0x20000;
-#elif STM32H5
-	return 0x02000;
+#if STM32H7 || STM32H5
+	return SectorSize;
 #else
 # error Unsupported processor
 #endif
 }
 
-bool Flash::FlashEraseSector(const uint32_t sector) noexcept
+#if STM32H5
+bool Flash::Erase(uint32_t start, uint32_t length) noexcept
+{
+	const uint32_t sector = GetSector(start);
+	const uint32_t numSectors = length/GetSectorLength();
+	return EraseSectors(sector, numSectors);
+}
+#endif
+
+bool Flash::EraseSectors(uint32_t sector, uint32_t numSectors) noexcept
 {
 	WatchdogReset();
 	FLASH_EraseInitTypeDef eraseInfo;
 	uint32_t SectorError;
 	bool ret = true;
 	eraseInfo.TypeErase = FLASH_TYPEERASE_SECTORS;
-#if STM32H7
+#if STM32H5
+	// Sectors are numbered from zero within each bank, so a range that crosses the bank boundary takes one erase operation per bank
+	HAL_FLASH_Unlock();
+	FlashClearError();
+	while (numSectors != 0)
+	{
+		const uint32_t sectorInBank = sector % FLASH_SECTOR_NB;
+		const uint32_t sectorsLeftInBank = FLASH_SECTOR_NB - sectorInBank;
+		eraseInfo.Banks = (sector < FLASH_SECTOR_NB) ? FLASH_BANK_1 : FLASH_BANK_2;
+		eraseInfo.Sector = sectorInBank;
+		eraseInfo.NbSectors = (numSectors > sectorsLeftInBank) ? sectorsLeftInBank : numSectors;
+		if (HAL_FLASHEx_Erase(&eraseInfo, &SectorError) != HAL_OK)
+		{
+			ret = false;
+			break;
+		}
+		sector += eraseInfo.NbSectors;
+		numSectors -= eraseInfo.NbSectors;
+	}
+	HAL_FLASH_Lock();
+#else
+# if STM32H7
 	if (sector < FLASH_SECTOR_TOTAL)
 	{
 		eraseInfo.Banks = FLASH_BANK_1;
@@ -147,18 +171,18 @@ bool Flash::FlashEraseSector(const uint32_t sector) noexcept
 	}
 	else
 	{
-# if STM32H743xx || STM32H742xx
+#  if STM32H743xx || STM32H742xx
 		eraseInfo.Banks = FLASH_BANK_2;
 		eraseInfo.Sector = sector - FLASH_SECTOR_TOTAL;
-# endif
+#  endif
 	}
-#else
+# else
 	eraseInfo.Sector = sector;
-#endif
-	eraseInfo.NbSectors = 1;
-#if STM32H7
+# endif
+	eraseInfo.NbSectors = numSectors;
+# if STM32H7
 	eraseInfo.VoltageRange = FLASH_VOLTAGE_RANGE_3;
-#endif
+# endif
 	HAL_FLASH_Unlock();
 	FlashClearError();
 	if (HAL_FLASHEx_Erase(&eraseInfo, &SectorError) != HAL_OK)
@@ -166,17 +190,18 @@ bool Flash::FlashEraseSector(const uint32_t sector) noexcept
 		ret = false;
 	}
 	HAL_FLASH_Lock();
-	if (!ret) { debugPrintf("Flash erase failed sector %d error %x\n", (int)sector, (unsigned)SectorError); }
+#endif
+//	if (!ret) { debugPrintf("Flash erase failed sector %d error %x\n", (int)sector, (unsigned)SectorError); }
 	return ret;
 }
 
-bool Flash::FlashWrite(const uint32_t addr, const uint8_t *data, const size_t len) noexcept
+bool Flash::Write(uint32_t addr, uint32_t length, const uint32_t *data) noexcept
 {
 	uint32_t *dst = (uint32_t *)addr;
-	uint32_t *src = (uint32_t *)data;
-	if (!IS_FLASH_ALIGNED(dst) || !IS_WORD_ALIGNED(src) || !IS_WORD_ALIGNED(len))
+	const uint32_t *src = data;
+	if (!IS_FLASH_ALIGNED(dst) || !IS_WORD_ALIGNED(src) || !IS_WORD_ALIGNED(length))
 	{
-		debugPrintf("FlashWrite alignment error dst %x, data %d len %d\n", (unsigned)dst, (unsigned)src, (int)len);
+//		debugPrintf("FlashWrite alignment error dst %x, data %d len %d\n", (unsigned)dst, (unsigned)src, (int)length);
 		return false;
 	}
 	bool ret = true;
@@ -186,7 +211,7 @@ bool Flash::FlashWrite(const uint32_t addr, const uint8_t *data, const size_t le
 	HAL_FLASH_Unlock();
 	FlashClearError();
 	uint32_t cnt = 0;
-	while (cnt < len)
+	while (cnt < length)
 	{
 #if STM32H7
 		// We write 256 bits = 8 32bit words at a time
@@ -200,7 +225,7 @@ bool Flash::FlashWrite(const uint32_t addr, const uint8_t *data, const size_t le
 		cnt += 32;
 #elif STM32H5
 		// We write 128 bits = 4 32-bit words at a time
-		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_QUADWORD, (uint32_t) dst, (uint64_t) *src) != HAL_OK)
+		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_QUADWORD, (uint32_t) dst, (uint32_t) src) != HAL_OK)
 		{
 			ret = false;
 			break;
@@ -214,12 +239,12 @@ bool Flash::FlashWrite(const uint32_t addr, const uint8_t *data, const size_t le
 	}
 	HAL_FLASH_Lock();
 	if (cacheEnabled) { Cache::Enable(); }
-	if (!ret) { debugPrintf("Flash write failed cnt %d\n", (int)((int)dst - addr)); }
+//	if (!ret) { debugPrintf("Flash write failed cnt %d\n", (int)((int)dst - addr)); }
 
 	return ret;
 }
 
-bool Flash::FlashRead(const uint32_t addr, uint8_t *data, const size_t len) noexcept
+bool Flash::Read(uint32_t addr, uint32_t length, uint8_t *data) noexcept
 {
 #if STM32H7 || STM32H5
 	// On the STM32H7 if the flash has not been correctly erased then simply reading
@@ -235,7 +260,7 @@ bool Flash::FlashRead(const uint32_t addr, uint8_t *data, const size_t len) noex
 	HAL_FLASH_Unlock();
 	FlashClearError();
 	// Do the actual read from flash
-	memcpy((void *)data, (void *)addr, len);
+	memcpy((void *)data, (const void *)addr, length);
 	// Clear any errors
 	FlashClearError();
 	HAL_FLASH_Lock();
