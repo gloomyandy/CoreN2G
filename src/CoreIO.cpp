@@ -630,14 +630,11 @@ void delay(uint32_t ms) noexcept
 // CoreSysTick assumes that ISRs don't use the 64-bit tick counter, so incrementing g_ms_ticks non-atomiclly from the tick ISR is OK
 void CoreSysTick() noexcept
 {
-#if STM32BTC
+#if STM32BTC || STM32
 	HAL_IncTick();
 #endif
 	// This is called by the tick ISR. We don't call millis64() from any higher priority ISR
 	++*const_cast<uint64_t*>(&g_ms_ticks);
-#if STM32
-	HAL_IncTick();							// the HAL's timeouts never expire without this
-#endif
 }
 
 // Members of class MicrosecondsTimer

@@ -184,8 +184,11 @@ public:
 	// Type of the callback function called when a transmi event with a nonzero message marker occurs
 	typedef void (*TxEventCallbackFunction)(uint8_t marker, CanId id, uint16_t timeStamp) noexcept;
 
+		// Type of the callback function when a message is received into receive buffer 0
+	typedef void (*RxEventCallbackFunction)(uint16_t messageTimeStamp, uint16_t timeStampCounter) noexcept;
+
 	// Initialise one of the CAN interfaces and return a pointer to the corresponding device. Returns null if device is already in use or device number is out of range.
-	static CanDevice *Init(const Config& p_config, uint32_t *memStart, const CanTiming& timing, TxEventCallbackFunction p_txCallback) noexcept;
+	static CanDevice *Init(const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback, RxEventCallbackFunction p_rxCallback) noexcept;
 
 	// Set the extended ID mask. May only be used while the interface is disabled.
 	void SetExtendedIdMask(uint32_t mask) noexcept;

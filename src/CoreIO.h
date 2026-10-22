@@ -19,7 +19,7 @@
 #include <General/SimpleMath.h>
 
 // Define the following true if the CAN timestamp counter is independent of the CAN bit timing
-#define EXTERNAL_CAN_TIMESTAMP_COUNTER		(SAME70 || STM32 || (RPXXXX && !USE_SPICAN))
+#define EXTERNAL_CAN_TIMESTAMP_COUNTER		(SAME70 || STM32BTC|| STM32 || RPXXXX)
 
 // Exported memory control variables. These are defined in file syscalls.h which must be included by exactly one client file.
 extern char *_ecv_array heapTop;

@@ -47,7 +47,12 @@ void CanDevice::CanStats::Clear() noexcept
 }
 
 // Initialise a CAN device and return a pointer to it
-/*static*/ CanDevice* CanDevice::Init(Pin p_txPin, Pin p_rxPin, const Config& p_config, uint32_t *memStart, const CanTiming &timing, TxEventCallbackFunction p_txCallback) noexcept
+/*static*/ CanDevice* CanDevice::Init(Pin p_txPin, Pin p_rxPin, const Config& p_config, uint32_t *memStart, const CanTiming &timing
+#ifdef RTOS
+							, TxEventCallbackFunction p_txCallback,
+							RxEventCallbackFunction p_rxCallback
+#endif
+																																	) noexcept
 {
 	CanDevice& dev = devices[0];
 	if (dev.inUse)														// device instance already in use
