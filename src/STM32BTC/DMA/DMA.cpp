@@ -65,6 +65,13 @@ HAL_StatusTypeDef DMA_Start_IT(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uin
     hdma->Instance->CR  |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
     hdma->Instance->FCR |= DMA_IT_FE;
 
+    /* As HAL_DMA_Start_IT: enable the half transfer interrupt if a half complete callback is set
+       (the NeoPixel output uses a circular double buffer that is refilled from it) */
+    if(hdma->XferHalfCpltCallback != NULL)
+    {
+      hdma->Instance->CR  |= DMA_IT_HT;
+    }
+
     /* Enable the Peripheral */
     __HAL_DMA_ENABLE(hdma);
   }
@@ -147,6 +154,13 @@ HAL_StatusTypeDef DMA_Start_IT(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uin
     DMA_SetConfig(hdma, SrcAddress, DstAddress, DataLength, Mode, Direction, MemInc);
 
     MODIFY_REG(((DMA_Stream_TypeDef   *)hdma->Instance)->CR, (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME | DMA_IT_HT), (DMA_IT_TC | DMA_IT_TE | DMA_IT_DME));
+
+    /* As HAL_DMA_Start_IT: enable the half transfer interrupt if a half complete callback is set
+       (the NeoPixel output uses a circular double buffer that is refilled from it) */
+    if(hdma->XferHalfCpltCallback != NULL)
+    {
+      ((DMA_Stream_TypeDef   *)hdma->Instance)->CR  |= DMA_IT_HT;
+    }
     if(IS_DMA_DMAMUX_ALL_INSTANCE(hdma->Instance) != 0U) /* No DMAMUX available for BDMA1 */
     {
       /* Check if DMAMUX Synchronization is enabled */
